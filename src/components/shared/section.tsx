@@ -6,11 +6,13 @@ interface SectionProps {
   className?: string;
   container?: boolean;
   dark?: boolean;
+  id?: string;
 }
 
-export function Section({ children, className, container = true, dark = true }: SectionProps) {
+export function Section({ children, className, container = true, dark = true, id }: SectionProps) {
   return (
     <section
+      id={id}
       className={cn(
         "py-16 md:py-24",
         dark ? "bg-zinc-950 text-white" : "bg-white text-zinc-900",
