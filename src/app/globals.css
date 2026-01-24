@@ -5,9 +5,14 @@
 :root {
   --background: #09090b;
   --foreground: #fafafa;
-  --accent: #22c55e;
+  --accent: #16a34a;
+  --accent-hover: #15803d;
+  --accent-muted: #a1a1aa;
   --card-bg: #18181b;
   --border: #27272a;
+  --green-dark: #15803d;
+  --green-darker: #14532d;
+  --green-glow: rgba(22, 163, 74, 0.15);
 }
 
 body {
@@ -25,6 +30,7 @@ html {
 *:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--green-glow);
 }
 
 /* Better text rendering */
@@ -42,35 +48,45 @@ body {
    TACTICAL UTILITY PATTERNS
    ================================ */
 
-/* Tactical grid pattern - soccer field lines aesthetic */
+/* Tactical grid pattern - subtle green-tinted lines */
 .bg-tactical-grid {
+  background-color: #09090b;
   background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(rgba(22, 163, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 163, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px, 120px 120px, 120px 120px;
 }
 
 /* Denser tactical grid */
 .bg-tactical-grid-dense {
+  background-color: #0a0a0b;
   background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 20px 20px;
+    linear-gradient(rgba(22, 163, 74, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 163, 74, 0.03) 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, rgba(22, 163, 74, 0.02) 0%, transparent 50%);
+  background-size: 20px 20px, 20px 20px, 100px 100px;
 }
 
 /* Topographic lines pattern */
 .bg-topo-lines {
-  background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 50 Q 25 30, 50 50 T 100 50' fill='none' stroke='rgba(255,255,255,0.02)' stroke-width='1'/%3E%3Cpath d='M0 70 Q 25 50, 50 70 T 100 70' fill='none' stroke='rgba(255,255,255,0.015)' stroke-width='1'/%3E%3Cpath d='M0 30 Q 25 10, 50 30 T 100 30' fill='none' stroke='rgba(255,255,255,0.015)' stroke-width='1'/%3E%3C/svg%3E");
+  background-color: #18181b;
+  background-image: 
+    url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 50 Q 25 30, 50 50 T 100 50' fill='none' stroke='rgba(22,163,74,0.03)' stroke-width='1'/%3E%3Cpath d='M0 70 Q 25 50, 50 70 T 100 70' fill='none' stroke='rgba(22,163,74,0.02)' stroke-width='1'/%3E%3Cpath d='M0 30 Q 25 10, 50 30 T 100 30' fill='none' stroke='rgba(255,255,255,0.015)' stroke-width='1'/%3E%3C/svg%3E");
   background-size: 100px 100px;
 }
 
 /* Field diagram pattern - center circle aesthetic */
 .bg-field-pattern {
+  background-color: #09090b;
   background-image: 
-    radial-gradient(circle at 50% 50%, transparent 0%, transparent 20%, rgba(255,255,255,0.02) 20%, rgba(255,255,255,0.02) 21%, transparent 21%),
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 200px 200px, 40px 40px, 40px 40px;
+    radial-gradient(circle at 50% 50%, transparent 0%, transparent 20%, rgba(22, 163, 74, 0.08) 20%, rgba(22, 163, 74, 0.08) 21%, transparent 21%),
+    linear-gradient(rgba(22, 163, 74, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 163, 74, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+  background-size: 200px 200px, 40px 40px, 40px 40px, 100px 100px, 100px 100px;
 }
 
 /* Chalkboard texture */
@@ -104,16 +120,16 @@ body {
 
 /* Dashboard card */
 .dashboard-card {
-  @apply bg-zinc-900 border border-zinc-800 rounded-xl;
+  @apply bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-lg shadow-black/50;
 }
 
 /* Button variants for dark theme */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 bg-white text-zinc-900 px-5 py-3 font-medium rounded-lg hover:bg-zinc-100 transition-colors;
+  @apply inline-flex items-center justify-center gap-2 bg-green-700 text-white px-5 py-3 font-bold rounded-lg hover:bg-green-600 transition-all shadow-lg shadow-green-900/30 hover:shadow-green-800/40;
 }
 
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 bg-zinc-800 text-white px-5 py-3 font-medium rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700;
+  @apply inline-flex items-center justify-center gap-2 bg-zinc-800 text-white px-5 py-3 font-medium rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-600 hover:border-green-700/50;
 }
 
 .btn-ghost {
@@ -122,13 +138,13 @@ body {
 
 /* Status colors */
 .status-open {
-  @apply text-green-500;
+  @apply text-white;
 }
 
 .status-closed {
-  @apply text-red-500;
+  @apply text-zinc-500;
 }
 
 .status-warning {
-  @apply text-yellow-500;
+  @apply text-zinc-400;
 }

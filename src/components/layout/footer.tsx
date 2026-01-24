@@ -29,14 +29,14 @@ export function Footer() {
             
             {/* Quick Location */}
             <div className="flex items-start gap-2 mt-4 text-sm">
-              <MapPin size={16} className="text-green-500 mt-0.5 flex-shrink-0" />
+              <MapPin size={16} className="text-white mt-0.5 flex-shrink-0" />
               <div>
                 <p className="text-zinc-400">14602 Ambrose St, Houston, TX 77045</p>
                 <a
                   href={GOOGLE_MAPS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-green-500 hover:text-green-400 text-xs font-medium mt-1 transition-colors"
+                  className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-xs font-medium mt-1 transition-colors"
                 >
                   <Navigation size={12} />
                   Get Directions
@@ -98,7 +98,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-zinc-800 mt-10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-zinc-500 text-sm">
-            &copy; {new Date().getFullYear()} Houston Premier Soccer. All rights reserved.
+            &copy; 2026 Houston Premier Soccer. All rights reserved.
           </p>
           <div className="flex gap-6">
             <Link href="/contact" className="text-zinc-500 hover:text-white text-sm transition-colors">

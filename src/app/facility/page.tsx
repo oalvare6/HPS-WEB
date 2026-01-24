@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { LocationCard } from "@/components/shared/location-card";
 import {
@@ -20,8 +21,8 @@ export default function FacilityPage() {
             The Facility
           </h1>
           <p className="text-xl text-zinc-400 max-w-2xl">
-            Purpose-built for competitive play. Quality turf, professional lighting, 
-            and the infrastructure to run events right.
+            Purpose-built for 7v7 competitive play. Quality turf, professional lighting, 
+            and the infrastructure to run fast-paced tournaments and leagues.
           </p>
         </div>
       </section>
@@ -32,7 +33,7 @@ export default function FacilityPage() {
           <div>
             <SectionHeader
               title="The Fields"
-              subtitle="Turf fields configured for multiple formats."
+              subtitle="Dedicated 7v7 turf fields for fast-paced action."
               dark
             />
             <ul className="space-y-4 text-zinc-400">
@@ -42,7 +43,7 @@ export default function FacilityPage() {
               </li>
               <li className="flex items-start gap-3">
                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2.5" />
-                <span>Configurable for 5v5, 7v7, and 11v11 formats</span>
+                <span>Purpose-built 7v7 field configurations</span>
               </li>
               <li className="flex items-start gap-3">
                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2.5" />
@@ -55,17 +56,14 @@ export default function FacilityPage() {
             </ul>
           </div>
 
-          {/* Field Diagram Placeholder */}
-          <div className="dashboard-card aspect-video flex items-center justify-center bg-tactical-grid-dense relative overflow-hidden">
-            {/* Stylized field diagram */}
-            <div className="absolute inset-4 border border-zinc-700 rounded-lg" />
-            <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 h-px bg-zinc-700" />
-            <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-20 h-20 border border-zinc-700 rounded-full" />
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 w-16 h-32 border border-zinc-700 rounded-r-lg" />
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 w-16 h-32 border border-zinc-700 rounded-l-lg" />
-            <span className="relative z-10 text-xs font-mono text-zinc-600 bg-zinc-900/80 px-2 py-1 rounded">
-              3 CONFIGURABLE FIELDS
-            </span>
+          {/* Field Image */}
+          <div className="dashboard-card aspect-video relative overflow-hidden">
+            <Image
+              src="https://images.unsplash.com/photo-1551958219-acbc608c6377?w=800&q=80"
+              alt="Soccer field at Houston Premier Soccer"
+              fill
+              className="object-cover"
+            />
           </div>
         </div>
       </Section>
@@ -80,25 +78,25 @@ export default function FacilityPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           <div className="dashboard-card p-6 text-center">
-            <Sun size={28} className="text-green-500 mx-auto mb-3" />
+            <Sun size={28} className="text-white mx-auto mb-3" />
             <h3 className="font-medium text-white">Field Lighting</h3>
             <p className="text-sm text-zinc-500 mt-1">Night games available</p>
           </div>
 
           <div className="dashboard-card p-6 text-center">
-            <Users size={28} className="text-green-500 mx-auto mb-3" />
+            <Users size={28} className="text-white mx-auto mb-3" />
             <h3 className="font-medium text-white">Spectator Areas</h3>
             <p className="text-sm text-zinc-500 mt-1">Covered seating</p>
           </div>
 
           <div className="dashboard-card p-6 text-center">
-            <Car size={28} className="text-green-500 mx-auto mb-3" />
+            <Car size={28} className="text-white mx-auto mb-3" />
             <h3 className="font-medium text-white">Parking</h3>
             <p className="text-sm text-zinc-500 mt-1">On-site lot</p>
           </div>
 
           <div className="dashboard-card p-6 text-center">
-            <ShieldCheck size={28} className="text-green-500 mx-auto mb-3" />
+            <ShieldCheck size={28} className="text-white mx-auto mb-3" />
             <h3 className="font-medium text-white">Restrooms</h3>
             <p className="text-sm text-zinc-500 mt-1">Clean facilities</p>
           </div>
@@ -116,28 +114,28 @@ export default function FacilityPage() {
         <div className="max-w-2xl">
           <ul className="space-y-4">
             <li className="dashboard-card flex items-start gap-4 p-4">
-              <span className="text-green-500 font-mono text-sm">01</span>
+              <span className="text-white font-mono text-sm">01</span>
               <div>
                 <h3 className="font-medium text-white">No metal cleats on turf</h3>
                 <p className="text-sm text-zinc-500 mt-1">Molded rubber or turf shoes only</p>
               </div>
             </li>
             <li className="dashboard-card flex items-start gap-4 p-4">
-              <span className="text-green-500 font-mono text-sm">02</span>
+              <span className="text-white font-mono text-sm">02</span>
               <div>
                 <h3 className="font-medium text-white">No glass containers</h3>
                 <p className="text-sm text-zinc-500 mt-1">Plastic or aluminum only on the fields</p>
               </div>
             </li>
             <li className="dashboard-card flex items-start gap-4 p-4">
-              <span className="text-green-500 font-mono text-sm">03</span>
+              <span className="text-white font-mono text-sm">03</span>
               <div>
                 <h3 className="font-medium text-white">Check in 15 minutes before match time</h3>
                 <p className="text-sm text-zinc-500 mt-1">Ensures games start on schedule</p>
               </div>
             </li>
             <li className="dashboard-card flex items-start gap-4 p-4">
-              <span className="text-green-500 font-mono text-sm">04</span>
+              <span className="text-white font-mono text-sm">04</span>
               <div>
                 <h3 className="font-medium text-white">Respect staff and other players</h3>
                 <p className="text-sm text-zinc-500 mt-1">Sportsmanship is expected at all times</p>
@@ -159,7 +157,7 @@ export default function FacilityPage() {
             
             <div className="space-y-6">
               <div className="flex items-start gap-3">
-                <Clock size={20} className="text-green-500 mt-0.5 flex-shrink-0" />
+                <Clock size={20} className="text-white mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-white font-medium">Operating Hours</p>
                   <p className="text-zinc-400 text-sm mt-1">

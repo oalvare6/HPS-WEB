@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { EventCard } from "@/components/shared/event-card";
+import { WeeklySchedule } from "@/components/shared/weekly-schedule";
 import { ArrowRight, Calendar, Trophy } from "lucide-react";
 
 export default function EventsPage() {
@@ -12,9 +13,9 @@ export default function EventsPage() {
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             Schedule & Events
           </h1>
-          <p className="text-xl text-zinc-400 max-w-2xl">
-            Leagues and tournaments for youth and adult players. 
-            Organized competition at the Houston Premier Soccer facility.
+          <p className="text-xl text-zinc-300 max-w-2xl">
+            Weekly 7v7 league games and tournaments for youth and adult players. 
+            See when teams play at your local 7v7 soccer spot.
           </p>
         </div>
       </section>
@@ -22,76 +23,43 @@ export default function EventsPage() {
       {/* Schedule Section */}
       <Section dark className="bg-zinc-900 bg-topo-lines" id="schedule">
         <SectionHeader
-          title="Current Schedule"
-          subtitle="Upcoming games and events."
+          title="Weekly 7v7 League Schedule"
+          subtitle="See when teams play. Youth 7v7 on Saturdays, Adult 7v7 on Fridays."
           dark
         />
 
-        {/* Schedule Grid */}
-        <div className="space-y-4">
-          <div className="dashboard-card p-4 md:p-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-zinc-800 rounded-lg flex flex-col items-center justify-center text-center">
-                  <span className="text-xs text-zinc-500 uppercase">Jan</span>
-                  <span className="text-lg font-bold text-white">25</span>
-                </div>
-                <div>
-                  <p className="font-semibold text-white">Spring League - Week 4</p>
-                  <p className="text-sm text-zinc-400">Youth U12 Division • 9:00 AM - 12:00 PM</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-zinc-900 bg-green-500 px-2 py-1 rounded">
-                  Scheduled
-                </span>
-                <span className="text-sm text-zinc-500">Field 1 & 2</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="dashboard-card p-4 md:p-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-zinc-800 rounded-lg flex flex-col items-center justify-center text-center">
-                  <span className="text-xs text-zinc-500 uppercase">Jan</span>
-                  <span className="text-lg font-bold text-white">31</span>
-                </div>
-                <div>
-                  <p className="font-semibold text-white">Friday Night 7v7</p>
-                  <p className="text-sm text-zinc-400">Adults 18+ • 7:00 PM - 10:00 PM</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-zinc-900 bg-green-500 px-2 py-1 rounded">
-                  Scheduled
-                </span>
-                <span className="text-sm text-zinc-500">All Fields</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="dashboard-card p-4 md:p-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-zinc-800 rounded-lg flex flex-col items-center justify-center text-center">
-                  <span className="text-xs text-zinc-500 uppercase">Feb</span>
-                  <span className="text-lg font-bold text-white">8-9</span>
-                </div>
-                <div>
-                  <p className="font-semibold text-white">Presidents Cup Qualifier</p>
-                  <p className="text-sm text-zinc-400">U14-U16 Elite • All Day Tournament</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-white bg-zinc-700 px-2 py-1 rounded">
-                  Registration Open
-                </span>
-                <span className="text-sm text-zinc-500">All Fields</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <WeeklySchedule leagues={[
+          {
+            name: "Youth U12 7v7 League",
+            type: "youth",
+            days: [
+              {
+                day: "Saturday",
+                games: [
+                  { time: "9:00 AM", homeTeam: "Houston Strikers", awayTeam: "Southside United" },
+                  { time: "10:30 AM", homeTeam: "Ambrose Athletic", awayTeam: "Third Ward SC" },
+                  { time: "12:00 PM", homeTeam: "Midtown FC", awayTeam: "Heights Dynamo" },
+                  { time: "1:30 PM", homeTeam: "East End Eagles", awayTeam: "Westside Warriors" },
+                ]
+              }
+            ]
+          },
+          {
+            name: "Adult 7v7 League",
+            type: "adult",
+            days: [
+              {
+                day: "Friday",
+                games: [
+                  { time: "7:00 PM", homeTeam: "Houston FC", awayTeam: "Southside United" },
+                  { time: "8:30 PM", homeTeam: "Ambrose Athletic", awayTeam: "Third Ward SC" },
+                  { time: "9:00 PM", homeTeam: "Midtown Strikers", awayTeam: "Heights FC" },
+                  { time: "9:30 PM", homeTeam: "East End Elite", awayTeam: "Westside United" },
+                ]
+              }
+            ]
+          }
+        ]} />
       </Section>
 
       {/* Standings Section */}
@@ -106,10 +74,10 @@ export default function EventsPage() {
         <div className="dashboard-card overflow-hidden">
           <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Trophy size={18} className="text-green-500" />
+              <Trophy size={18} className="text-white" />
               <h3 className="font-semibold text-white">Adult 7v7 League - Spring 2026</h3>
             </div>
-            <span className="text-xs text-zinc-500">Updated Jan 24, 2026</span>
+            <span className="text-xs text-zinc-500">Updated Weekly</span>
           </div>
           
           <div className="overflow-x-auto">
@@ -128,13 +96,13 @@ export default function EventsPage() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 <tr className="hover:bg-zinc-800/30">
-                  <td className="px-4 py-3 text-green-500 font-bold">1</td>
+                  <td className="px-4 py-3 text-white font-bold">1</td>
                   <td className="px-4 py-3 font-medium text-white">Houston FC</td>
                   <td className="px-4 py-3 text-center text-zinc-400">6</td>
                   <td className="px-4 py-3 text-center text-zinc-400">5</td>
                   <td className="px-4 py-3 text-center text-zinc-400">1</td>
                   <td className="px-4 py-3 text-center text-zinc-400">0</td>
-                  <td className="px-4 py-3 text-center text-green-500">+12</td>
+                  <td className="px-4 py-3 text-center text-white">+12</td>
                   <td className="px-4 py-3 text-center font-bold text-white">16</td>
                 </tr>
                 <tr className="hover:bg-zinc-800/30">
@@ -144,7 +112,7 @@ export default function EventsPage() {
                   <td className="px-4 py-3 text-center text-zinc-400">4</td>
                   <td className="px-4 py-3 text-center text-zinc-400">1</td>
                   <td className="px-4 py-3 text-center text-zinc-400">1</td>
-                  <td className="px-4 py-3 text-center text-green-500">+8</td>
+                  <td className="px-4 py-3 text-center text-white">+8</td>
                   <td className="px-4 py-3 text-center font-bold text-white">13</td>
                 </tr>
                 <tr className="hover:bg-zinc-800/30">
@@ -154,7 +122,7 @@ export default function EventsPage() {
                   <td className="px-4 py-3 text-center text-zinc-400">3</td>
                   <td className="px-4 py-3 text-center text-zinc-400">2</td>
                   <td className="px-4 py-3 text-center text-zinc-400">1</td>
-                  <td className="px-4 py-3 text-center text-green-500">+4</td>
+                  <td className="px-4 py-3 text-center text-white">+4</td>
                   <td className="px-4 py-3 text-center font-bold text-white">11</td>
                 </tr>
                 <tr className="hover:bg-zinc-800/30">
@@ -174,17 +142,37 @@ export default function EventsPage() {
                   <td className="px-4 py-3 text-center text-zinc-400">1</td>
                   <td className="px-4 py-3 text-center text-zinc-400">1</td>
                   <td className="px-4 py-3 text-center text-zinc-400">4</td>
-                  <td className="px-4 py-3 text-center text-red-500">-6</td>
+                  <td className="px-4 py-3 text-center text-zinc-500">-6</td>
                   <td className="px-4 py-3 text-center font-bold text-white">4</td>
                 </tr>
                 <tr className="hover:bg-zinc-800/30">
                   <td className="px-4 py-3 text-zinc-400 font-bold">6</td>
                   <td className="px-4 py-3 font-medium text-white">Heights FC</td>
                   <td className="px-4 py-3 text-center text-zinc-400">6</td>
+                  <td className="px-4 py-3 text-center text-zinc-400">1</td>
+                  <td className="px-4 py-3 text-center text-zinc-400">0</td>
+                  <td className="px-4 py-3 text-center text-zinc-400">5</td>
+                  <td className="px-4 py-3 text-center text-zinc-500">-12</td>
+                  <td className="px-4 py-3 text-center font-bold text-white">3</td>
+                </tr>
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="px-4 py-3 text-zinc-400 font-bold">7</td>
+                  <td className="px-4 py-3 font-medium text-white">Westside United</td>
+                  <td className="px-4 py-3 text-center text-zinc-400">6</td>
+                  <td className="px-4 py-3 text-center text-zinc-400">0</td>
+                  <td className="px-4 py-3 text-center text-zinc-400">2</td>
+                  <td className="px-4 py-3 text-center text-zinc-400">4</td>
+                  <td className="px-4 py-3 text-center text-zinc-500">-10</td>
+                  <td className="px-4 py-3 text-center font-bold text-white">2</td>
+                </tr>
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="px-4 py-3 text-zinc-400 font-bold">8</td>
+                  <td className="px-4 py-3 font-medium text-white">East End Elite</td>
+                  <td className="px-4 py-3 text-center text-zinc-400">6</td>
                   <td className="px-4 py-3 text-center text-zinc-400">0</td>
                   <td className="px-4 py-3 text-center text-zinc-400">1</td>
                   <td className="px-4 py-3 text-center text-zinc-400">5</td>
-                  <td className="px-4 py-3 text-center text-red-500">-18</td>
+                  <td className="px-4 py-3 text-center text-zinc-500">-18</td>
                   <td className="px-4 py-3 text-center font-bold text-white">1</td>
                 </tr>
               </tbody>
@@ -196,8 +184,8 @@ export default function EventsPage() {
       {/* Leagues Section */}
       <Section dark className="bg-zinc-900">
         <SectionHeader
-          title="Leagues"
-          subtitle="Seasonal play with consistent scheduling."
+          title="7v7 Leagues"
+          subtitle="Seasonal 7v7 play with consistent scheduling."
           dark
         />
 
@@ -205,19 +193,19 @@ export default function EventsPage() {
         <div className="dashboard-card p-6 md:p-8">
           <div className="flex items-start gap-4">
             <div className="w-12 h-12 bg-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Calendar size={24} className="text-green-500" />
+              <Calendar size={24} className="text-white" />
             </div>
             <div>
               <h3 className="text-xl font-semibold text-white mb-2">
-                Spring League Registration Open
+                Spring 7v7 League Registration Open
               </h3>
               <p className="text-zinc-400 mb-4 max-w-xl">
-                Registration is now open for youth and adult spring league seasons. 
+                Registration is now open for youth and adult spring 7v7 league seasons. 
                 Contact us for team registration or to join as a free agent.
               </p>
               <Link
                 href="/register"
-                className="inline-flex items-center gap-2 text-green-500 font-medium hover:text-green-400 transition-colors"
+                className="inline-flex items-center gap-2 text-white font-medium hover:text-zinc-300 transition-colors"
               >
                 Register Now
                 <ArrowRight size={18} />
@@ -229,17 +217,17 @@ export default function EventsPage() {
         {/* League Info */}
         <div className="grid md:grid-cols-2 gap-6 mt-8">
           <div className="dashboard-card p-6">
-            <h3 className="font-semibold text-white mb-2">Youth Leagues</h3>
+            <h3 className="font-semibold text-white mb-2">Youth 7v7 Leagues</h3>
             <p className="text-zinc-400 text-sm">
-              Development-focused leagues for U8 through U18 age groups. 
-              Seasonal play with balanced competition.
+              Development-focused 7v7 leagues for U8 through U18 age groups. 
+              Seasonal play with balanced competition in fast-paced format.
             </p>
           </div>
           <div className="dashboard-card p-6">
-            <h3 className="font-semibold text-white mb-2">Adult Leagues</h3>
+            <h3 className="font-semibold text-white mb-2">Adult 7v7 Leagues</h3>
             <p className="text-zinc-400 text-sm">
-              Recreational and competitive divisions for players 18+. 
-              Evening and weekend scheduling.
+              Recreational and competitive 7v7 divisions for players 18+. 
+              Evening and weekend scheduling with fast-paced action.
             </p>
           </div>
         </div>
@@ -248,8 +236,8 @@ export default function EventsPage() {
       {/* Tournaments Section */}
       <Section dark className="bg-zinc-950 bg-tactical-grid">
         <SectionHeader
-          title="Past Tournaments"
-          subtitle="Completed events."
+          title="Past 7v7 Tournaments"
+          subtitle="Completed 7v7 events."
           dark
         />
 
@@ -303,10 +291,10 @@ export default function EventsPage() {
       <Section dark className="bg-zinc-900">
         <div className="text-center max-w-2xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-            Want to Participate?
+            Want to Play 7v7?
           </h2>
           <p className="text-zinc-400 mb-8">
-            Register to get updates on upcoming leagues and tournaments. 
+            Register to get updates on upcoming 7v7 leagues and tournaments. 
             We&apos;ll notify you when registration opens.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

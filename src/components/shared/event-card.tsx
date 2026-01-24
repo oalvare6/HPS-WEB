@@ -38,8 +38,8 @@ export function EventCard({
           </span>
         )}
         {status === "registration-open" && (
-          <span className="text-xs font-medium text-zinc-900 bg-green-500 px-2 py-1 rounded flex items-center gap-1">
-            <span className="w-1.5 h-1.5 bg-zinc-900 rounded-full animate-pulse" />
+          <span className="text-xs font-bold text-white bg-green-700 px-2 py-1 rounded flex items-center gap-1 shadow-md shadow-green-900/50 border border-green-600">
+            <span className="w-1.5 h-1.5 bg-green-300 rounded-full animate-pulse" />
             Open
           </span>
         )}
@@ -47,11 +47,11 @@ export function EventCard({
 
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <Calendar size={14} className="text-zinc-500" />
+          <Calendar size={14} className="text-green-500" />
           <span className="font-medium text-white">{date}</span>
         </div>
         <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <Users size={14} className="text-zinc-500" />
+          <Users size={14} className="text-green-500" />
           <span>{division}</span>
           {teamCount && <span className="text-zinc-500">• {teamCount}</span>}
         </div>

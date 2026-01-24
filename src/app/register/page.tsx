@@ -19,10 +19,10 @@ export default function RegisterPage() {
       <section className="bg-zinc-950 text-white py-16 md:py-24 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-            Register for Tournament
+            Register for 7v7 Tournament
           </h1>
           <p className="text-xl text-zinc-400 max-w-2xl">
-            Sign up for upcoming leagues and tournaments at Houston Premier Soccer.
+            Sign up for upcoming 7v7 leagues and tournaments at Houston Premier Soccer.
           </p>
         </div>
       </section>
@@ -32,7 +32,7 @@ export default function RegisterPage() {
         <div className="max-w-2xl mx-auto">
           {submitted ? (
             <div className="dashboard-card p-8 md:p-12 text-center">
-              <CheckCircle size={56} className="text-green-500 mx-auto mb-6" />
+              <CheckCircle size={56} className="text-white mx-auto mb-6" />
               <h2 className="text-2xl font-semibold text-white mb-3">
                 Registration Received
               </h2>
@@ -42,7 +42,7 @@ export default function RegisterPage() {
               </p>
               <Link
                 href="/"
-                className="inline-flex items-center gap-2 text-green-500 font-medium hover:text-green-400 transition-colors"
+                className="inline-flex items-center gap-2 text-white font-medium hover:text-zinc-300 transition-colors"
               >
                 <ArrowLeft size={18} />
                 Back to Home
@@ -69,7 +69,7 @@ export default function RegisterPage() {
                     id="type"
                     name="type"
                     required
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors"
                   >
                     <option value="">Select one...</option>
                     <option value="team">Team Registration</option>
@@ -93,7 +93,7 @@ export default function RegisterPage() {
                       id="firstName"
                       name="firstName"
                       required
-                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors placeholder:text-zinc-500"
+                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
                     />
                   </div>
                   <div>
@@ -108,7 +108,7 @@ export default function RegisterPage() {
                       id="lastName"
                       name="lastName"
                       required
-                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors placeholder:text-zinc-500"
+                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
                     />
                   </div>
                 </div>
@@ -127,7 +127,7 @@ export default function RegisterPage() {
                       id="email"
                       name="email"
                       required
-                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors placeholder:text-zinc-500"
+                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
                     />
                   </div>
                   <div>
@@ -142,7 +142,7 @@ export default function RegisterPage() {
                       id="phone"
                       name="phone"
                       required
-                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors placeholder:text-zinc-500"
+                      className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
                     />
                   </div>
                 </div>
@@ -160,7 +160,7 @@ export default function RegisterPage() {
                     id="dob"
                     name="dob"
                     required
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors"
                   />
                 </div>
 
@@ -182,7 +182,7 @@ export default function RegisterPage() {
                         id="emergencyName"
                         name="emergencyName"
                         required
-                        className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors placeholder:text-zinc-500"
+                        className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
                       />
                     </div>
                     <div>
@@ -197,7 +197,7 @@ export default function RegisterPage() {
                         id="emergencyPhone"
                         name="emergencyPhone"
                         required
-                        className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors placeholder:text-zinc-500"
+                        className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
                       />
                     </div>
                   </div>
@@ -210,7 +210,7 @@ export default function RegisterPage() {
                       type="checkbox"
                       name="waiver"
                       required
-                      className="w-5 h-5 mt-0.5 border-zinc-600 bg-zinc-800 rounded focus:ring-green-500 text-green-500"
+                      className="w-5 h-5 mt-0.5 border-zinc-600 bg-zinc-800 rounded focus:ring-white text-white"
                     />
                     <span className="text-sm text-zinc-400">
                       I agree to the waiver and terms of participation. I understand that 

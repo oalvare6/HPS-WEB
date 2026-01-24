@@ -40,7 +40,7 @@ export default function ContactPage() {
 
             {submitted ? (
               <div className="dashboard-card p-8 text-center">
-                <CheckCircle size={48} className="text-green-500 mx-auto mb-4" />
+                <CheckCircle size={48} className="text-white mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-white mb-2">
                   Message Sent
                 </h3>
@@ -62,7 +62,7 @@ export default function ContactPage() {
                     id="name"
                     name="name"
                     required
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors placeholder:text-zinc-500"
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
                     placeholder="Your name"
                   />
                 </div>
@@ -79,7 +79,7 @@ export default function ContactPage() {
                     id="email"
                     name="email"
                     required
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors placeholder:text-zinc-500"
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
                     placeholder="your@email.com"
                   />
                 </div>
@@ -94,7 +94,7 @@ export default function ContactPage() {
                   <select
                     id="subject"
                     name="subject"
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors"
                   >
                     <option value="general">General Inquiry</option>
                     <option value="registration">Tournament Registration</option>
@@ -116,7 +116,7 @@ export default function ContactPage() {
                     name="message"
                     rows={5}
                     required
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors resize-none placeholder:text-zinc-500"
+                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors resize-none placeholder:text-zinc-500"
                     placeholder="How can we help?"
                   />
                 </div>
@@ -141,7 +141,7 @@ export default function ContactPage() {
             <div className="space-y-6">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Mail size={20} className="text-green-500" />
+                  <Mail size={20} className="text-white" />
                 </div>
                 <div>
                   <h3 className="font-medium text-white">Email</h3>
@@ -156,7 +156,7 @@ export default function ContactPage() {
 
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Phone size={20} className="text-green-500" />
+                  <Phone size={20} className="text-white" />
                 </div>
                 <div>
                   <h3 className="font-medium text-white">Phone</h3>
@@ -176,7 +176,7 @@ export default function ContactPage() {
             {/* Hours Note */}
             <div className="dashboard-card mt-8 p-6">
               <div className="flex items-start gap-3">
-                <Clock size={20} className="text-green-500 flex-shrink-0 mt-0.5" />
+                <Clock size={20} className="text-white flex-shrink-0 mt-0.5" />
                 <div>
                   <h3 className="font-medium text-white mb-2">Response Time</h3>
                   <p className="text-zinc-400 text-sm">

@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Houston Premier Soccer | League Operations Center",
+  title: "Houston Premier Soccer | Your Local Soccer Spot",
   description: "Schedules, standings, and field status for Houston Premier Soccer leagues and tournaments. Check game times, get directions, and register for events.",
 };
 

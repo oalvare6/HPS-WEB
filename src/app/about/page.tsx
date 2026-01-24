@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { Target, Users, Award } from "lucide-react";
 
@@ -8,10 +9,10 @@ export default function AboutPage() {
       <section className="bg-zinc-950 text-white py-16 md:py-24 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-            Built for Houston Soccer
+            Built for 7v7 Soccer
           </h1>
           <p className="text-xl text-zinc-400 max-w-2xl">
-            A facility and organization focused on what matters: the game, the community, 
+            A facility and organization focused on fast-paced 7v7 play: the game, the community, 
             and doing things right.
           </p>
         </div>
@@ -25,28 +26,33 @@ export default function AboutPage() {
             <div className="space-y-4 text-zinc-400 leading-relaxed">
               <p>
                 Houston Premier Soccer started with a straightforward goal: create a place 
-                where competitive soccer is run properly. No shortcuts on field quality. 
+                where competitive 7v7 soccer is run properly. No shortcuts on field quality. 
                 No disorganized events. No excuses.
               </p>
               <p>
                 We saw a gap in the Houston area—plenty of places to play, but few that 
-                consistently delivered on the basics. Quality turf. Professional lighting. 
-                Events that start on time. Clear communication.
+                consistently delivered on the basics for 7v7 soccer. Quality turf sized for 
+                fast-paced play. Professional lighting. Events that start on time. Clear communication.
               </p>
               <p>
-                That&apos;s what we focus on. Whether it&apos;s a youth tournament on Saturday 
+                That&apos;s what we focus on. Whether it&apos;s a youth 7v7 tournament on Saturday 
                 morning or an adult league game under the lights, every player and family 
                 should expect the same standard.
               </p>
             </div>
           </div>
           
-          {/* Tactical Diagram Placeholder */}
-          <div className="dashboard-card aspect-video flex items-center justify-center bg-tactical-grid-dense relative overflow-hidden">
-            <div className="absolute inset-8 border border-zinc-700/50 rounded-lg" />
-            <span className="relative z-10 text-xs font-mono text-zinc-600 bg-zinc-900/80 px-2 py-1 rounded">
-              SINCE 2020
-            </span>
+          {/* About Image */}
+          <div className="dashboard-card aspect-video relative overflow-hidden">
+            <Image
+              src="https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=800&q=80"
+              alt="Soccer players on the field"
+              fill
+              className="object-cover"
+            />
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+              <span className="text-white font-semibold text-lg">SINCE 2020</span>
+            </div>
           </div>
         </div>
       </Section>
@@ -63,7 +69,7 @@ export default function AboutPage() {
           {/* Competition */}
           <div className="dashboard-card text-center p-8">
             <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Target size={28} className="text-green-500" />
+              <Target size={28} className="text-white" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-3">Competition</h3>
             <p className="text-zinc-400 leading-relaxed">
@@ -75,7 +81,7 @@ export default function AboutPage() {
           {/* Community */}
           <div className="dashboard-card text-center p-8">
             <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Users size={28} className="text-green-500" />
+              <Users size={28} className="text-white" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-3">Community</h3>
             <p className="text-zinc-400 leading-relaxed">
@@ -87,7 +93,7 @@ export default function AboutPage() {
           {/* Quality */}
           <div className="dashboard-card text-center p-8">
             <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Award size={28} className="text-green-500" />
+              <Award size={28} className="text-white" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-3">Quality</h3>
             <p className="text-zinc-400 leading-relaxed">

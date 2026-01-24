@@ -14,14 +14,14 @@ interface StatusIndicatorProps {
 
 const statusColors: Record<StatusType, string> = {
   open: "bg-green-500",
-  closed: "bg-red-500",
-  warning: "bg-yellow-500",
+  closed: "bg-zinc-600",
+  warning: "bg-amber-500",
 };
 
 const statusPulse: Record<StatusType, string> = {
   open: "animate-pulse bg-green-400",
-  closed: "bg-red-500",
-  warning: "animate-pulse bg-yellow-400",
+  closed: "bg-zinc-600",
+  warning: "animate-pulse bg-amber-400",
 };
 
 export function StatusIndicator({ items, className }: StatusIndicatorProps) {
@@ -43,7 +43,7 @@ export function StatusIndicator({ items, className }: StatusIndicatorProps) {
               )}
             />
           </span>
-          <span className="text-sm font-medium text-zinc-300">{item.label}</span>
+          <span className="text-sm font-medium text-white">{item.label}</span>
         </div>
       ))}
     </div>
