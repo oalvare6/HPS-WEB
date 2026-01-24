@@ -1,11 +1,15 @@
 import Link from "next/link";
 import Image from "next/image";
+import { MapPin, Navigation, ExternalLink } from "lucide-react";
+
+const GOOGLE_MAPS_URL =
+  "https://www.google.com/maps/dir/?api=1&destination=14602+Ambrose+St,+Houston,+TX+77045";
 
 export function Footer() {
   return (
-    <footer className="bg-zinc-950 text-white">
-      <div className="max-w-6xl mx-auto px-6 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-12 md:gap-8">
+    <footer className="bg-zinc-950 text-white border-t border-zinc-800">
+      <div className="max-w-6xl mx-auto px-6 py-12 md:py-16">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 md:gap-8">
           {/* Brand */}
           <div className="md:col-span-2">
             <Link href="/" className="flex items-center gap-3 mb-4">
@@ -22,27 +26,45 @@ export function Footer() {
               Houston&apos;s home for competitive soccer. Quality fields, organized events, 
               and a community built around the game.
             </p>
+            
+            {/* Quick Location */}
+            <div className="flex items-start gap-2 mt-4 text-sm">
+              <MapPin size={16} className="text-green-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-zinc-400">14602 Ambrose St, Houston, TX 77045</p>
+                <a
+                  href={GOOGLE_MAPS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-green-500 hover:text-green-400 text-xs font-medium mt-1 transition-colors"
+                >
+                  <Navigation size={12} />
+                  Get Directions
+                  <ExternalLink size={10} className="opacity-70" />
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h3 className="font-semibold text-sm uppercase tracking-wide mb-4">
+            <h3 className="font-semibold text-sm uppercase tracking-wide mb-4 text-zinc-300">
               Quick Links
             </h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/about" className="text-zinc-400 hover:text-white text-sm transition-colors">
-                  About
+                <Link href="/events#schedule" className="text-zinc-400 hover:text-white text-sm transition-colors">
+                  Schedule
+                </Link>
+              </li>
+              <li>
+                <Link href="/events#standings" className="text-zinc-400 hover:text-white text-sm transition-colors">
+                  Standings
                 </Link>
               </li>
               <li>
                 <Link href="/facility" className="text-zinc-400 hover:text-white text-sm transition-colors">
                   Facility
-                </Link>
-              </li>
-              <li>
-                <Link href="/events" className="text-zinc-400 hover:text-white text-sm transition-colors">
-                  Events
                 </Link>
               </li>
               <li>
@@ -55,7 +77,7 @@ export function Footer() {
 
           {/* Contact */}
           <div>
-            <h3 className="font-semibold text-sm uppercase tracking-wide mb-4">
+            <h3 className="font-semibold text-sm uppercase tracking-wide mb-4 text-zinc-300">
               Contact
             </h3>
             <ul className="space-y-3 text-sm text-zinc-400">
@@ -69,21 +91,21 @@ export function Footer() {
                   (713) 555-0100
                 </a>
               </li>
-              <li className="pt-2">
-                Houston, TX
-              </li>
             </ul>
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-zinc-800 mt-12 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="border-t border-zinc-800 mt-10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-zinc-500 text-sm">
             &copy; {new Date().getFullYear()} Houston Premier Soccer. All rights reserved.
           </p>
           <div className="flex gap-6">
             <Link href="/contact" className="text-zinc-500 hover:text-white text-sm transition-colors">
               Contact Us
+            </Link>
+            <Link href="/about" className="text-zinc-500 hover:text-white text-sm transition-colors">
+              About
             </Link>
           </div>
         </div>

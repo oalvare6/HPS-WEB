@@ -8,12 +8,12 @@ interface SectionProps {
   dark?: boolean;
 }
 
-export function Section({ children, className, container = true, dark = false }: SectionProps) {
+export function Section({ children, className, container = true, dark = true }: SectionProps) {
   return (
     <section
       className={cn(
-        "py-20 md:py-28",
-        dark ? "bg-zinc-950 text-white" : "bg-white",
+        "py-16 md:py-24",
+        dark ? "bg-zinc-950 text-white" : "bg-white text-zinc-900",
         className
       )}
     >
@@ -33,12 +33,12 @@ interface SectionHeaderProps {
   dark?: boolean;
 }
 
-export function SectionHeader({ title, subtitle, align = "left", dark = false }: SectionHeaderProps) {
+export function SectionHeader({ title, subtitle, align = "left", dark = true }: SectionHeaderProps) {
   return (
-    <div className={cn("mb-12", align === "center" && "text-center")}>
+    <div className={cn("mb-10", align === "center" && "text-center")}>
       <h2
         className={cn(
-          "text-3xl md:text-4xl font-semibold tracking-tight",
+          "text-2xl md:text-3xl font-bold tracking-tight",
           dark ? "text-white" : "text-zinc-900"
         )}
       >
@@ -47,7 +47,7 @@ export function SectionHeader({ title, subtitle, align = "left", dark = false }:
       {subtitle && (
         <p
           className={cn(
-            "mt-4 text-lg",
+            "mt-3 text-lg",
             dark ? "text-zinc-400" : "text-zinc-600"
           )}
         >

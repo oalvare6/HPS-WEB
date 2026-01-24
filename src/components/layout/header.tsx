@@ -5,20 +5,27 @@ import Image from "next/image";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StatusIndicatorCompact } from "@/components/shared/status-indicator";
 
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/about", label: "About" },
   { href: "/facility", label: "Facility" },
-  { href: "/events", label: "Events" },
+  { href: "/events", label: "Schedule" },
   { href: "/contact", label: "Contact" },
+];
+
+// Status data - in production this would come from an API/CMS
+const statusItems = [
+  { label: "Registration Open", status: "open" as const },
+  { label: "Fields: Open", status: "open" as const },
 ];
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 bg-white border-b border-zinc-200">
+    <header className="sticky top-0 z-50 bg-zinc-950 border-b border-zinc-800">
       <div className="max-w-6xl mx-auto px-6">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
@@ -28,35 +35,44 @@ export function Header() {
               alt="Houston Premier Soccer"
               width={48}
               height={48}
-              className="w-10 h-10 md:w-12 md:h-12"
+              className="w-10 h-10 md:w-12 md:h-12 invert"
             />
-            <span className="hidden sm:block font-semibold text-zinc-900 text-lg">
+            <span className="hidden sm:block font-semibold text-white text-lg">
               Houston Premier Soccer
             </span>
           </Link>
 
-          {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
+          {/* Desktop: Status + Nav */}
+          <div className="hidden md:flex items-center gap-8">
+            {/* Status Indicators */}
+            <StatusIndicatorCompact items={statusItems} />
+
+            {/* Divider */}
+            <div className="h-6 w-px bg-zinc-800" />
+
+            {/* Navigation */}
+            <nav className="flex items-center gap-6">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ))}
               <Link
-                key={link.href}
-                href={link.href}
-                className="text-sm font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
+                href="/register"
+                className="bg-white text-zinc-900 px-4 py-2 text-sm font-medium rounded-md hover:bg-zinc-100 transition-colors"
               >
-                {link.label}
+                Register
               </Link>
-            ))}
-            <Link
-              href="/register"
-              className="bg-zinc-900 text-white px-4 py-2 text-sm font-medium rounded-md hover:bg-zinc-800 transition-colors"
-            >
-              Register
-            </Link>
-          </nav>
+            </nav>
+          </div>
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2 -mr-2 text-zinc-600 hover:text-zinc-900"
+            className="md:hidden p-2 -mr-2 text-zinc-400 hover:text-white"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle menu"
           >
@@ -68,15 +84,20 @@ export function Header() {
         <div
           className={cn(
             "md:hidden overflow-hidden transition-all duration-200",
-            mobileMenuOpen ? "max-h-96 pb-6" : "max-h-0"
+            mobileMenuOpen ? "max-h-[500px] pb-6" : "max-h-0"
           )}
         >
-          <nav className="flex flex-col gap-4 pt-4 border-t border-zinc-100">
+          {/* Mobile Status Indicators */}
+          <div className="pt-4 pb-4 border-t border-zinc-800">
+            <StatusIndicatorCompact items={statusItems} />
+          </div>
+
+          <nav className="flex flex-col gap-4">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-base font-medium text-zinc-600 hover:text-zinc-900 transition-colors"
+                className="text-base font-medium text-zinc-400 hover:text-white transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 {link.label}
@@ -84,10 +105,10 @@ export function Header() {
             ))}
             <Link
               href="/register"
-              className="bg-zinc-900 text-white px-4 py-3 text-center font-medium rounded-md hover:bg-zinc-800 transition-colors mt-2"
+              className="bg-white text-zinc-900 px-4 py-3 text-center font-medium rounded-md hover:bg-zinc-100 transition-colors mt-2"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Register
+              Register for Tournament
             </Link>
           </nav>
         </div>

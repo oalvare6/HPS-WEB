@@ -10,8 +10,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Houston Premier Soccer",
-  description: "Houston's home for competitive soccer. Tournaments, leagues, and quality facilities.",
+  title: "Houston Premier Soccer | League Operations Center",
+  description: "Schedules, standings, and field status for Houston Premier Soccer leagues and tournaments. Check game times, get directions, and register for events.",
 };
 
 export default function RootLayout({
@@ -20,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased`}>
+    <html lang="en" className="dark">
+      <body className={`${inter.variable} font-sans antialiased bg-zinc-950 text-white`}>
         <Header />
         <main className="min-h-screen">{children}</main>
         <Footer />
