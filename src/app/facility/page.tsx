@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { LocationCard } from "@/components/shared/location-card";
 import {
@@ -56,14 +55,21 @@ export default function FacilityPage() {
             </ul>
           </div>
 
-          {/* Field Image */}
+          {/* Field Video */}
           <div className="dashboard-card aspect-video relative overflow-hidden">
-            <Image
-              src="https://images.unsplash.com/photo-1551958219-acbc608c6377?w=800&q=80"
-              alt="Soccer field at Houston Premier Soccer"
-              fill
-              className="object-cover"
-            />
+            <video
+              className="w-full h-full object-cover"
+              autoPlay
+              muted
+              loop
+              playsInline
+              controls
+              poster="/community/hps-community-7v7.png"
+            >
+              <source src="/videos/FACILITY.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-zinc-950/70 via-transparent to-transparent" />
           </div>
         </div>
       </Section>
