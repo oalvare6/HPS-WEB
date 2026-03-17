@@ -77,32 +77,57 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right: Spring Registration Card */}
-            <div className="dashboard-card bg-tactical-grid-dense overflow-hidden">
-              {/* Collapsed Header - Always Visible */}
-              <div 
-                className="p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors"
-                onClick={() => setIsFormExpanded(!isFormExpanded)}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      <span className="text-xs font-mono text-green-500 uppercase tracking-wider">Planning Phase</span>
-                    </div>
-                    <h2 className="text-xl font-bold text-white">March 2026</h2>
-                    <p className="text-xs text-zinc-400 mt-1">Express interest & availability</p>
-                  </div>
-                  <div className={`transform transition-transform ${isFormExpanded ? 'rotate-180' : ''}`}>
-                    <ChevronDown size={24} className="text-green-500" />
+            {/* Right: Community + Planning */}
+            <div className="space-y-4">
+              {/* Community Photo */}
+              <div className="dashboard-card overflow-hidden border border-zinc-700/70 shadow-xl shadow-black/30">
+                <div className="relative aspect-video">
+                  <Image
+                    src="/community/hps-community-7v7.png"
+                    alt="Houston Premier Soccer 7v7 community"
+                    fill
+                    className="object-cover"
+                    sizes="(min-width: 1024px) 520px, 100vw"
+                    priority
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/85 via-zinc-950/20 to-transparent" />
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <p className="text-sm font-semibold text-white tracking-tight">
+                      Real players. Real community.
+                    </p>
+                    <p className="text-xs text-green-400 font-mono mt-0.5">
+                      Houston 7v7 under the lights
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Expanded Form */}
-              {isFormExpanded && (
-                <div className="p-6 pt-0 border-t border-zinc-800/50">
-                  <form className="space-y-3.5">
+              {/* Spring Planning Card */}
+              <div className="dashboard-card bg-tactical-grid-dense overflow-hidden">
+                {/* Collapsed Header - Always Visible */}
+                <div 
+                  className="p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors"
+                  onClick={() => setIsFormExpanded(!isFormExpanded)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-xs font-mono text-green-500 uppercase tracking-wider">Planning Phase</span>
+                      </div>
+                      <h2 className="text-xl font-bold text-white">March 2026</h2>
+                      <p className="text-xs text-zinc-400 mt-1">Express interest & availability</p>
+                    </div>
+                    <div className={`transform transition-transform ${isFormExpanded ? 'rotate-180' : ''}`}>
+                      <ChevronDown size={24} className="text-green-500" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expanded Form */}
+                {isFormExpanded && (
+                  <div className="p-6 pt-0 border-t border-zinc-800/50">
+                    <form className="space-y-3.5">
                     <div>
                       <label htmlFor="name" className="block text-xs font-medium text-green-400 mb-1 uppercase tracking-wide">
                         Full Name
@@ -237,6 +262,7 @@ export default function Home() {
                   </form>
                 </div>
               )}
+              </div>
             </div>
           </div>
         </div>
