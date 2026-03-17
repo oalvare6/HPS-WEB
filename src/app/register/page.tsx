@@ -3,15 +3,33 @@
 import { useState, FormEvent } from "react";
 import Link from "next/link";
 import { Section, SectionHeader } from "@/components/shared/section";
-import { CheckCircle, ArrowLeft } from "lucide-react";
+import { CheckCircle, ArrowLeft, ExternalLink, ShieldCheck } from "lucide-react";
+
+const ADULT_WAIVER_URL =
+  "https://www.jotform.com/sign/260753864938068/invite/01kky32y0ddaa703754db91d32";
+const YOUTH_WAIVER_URL =
+  "https://www.jotform.com/sign/260754139986067/invite/01kky35100f0cd74d7746a0d80";
+
+type RegistrationType = "team" | "adult" | "youth" | "freeagent" | "";
 
 export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [registrationType, setRegistrationType] = useState<RegistrationType>("");
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    setRegistrationType((formData.get("type") as RegistrationType) || "");
     setSubmitted(true);
   };
+
+  const waiverUrl = registrationType === "youth" ? YOUTH_WAIVER_URL : ADULT_WAIVER_URL;
+  const waiverLabel =
+    registrationType === "youth" ? "Complete Youth Waiver" : "Complete Adult Waiver";
+  const waiverHelperText =
+    registrationType === "youth"
+      ? "A parent or guardian must complete the youth waiver before this registration is considered complete."
+      : "This registration is not complete until the adult waiver is signed.";
 
   return (
     <>
@@ -32,27 +50,43 @@ export default function RegisterPage() {
         <div className="max-w-2xl mx-auto">
           {submitted ? (
             <div className="dashboard-card p-8 md:p-12 text-center">
-              <CheckCircle size={56} className="text-white mx-auto mb-6" />
+              <CheckCircle size={56} className="text-green-500 mx-auto mb-6" />
               <h2 className="text-2xl font-semibold text-white mb-3">
-                Registration Received
+                Registration Submitted
               </h2>
-              <p className="text-zinc-400 mb-6 max-w-md mx-auto">
-                Thanks for registering. We&apos;ll send confirmation and next steps 
-                to your email address.
+              <p className="text-zinc-300 mb-3 max-w-lg mx-auto">
+                Your registration form has been received, but your spot is <span className="text-white font-semibold">not complete until the waiver is signed</span>.
               </p>
-              <Link
-                href="/"
-                className="inline-flex items-center gap-2 text-white font-medium hover:text-zinc-300 transition-colors"
-              >
-                <ArrowLeft size={18} />
-                Back to Home
-              </Link>
+              <div className="max-w-lg mx-auto p-4 mb-6 bg-zinc-800/60 border border-zinc-700 rounded-xl text-left">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck size={20} className="text-green-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-zinc-300">{waiverHelperText}</p>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <a
+                  href={waiverUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary"
+                >
+                  {waiverLabel}
+                  <ExternalLink size={18} />
+                </a>
+                <Link
+                  href="/"
+                  className="inline-flex items-center justify-center gap-2 text-white font-medium hover:text-zinc-300 transition-colors border border-zinc-700 rounded-lg px-5 py-3"
+                >
+                  <ArrowLeft size={18} />
+                  Back to Home
+                </Link>
+              </div>
             </div>
           ) : (
             <>
               <SectionHeader
                 title="Player Registration"
-                subtitle="Fill out the form below to register for events."
+                subtitle="Fill out the form below to register for events. You will complete the correct waiver after submitting."
                 dark
               />
 
@@ -77,6 +111,9 @@ export default function RegisterPage() {
                     <option value="youth">Youth Player (Parent Registering)</option>
                     <option value="freeagent">Free Agent</option>
                   </select>
+                  <p className="text-xs text-zinc-500 mt-2">
+                    Team registrations and free agents currently continue to the adult waiver flow. Youth registrations continue to the youth waiver flow.
+                  </p>
                 </div>
 
                 {/* Name Fields */}
@@ -228,7 +265,7 @@ export default function RegisterPage() {
                 </button>
 
                 <p className="text-sm text-zinc-500 text-center">
-                  After submitting, you&apos;ll receive confirmation and payment details via email.
+                  After submitting, you&apos;ll be directed to the correct waiver. Registration is not complete until the waiver is signed.
                 </p>
               </form>
             </>
