@@ -95,9 +95,13 @@ export async function POST(request: Request) {
 
     const templateId = getTemplateId(waiverType);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/9423ad92-7622-4925-8ff4-e04b7fa95628',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cda60d'},body:JSON.stringify({sessionId:'cda60d',location:'api/register/route.ts:97',message:'DocuSeal pre-call env check',data:{apiKeyPresent:!!DOCUSEAL_API_KEY,apiKeyLength:DOCUSEAL_API_KEY?.length??0,adultTemplateRaw:process.env.DOCUSEAL_ADULT_TEMPLATE_ID,youthTemplateRaw:process.env.DOCUSEAL_YOUTH_TEMPLATE_ID,templateIdResolved:templateId,waiverType,registrationId:inserted.id},timestamp:Date.now(),hypothesisId:'A-B'})}).catch(()=>{});
-    // #endregion
+    // DEBUG: check env vars are present
+    if (!DOCUSEAL_API_KEY || !templateId || isNaN(templateId)) {
+      return NextResponse.json(
+        { error: `[DEBUG] Missing env: apiKey=${!!DOCUSEAL_API_KEY} templateId=${templateId} waiverType=${waiverType}` },
+        { status: 500 }
+      );
+    }
 
     const dsPayload = {
       template_id: templateId,
@@ -124,11 +128,9 @@ export async function POST(request: Request) {
     if (!dsResponse.ok) {
       const dsErr = await dsResponse.text();
       console.error("DocuSeal submission creation failed:", dsErr);
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/9423ad92-7622-4925-8ff4-e04b7fa95628',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cda60d'},body:JSON.stringify({sessionId:'cda60d',location:'api/register/route.ts:130',message:'DocuSeal API error response',data:{httpStatus:dsResponse.status,responseBody:dsErr,payloadSent:dsPayload},timestamp:Date.now(),hypothesisId:'C-D'})}).catch(()=>{});
-      // #endregion
+      // DEBUG: surface actual error temporarily
       return NextResponse.json(
-        { error: "Registration saved but waiver could not be created. Please contact us." },
+        { error: `[DEBUG] DocuSeal ${dsResponse.status}: ${dsErr}` },
         { status: 500 }
       );
     }
