@@ -95,31 +95,38 @@ export async function POST(request: Request) {
 
     const templateId = getTemplateId(waiverType);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/9423ad92-7622-4925-8ff4-e04b7fa95628',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cda60d'},body:JSON.stringify({sessionId:'cda60d',location:'api/register/route.ts:97',message:'DocuSeal pre-call env check',data:{apiKeyPresent:!!DOCUSEAL_API_KEY,apiKeyLength:DOCUSEAL_API_KEY?.length??0,adultTemplateRaw:process.env.DOCUSEAL_ADULT_TEMPLATE_ID,youthTemplateRaw:process.env.DOCUSEAL_YOUTH_TEMPLATE_ID,templateIdResolved:templateId,waiverType,registrationId:inserted.id},timestamp:Date.now(),hypothesisId:'A-B'})}).catch(()=>{});
+    // #endregion
+
+    const dsPayload = {
+      template_id: templateId,
+      send_email: false,
+      submitters: [
+        {
+          role: "First Party",
+          email: payload.email,
+          name: `${payload.firstName} ${payload.lastName}`,
+          metadata: { registration_id: inserted.id },
+        },
+      ],
+    };
+
     const dsResponse = await fetch("https://api.docuseal.com/submissions", {
       method: "POST",
       headers: {
         "X-Auth-Token": DOCUSEAL_API_KEY,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        template_id: templateId,
-        send_email: false,
-        submitters: [
-          {
-            role: "First Party",
-            email: payload.email,
-            name: `${payload.firstName} ${payload.lastName}`,
-            metadata: {
-              registration_id: inserted.id,
-            },
-          },
-        ],
-      }),
+      body: JSON.stringify(dsPayload),
     });
 
     if (!dsResponse.ok) {
       const dsErr = await dsResponse.text();
       console.error("DocuSeal submission creation failed:", dsErr);
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/9423ad92-7622-4925-8ff4-e04b7fa95628',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cda60d'},body:JSON.stringify({sessionId:'cda60d',location:'api/register/route.ts:130',message:'DocuSeal API error response',data:{httpStatus:dsResponse.status,responseBody:dsErr,payloadSent:dsPayload},timestamp:Date.now(),hypothesisId:'C-D'})}).catch(()=>{});
+      // #endregion
       return NextResponse.json(
         { error: "Registration saved but waiver could not be created. Please contact us." },
         { status: 500 }
