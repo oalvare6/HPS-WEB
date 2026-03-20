@@ -2,23 +2,19 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Calendar, Trophy, Users, MapPin, Clock, ChevronRight, ChevronDown } from "lucide-react";
+import { ArrowRight, Calendar, Trophy, Users, MapPin, Clock } from "lucide-react";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { EventCard } from "@/components/shared/event-card";
 import { LocationCard } from "@/components/shared/location-card";
 import { StatusIndicator } from "@/components/shared/status-indicator";
 import { QuickActionsBar } from "@/components/layout/quick-actions-bar";
-import { useState } from "react";
 
-// Status data - in production this would come from an API/CMS
 const statusItems = [
   { label: "Registration Open", status: "open" as const },
   { label: "Fields: Open", status: "open" as const },
 ];
 
 export default function Home() {
-  const [isFormExpanded, setIsFormExpanded] = useState(false);
-
   return (
     <>
       {/* Quick Actions Bar */}
@@ -61,23 +57,18 @@ export default function Home() {
 
               {/* Primary CTAs */}
               <div className="flex flex-col sm:flex-row gap-3">
-                <Link
-                  href="/events#schedule"
-                  className="btn-primary"
-                >
+                <Link href="/register" className="btn-primary">
+                  <Trophy size={18} />
+                  Register for Tournament
+                </Link>
+                <Link href="/events#schedule" className="btn-secondary">
                   <Calendar size={18} />
                   Check Schedule
-                </Link>
-                <Link
-                  href="/register"
-                  className="btn-secondary"
-                >
-                  Register for Tournament
                 </Link>
               </div>
             </div>
 
-            {/* Right: Community + Planning */}
+            {/* Right: Community Photo + Tournament Info */}
             <div className="space-y-4">
               {/* Community Photo */}
               <div className="dashboard-card overflow-hidden border border-zinc-700/70 shadow-xl shadow-black/30">
@@ -102,166 +93,45 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Spring Planning Card */}
-              <div className="dashboard-card bg-tactical-grid-dense overflow-hidden">
-                {/* Collapsed Header - Always Visible */}
-                <div 
-                  className="p-4 cursor-pointer hover:bg-zinc-800/30 transition-colors"
-                  onClick={() => setIsFormExpanded(!isFormExpanded)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <span className="text-xs font-mono text-green-500 uppercase tracking-wider">Planning Phase</span>
-                      </div>
-                      <h2 className="text-xl font-bold text-white">March 2026</h2>
-                      <p className="text-xs text-zinc-400 mt-1">Express interest & availability</p>
+              {/* Spring Classic Card */}
+              <div className="dashboard-card p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      <span className="text-xs font-mono text-green-500 uppercase tracking-wider">Registration Open</span>
                     </div>
-                    <div className={`transform transition-transform ${isFormExpanded ? 'rotate-180' : ''}`}>
-                      <ChevronDown size={24} className="text-green-500" />
-                    </div>
+                    <h2 className="text-xl font-bold text-white">Spring Classic 2026</h2>
+                  </div>
+                  <Trophy size={24} className="text-green-500" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center gap-2 text-zinc-300">
+                    <Calendar size={14} className="text-green-500 flex-shrink-0" />
+                    <span>Every Friday starting Mar 27</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-zinc-300">
+                    <Clock size={14} className="text-green-500 flex-shrink-0" />
+                    <span>7:00 PM – 12:00 AM</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-zinc-300">
+                    <MapPin size={14} className="text-green-500 flex-shrink-0" />
+                    <span>14602 Ambrose St</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-zinc-300">
+                    <Users size={14} className="text-green-500 flex-shrink-0" />
+                    <span>Youth & Adult 7v7</span>
                   </div>
                 </div>
 
-                {/* Expanded Form */}
-                {isFormExpanded && (
-                  <div className="p-6 pt-0 border-t border-zinc-800/50">
-                    <form className="space-y-3.5">
-                    <div>
-                      <label htmlFor="name" className="block text-xs font-medium text-green-400 mb-1 uppercase tracking-wide">
-                        Full Name
-                      </label>
-                      <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        className="w-full px-3 py-2 bg-zinc-800/80 border border-zinc-600 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-green-600 focus:ring-2 focus:ring-green-900/30 transition-all font-mono text-sm"
-                        placeholder="Enter your name"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="email" className="block text-xs font-medium text-green-400 mb-1 uppercase tracking-wide">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        className="w-full px-3 py-2 bg-zinc-800/80 border border-zinc-600 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-green-600 focus:ring-2 focus:ring-green-900/30 transition-all font-mono text-sm"
-                        placeholder="your@email.com"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="phone" className="block text-xs font-medium text-green-400 mb-1 uppercase tracking-wide">
-                        Phone
-                      </label>
-                      <input
-                        type="tel"
-                        id="phone"
-                        name="phone"
-                        className="w-full px-3 py-2 bg-zinc-800/80 border border-zinc-600 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:border-green-600 focus:ring-2 focus:ring-green-900/30 transition-all font-mono text-sm"
-                        placeholder="(555) 000-0000"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="division" className="block text-xs font-medium text-green-400 mb-1 uppercase tracking-wide">
-                        Division Interest
-                      </label>
-                      <select
-                        id="division"
-                        name="division"
-                        className="w-full px-3 py-2 bg-zinc-800/80 border border-zinc-600 rounded-lg text-white focus:outline-none focus:border-green-600 focus:ring-2 focus:ring-green-900/30 transition-all font-mono text-sm"
-                        required
-                      >
-                        <option value="">Select division</option>
-                        <option value="youth-u8">Youth U8</option>
-                        <option value="youth-u10">Youth U10</option>
-                        <option value="youth-u12">Youth U12</option>
-                        <option value="youth-u14">Youth U14</option>
-                        <option value="youth-u16">Youth U16</option>
-                        <option value="adult-rec">Adult Recreational</option>
-                        <option value="adult-comp">Adult Competitive</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label htmlFor="format" className="block text-xs font-medium text-green-400 mb-1 uppercase tracking-wide">
-                        Preferred Format
-                      </label>
-                      <select
-                        id="format"
-                        name="format"
-                        className="w-full px-3 py-2 bg-zinc-800/80 border border-zinc-600 rounded-lg text-white focus:outline-none focus:border-green-600 focus:ring-2 focus:ring-green-900/30 transition-all font-mono text-sm"
-                        required
-                      >
-                        <option value="">Select format</option>
-                        <option value="4-day-tournament">4-Day Tournament</option>
-                        <option value="8-week-season">8-Week Season</option>
-                        <option value="either">Either Works</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-green-400 mb-2 uppercase tracking-wide">
-                        Best Days (Select All That Apply)
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
-                          <label key={day} className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded border border-zinc-700/50 hover:border-green-600/50 cursor-pointer transition-colors">
-                            <input
-                              type="checkbox"
-                              name="days[]"
-                              value={day.toLowerCase()}
-                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-green-600 focus:ring-2 focus:ring-green-900/30 focus:ring-offset-0"
-                            />
-                            <span className="text-xs text-white font-mono">{day}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-green-400 mb-2 uppercase tracking-wide">
-                        Best Times (Select All That Apply)
-                      </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {['5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM', '10:00 PM'].map((time) => (
-                          <label key={time} className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded border border-zinc-700/50 hover:border-green-600/50 cursor-pointer transition-colors">
-                            <input
-                              type="checkbox"
-                              name="times[]"
-                              value={time.toLowerCase().replace(/[:\s]/g, '')}
-                              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-green-600 focus:ring-2 focus:ring-green-900/30 focus:ring-offset-0"
-                            />
-                            <span className="text-xs text-white font-mono">{time}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full bg-green-700 text-white font-bold py-2.5 px-6 rounded-lg hover:bg-green-600 transition-all flex items-center justify-center gap-2 uppercase tracking-wider text-sm shadow-lg shadow-green-900/50 hover:shadow-green-800/60 border border-green-600"
-                    >
-                      <Users size={18} />
-                      Submit Interest
-                    </button>
-
-                    {/* Quick Info */}
-                    <div className="mt-3 p-2.5 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
-                      <p className="text-xs text-zinc-400 text-center">
-                        <span className="text-green-400 font-semibold">Format TBD</span> — Your input helps us plan the best schedule.
-                      </p>
-                    </div>
-                  </form>
-                </div>
-              )}
+                <Link
+                  href="/register"
+                  className="btn-primary w-full justify-center text-sm"
+                >
+                  Register Now
+                  <ArrowRight size={14} />
+                </Link>
               </div>
             </div>
           </div>
@@ -269,93 +139,101 @@ export default function Home() {
       </section>
 
       {/* What Happens Here */}
-      <Section dark className="bg-zinc-900 bg-topo-lines">
-        <SectionHeader
-          title="What Happens Here"
-          subtitle="Fast-paced 7v7 soccer for all ages and skill levels."
-          dark
-        />
+      <Section dark className="bg-zinc-950 overflow-hidden relative">
+        <div className="absolute inset-0">
+          <Image
+            src="https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=1400&q=80"
+            alt="Soccer field"
+            fill
+            className="object-cover opacity-10"
+          />
+        </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Tournaments */}
-          <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
-            <div className="aspect-video bg-zinc-800 relative">
-              <Image
-                src="https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&q=80"
-                alt="Soccer tournament action"
-                fill
-                className="object-cover"
-              />
-            </div>
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">7v7 Tournaments</h3>
-              <p className="text-zinc-400">
-                Weekend 7v7 competitions for youth and adult divisions. Fast-paced single-day and multi-day formats.
-              </p>
-              <Link
-                href="/events"
-                className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-sm font-medium mt-4 transition-colors"
-              >
-                View Tournaments
-                <ArrowRight size={14} />
-              </Link>
-            </div>
-          </div>
+        <div className="relative">
+          <SectionHeader
+            title="What Happens Here"
+            subtitle="Fast-paced 7v7 soccer for all ages and skill levels."
+            dark
+          />
 
-          {/* Leagues */}
-          <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
-            <div className="aspect-video bg-zinc-800 relative">
-              <Image
-                src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=600&q=80"
-                alt="Soccer league match"
-                fill
-                className="object-cover"
-              />
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
+              <div className="aspect-video bg-zinc-800 relative">
+                <Image
+                  src="https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&q=80"
+                  alt="Soccer tournament action"
+                  fill
+                  className="object-cover"
+                />
+              </div>
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-white mb-2">7v7 Tournaments</h3>
+                <p className="text-zinc-400">
+                  Weekend 7v7 competitions for youth and adult divisions. Fast-paced single-day and multi-day formats.
+                </p>
+                <Link
+                  href="/events"
+                  className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-sm font-medium mt-4 transition-colors"
+                >
+                  View Tournaments
+                  <ArrowRight size={14} />
+                </Link>
+              </div>
             </div>
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">7v7 Leagues</h3>
-              <p className="text-zinc-400">
-                Seasonal 7v7 play with consistent scheduling. Youth development and adult recreational divisions.
-              </p>
-              <Link
-                href="/events#schedule"
-                className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-sm font-medium mt-4 transition-colors"
-              >
-                View League Table
-                <ArrowRight size={14} />
-              </Link>
-            </div>
-          </div>
 
-          {/* Rentals */}
-          <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
-            <div className="aspect-video bg-zinc-800 relative">
-              <Image
-                src="https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=600&q=80"
-                alt="Soccer field at night"
-                fill
-                className="object-cover"
-              />
+            <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
+              <div className="aspect-video bg-zinc-800 relative">
+                <Image
+                  src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=600&q=80"
+                  alt="Soccer league match"
+                  fill
+                  className="object-cover"
+                />
+              </div>
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-white mb-2">7v7 Leagues</h3>
+                <p className="text-zinc-400">
+                  Seasonal 7v7 play with consistent scheduling. Youth development and adult recreational divisions.
+                </p>
+                <Link
+                  href="/events#schedule"
+                  className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-sm font-medium mt-4 transition-colors"
+                >
+                  View League Table
+                  <ArrowRight size={14} />
+                </Link>
+              </div>
             </div>
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-white mb-2">Field Rentals</h3>
-              <p className="text-zinc-400">
-                Book 7v7 field time for your team, training sessions, or private matches.
-              </p>
-              <Link
-                href="/contact"
-                className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-sm font-medium mt-4 transition-colors"
-              >
-                Book a Field
-                <ArrowRight size={14} />
-              </Link>
+
+            <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
+              <div className="aspect-video bg-zinc-800 relative">
+                <Image
+                  src="https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=600&q=80"
+                  alt="Soccer field at night"
+                  fill
+                  className="object-cover"
+                />
+              </div>
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-white mb-2">Field Rentals</h3>
+                <p className="text-zinc-400">
+                  Book 7v7 field time for your team, training sessions, or private matches.
+                </p>
+                <Link
+                  href="/contact"
+                  className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-sm font-medium mt-4 transition-colors"
+                >
+                  Book a Field
+                  <ArrowRight size={14} />
+                </Link>
+              </div>
             </div>
           </div>
         </div>
       </Section>
 
       {/* Past Events */}
-      <Section dark className="bg-zinc-950 bg-tactical-grid">
+      <Section dark className="bg-zinc-900">
         <SectionHeader
           title="Recent Events"
           subtitle="Completed tournaments and leagues."
@@ -398,7 +276,7 @@ export default function Home() {
       </Section>
 
       {/* Location Section */}
-      <Section dark className="bg-zinc-900">
+      <Section dark className="bg-zinc-950">
         <div className="grid md:grid-cols-2 gap-12 items-start">
           <div>
             <SectionHeader
@@ -442,32 +320,33 @@ export default function Home() {
             </Link>
           </div>
 
-          {/* Location Card */}
           <LocationCard />
         </div>
       </Section>
 
       {/* CTA Section */}
-      <Section dark className="bg-zinc-950 bg-field-pattern">
-        <div className="text-center max-w-2xl mx-auto">
+      <Section dark className="bg-zinc-900 relative overflow-hidden">
+        <div className="absolute inset-0">
+          <Image
+            src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=1400&q=80"
+            alt="Soccer action"
+            fill
+            className="object-cover opacity-10"
+          />
+        </div>
+        <div className="relative text-center max-w-2xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
             Ready to Play 7v7?
           </h2>
           <p className="text-zinc-400 mb-8">
-            Register your team for upcoming 7v7 tournaments and league seasons. 
+            Register for upcoming 7v7 tournaments and league seasons. 
             Contact us for group rates and field rental inquiries.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/register"
-              className="btn-primary"
-            >
+            <Link href="/register" className="btn-primary">
               Register for Tournament
             </Link>
-            <Link
-              href="/contact"
-              className="btn-secondary"
-            >
+            <Link href="/contact" className="btn-secondary">
               Contact Us
             </Link>
           </div>
@@ -475,7 +354,7 @@ export default function Home() {
       </Section>
 
       {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-zinc-950" />
+      <div className="h-20 md:hidden bg-zinc-900" />
     </>
   );
 }
