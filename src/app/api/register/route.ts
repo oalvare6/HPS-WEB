@@ -95,14 +95,6 @@ export async function POST(request: Request) {
 
     const templateId = getTemplateId(waiverType);
 
-    // DEBUG: check env vars are present
-    if (!DOCUSEAL_API_KEY || !templateId || isNaN(templateId)) {
-      return NextResponse.json(
-        { error: `[DEBUG] Missing env: apiKey=${!!DOCUSEAL_API_KEY} templateId=${templateId} waiverType=${waiverType}` },
-        { status: 500 }
-      );
-    }
-
     const dsPayload = {
       template_id: templateId,
       send_email: false,
@@ -128,9 +120,8 @@ export async function POST(request: Request) {
     if (!dsResponse.ok) {
       const dsErr = await dsResponse.text();
       console.error("DocuSeal submission creation failed:", dsErr);
-      // DEBUG: surface actual error temporarily
       return NextResponse.json(
-        { error: `[DEBUG] DocuSeal ${dsResponse.status}: ${dsErr}` },
+        { error: "Registration saved but waiver could not be created. Please contact us." },
         { status: 500 }
       );
     }
