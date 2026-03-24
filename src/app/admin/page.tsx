@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Section } from "@/components/shared/section";
 import {
   Loader2,
@@ -100,7 +100,7 @@ export default function AdminPage() {
       .finally(() => { setRegLoading(false); setLoginLoading(false); });
   };
 
-  const loadPayments = () => {
+  const loadPayments = useCallback(() => {
     setPayLoading(true);
     fetch("/api/admin/payments")
       .then((res) => {
@@ -114,17 +114,17 @@ export default function AdminPage() {
       })
       .catch(() => setPayError("Failed to load payments."))
       .finally(() => setPayLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     loadRegistrations();
   }, []);
 
   useEffect(() => {
-    if (authed && activeTab === "payments" && payments.length === 0 && !payLoading) {
+    if (authed && activeTab === "payments") {
       loadPayments();
     }
-  }, [authed, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authed, activeTab, loadPayments]);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

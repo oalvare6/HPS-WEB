@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     const email = (session.metadata?.email ?? session.customer_email ?? "").toLowerCase().trim();
     const tournamentName = session.metadata?.tournament_name ?? null;
-    const registrationId = session.metadata?.registration_id || null;
+    const registrationId = session.metadata?.registration_id ?? null;
     const amountTotal = session.amount_total ?? 0; // cents
     const paymentIntentId =
       typeof session.payment_intent === "string"
