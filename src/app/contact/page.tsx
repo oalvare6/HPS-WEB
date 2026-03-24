@@ -3,7 +3,23 @@
 import { useState, FormEvent } from "react";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { LocationInline } from "@/components/shared/location-card";
-import { Mail, Phone, CheckCircle, Clock } from "lucide-react";
+import { Mail, CheckCircle, Clock } from "lucide-react";
+
+const WHATSAPP_URL = "https://chat.whatsapp.com/HzBW39TgVemIA6EHWMnInY";
+
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 48 48"
+      className={className}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M24 4C13 4 4 13 4 24c0 3.6 1 7 2.7 10L4 44l10.3-2.7C17.2 43 20.5 44 24 44c11 0 20-9 20-20S35 4 24 4zm0 36c-3.1 0-6.1-.8-8.7-2.4l-.6-.4-6.1 1.6 1.6-5.9-.4-.6C8.2 30.3 7.4 27.2 7.4 24 7.4 14.8 14.9 7.4 24 7.4S40.6 14.9 40.6 24 33.1 40 24 40zm10.9-14.5c-.6-.3-3.5-1.7-4-1.9-.5-.2-.9-.3-1.3.3-.4.6-1.5 1.9-1.8 2.3-.3.4-.7.4-1.3.1-.6-.3-2.5-.9-4.7-2.9-1.7-1.5-2.9-3.4-3.2-4-.3-.6 0-.9.3-1.2.3-.3.6-.7.9-1 .3-.3.4-.6.6-1 .2-.4.1-.7 0-1-.1-.3-1.3-3.2-1.8-4.3-.5-1.1-1-1-1.3-1H16c-.4 0-1 .1-1.5.7-.5.6-2 1.9-2 4.7s2 5.5 2.3 5.8c.3.4 4 6.1 9.7 8.6 1.4.6 2.4.9 3.3 1.2 1.4.4 2.6.4 3.6.2 1.1-.2 3.5-1.4 4-2.8.5-1.4.5-2.5.3-2.8-.1-.2-.5-.4-1.1-.6z" />
+    </svg>
+  );
+}
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -146,25 +162,27 @@ export default function ContactPage() {
                 <div>
                   <h3 className="font-medium text-white">Email</h3>
                   <a
-                    href="mailto:info@houstonpremiersoccer.com"
+                    href="mailto:houspremiersoccer@gmail.com"
                     className="text-zinc-400 hover:text-white transition-colors"
                   >
-                    info@houstonpremiersoccer.com
+                    houspremiersoccer@gmail.com
                   </a>
                 </div>
               </div>
 
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Phone size={20} className="text-white" />
+                <div className="w-10 h-10 bg-[#25D366] rounded-lg flex items-center justify-center flex-shrink-0">
+                  <WhatsAppIcon className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-white">Phone</h3>
+                  <h3 className="font-medium text-white">WhatsApp Community</h3>
                   <a
-                    href="tel:+17135550100"
-                    className="text-zinc-400 hover:text-white transition-colors"
+                    href={WHATSAPP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#25D366] hover:text-[#20bd5a] transition-colors"
                   >
-                    (713) 555-0100
+                    Join our community chat
                   </a>
                 </div>
               </div>
