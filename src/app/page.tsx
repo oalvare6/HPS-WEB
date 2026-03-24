@@ -127,13 +127,22 @@ export default function Home() {
                   </div>
                 </div>
 
-                <Link
-                  href="/register"
-                  className="btn-primary w-full justify-center text-sm"
-                >
-                  Register Now
-                  <ArrowRight size={14} />
-                </Link>
+                <div className="flex flex-col gap-2">
+                  <Link
+                    href="/register"
+                    className="btn-primary w-full justify-center text-sm"
+                  >
+                    Register Now
+                    <ArrowRight size={14} />
+                  </Link>
+                  <Link
+                    href="/pay"
+                    className="btn-secondary w-full justify-center text-sm"
+                  >
+                    Pay for Tournament
+                    <ArrowRight size={14} />
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

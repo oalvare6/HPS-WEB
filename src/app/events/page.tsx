@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { EventCard } from "@/components/shared/event-card";
 import { WeeklySchedule } from "@/components/shared/weekly-schedule";
-import { ArrowRight, Calendar, Trophy } from "lucide-react";
+import { ArrowRight, Calendar, Trophy, MapPin, Clock, Users, CreditCard } from "lucide-react";
 
 export default function EventsPage() {
   return (
@@ -19,6 +19,62 @@ export default function EventsPage() {
           </p>
         </div>
       </section>
+
+      {/* Spring Classic 2026 — Upcoming Tournament Banner */}
+      <Section dark className="bg-zinc-900 border-b border-zinc-800">
+        <div className="max-w-4xl mx-auto">
+          <div className="dashboard-card overflow-hidden">
+            <div className="bg-green-500/10 border-b border-green-500/20 px-6 py-3 flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-xs font-mono text-green-400 uppercase tracking-wider font-semibold">
+                Upcoming — Registration &amp; Payments Open
+              </span>
+            </div>
+            <div className="p-6 md:p-8">
+              <div className="flex flex-col md:flex-row md:items-center gap-6">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Trophy size={22} className="text-green-400 flex-shrink-0" />
+                    <h2 className="text-2xl font-bold text-white">
+                      Spring Classic 2026
+                    </h2>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm mb-4">
+                    <div className="flex items-center gap-2 text-zinc-300">
+                      <Calendar size={14} className="text-green-500 flex-shrink-0" />
+                      <span>Every Friday starting Mar 27, 2026</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-zinc-300">
+                      <Clock size={14} className="text-green-500 flex-shrink-0" />
+                      <span>7:00 PM – 12:00 AM</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-zinc-300">
+                      <MapPin size={14} className="text-green-500 flex-shrink-0" />
+                      <span>14602 Ambrose St, Houston TX</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-zinc-300">
+                      <Users size={14} className="text-green-500 flex-shrink-0" />
+                      <span>Youth &amp; Adult 7v7</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3 md:min-w-[200px]">
+                  <Link href="/register" className="btn-primary justify-center text-sm">
+                    <Trophy size={16} />
+                    Register Now
+                    <ArrowRight size={14} />
+                  </Link>
+                  <Link href="/pay" className="btn-secondary justify-center text-sm">
+                    <CreditCard size={16} />
+                    Pay Entry Fee
+                    <ArrowRight size={14} />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Section>
 
       {/* Schedule Section */}
       <Section dark className="bg-zinc-900 bg-topo-lines" id="schedule">
@@ -298,17 +354,12 @@ export default function EventsPage() {
             We&apos;ll notify you when registration opens.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/register"
-              className="btn-primary"
-            >
+            <Link href="/register" className="btn-primary">
               Register Now
             </Link>
-            <Link
-              href="/contact"
-              className="btn-secondary"
-            >
-              Contact Us
+            <Link href="/pay" className="btn-secondary">
+              <CreditCard size={18} />
+              Pay Entry Fee
             </Link>
           </div>
         </div>
