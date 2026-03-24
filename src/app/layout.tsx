@@ -17,6 +17,28 @@ export const metadata: Metadata = {
     shortcut: "/icon.png",
     apple: "/apple-icon.png",
   },
+  openGraph: {
+    title: "Houston Premier Soccer",
+    description: "Your local 7v7 soccer spot. Quality grass field, competitive leagues, and a community built around the beautiful game.",
+    url: "https://houstonpremiersoccer.com",
+    siteName: "Houston Premier Soccer",
+    images: [
+      {
+        url: "/brand/hps-badge.png",
+        width: 512,
+        height: 512,
+        alt: "Houston Premier Soccer Logo",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Houston Premier Soccer",
+    description: "Your local 7v7 soccer spot. Quality grass field, competitive leagues, and a community built around the beautiful game.",
+    images: ["/brand/hps-badge.png"],
+  },
 };
 
 export default function RootLayout({

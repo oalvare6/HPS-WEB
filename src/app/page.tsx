@@ -28,14 +28,16 @@ export default function Home() {
             <div>
               {/* Logo Badge */}
               <div className="mb-6">
-                <Image
-                  src="/brand/hps-badge.png"
-                  alt="Houston Premier Soccer"
-                  width={100}
-                  height={100}
-                  className="w-20 h-20 md:w-24 md:h-24 invert"
-                  priority
-                />
+                <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white p-1 shadow-lg shadow-black/30">
+                  <Image
+                    src="/brand/hps-badge.png"
+                    alt="Houston Premier Soccer"
+                    width={100}
+                    height={100}
+                    className="w-full h-full rounded-full"
+                    priority
+                  />
+                </div>
               </div>
 
               {/* Status Indicators */}
@@ -139,14 +141,15 @@ export default function Home() {
       </section>
 
       {/* What Happens Here */}
-      <Section dark className="bg-zinc-950 overflow-hidden relative">
+      <Section dark className="bg-zinc-900 overflow-hidden relative">
         <div className="absolute inset-0">
           <Image
             src="https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=1400&q=80"
             alt="Soccer field"
             fill
-            className="object-cover opacity-10"
+            className="object-cover opacity-[0.07]"
           />
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/60 via-transparent to-zinc-950/60" />
         </div>
 
         <div className="relative">
@@ -233,7 +236,7 @@ export default function Home() {
       </Section>
 
       {/* Past Events */}
-      <Section dark className="bg-zinc-900">
+      <Section dark className="bg-zinc-950 bg-tactical-grid-dense">
         <SectionHeader
           title="Recent Events"
           subtitle="Completed tournaments and leagues."
@@ -276,7 +279,7 @@ export default function Home() {
       </Section>
 
       {/* Location Section */}
-      <Section dark className="bg-zinc-950">
+      <Section dark className="bg-zinc-900">
         <div className="grid md:grid-cols-2 gap-12 items-start">
           <div>
             <SectionHeader
@@ -325,14 +328,15 @@ export default function Home() {
       </Section>
 
       {/* CTA Section */}
-      <Section dark className="bg-zinc-900 relative overflow-hidden">
+      <Section dark className="bg-zinc-950 relative overflow-hidden">
         <div className="absolute inset-0">
           <Image
             src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=1400&q=80"
             alt="Soccer action"
             fill
-            className="object-cover opacity-10"
+            className="object-cover opacity-[0.07]"
           />
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-zinc-950/80" />
         </div>
         <div className="relative text-center max-w-2xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
@@ -354,7 +358,7 @@ export default function Home() {
       </Section>
 
       {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-zinc-900" />
+      <div className="h-20 md:hidden bg-zinc-950" />
     </>
   );
 }

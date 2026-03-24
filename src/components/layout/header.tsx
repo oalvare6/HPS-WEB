@@ -25,18 +25,20 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 bg-zinc-950 border-b border-zinc-800">
+    <header className="sticky top-0 z-50 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/80">
       <div className="max-w-6xl mx-auto px-6">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">
-            <Image
-              src="/brand/hps-badge.png"
-              alt="Houston Premier Soccer"
-              width={48}
-              height={48}
-              className="w-10 h-10 md:w-12 md:h-12 invert"
-            />
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white p-0.5 shadow-md shadow-black/20">
+              <Image
+                src="/brand/hps-badge.png"
+                alt="Houston Premier Soccer"
+                width={48}
+                height={48}
+                className="w-full h-full rounded-full"
+              />
+            </div>
             <span className="hidden sm:block font-semibold text-white text-lg">
               Houston Premier Soccer
             </span>

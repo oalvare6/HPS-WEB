@@ -13,13 +13,15 @@ export function Footer() {
           {/* Brand */}
           <div className="md:col-span-2">
             <Link href="/" className="flex items-center gap-3 mb-4">
-              <Image
-                src="/brand/hps-badge.png"
-                alt="Houston Premier Soccer"
-                width={48}
-                height={48}
-                className="w-12 h-12 invert"
-              />
+              <div className="w-12 h-12 rounded-full bg-white p-0.5 shadow-md shadow-black/20">
+                <Image
+                  src="/brand/hps-badge.png"
+                  alt="Houston Premier Soccer"
+                  width={48}
+                  height={48}
+                  className="w-full h-full rounded-full"
+                />
+              </div>
               <span className="font-semibold text-lg">Houston Premier Soccer</span>
             </Link>
             <p className="text-zinc-400 text-sm leading-relaxed max-w-sm">

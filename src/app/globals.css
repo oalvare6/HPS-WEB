@@ -48,15 +48,16 @@ body {
    TACTICAL UTILITY PATTERNS
    ================================ */
 
-/* Tactical grid pattern - subtle green-tinted lines */
+/* Tactical grid pattern - subtle green-tinted lines with radial glow */
 .bg-tactical-grid {
   background-color: #09090b;
   background-image: 
+    radial-gradient(ellipse at 20% 50%, rgba(22, 163, 74, 0.08) 0%, transparent 60%),
     linear-gradient(rgba(22, 163, 74, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(22, 163, 74, 0.05) 1px, transparent 1px),
     linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 40px 40px, 40px 40px, 120px 120px, 120px 120px;
+  background-size: 100% 100%, 40px 40px, 40px 40px, 120px 120px, 120px 120px;
 }
 
 /* Denser tactical grid */
@@ -120,7 +121,7 @@ body {
 
 /* Dashboard card */
 .dashboard-card {
-  @apply bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-lg shadow-black/50;
+  @apply bg-zinc-900/90 border border-zinc-700/50 rounded-xl shadow-lg shadow-black/40 backdrop-blur-sm;
 }
 
 /* Button variants for dark theme */
