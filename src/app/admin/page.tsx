@@ -195,6 +195,12 @@ export default function AdminPage() {
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
+  const formatDateTime = (dateStr: string) =>
+    new Date(dateStr).toLocaleString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+      hour: "numeric", minute: "2-digit",
+    });
+
   const formatCurrency = (amount: number, currency = "usd") =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount);
 
@@ -582,7 +588,7 @@ export default function AdminPage() {
                                 </span>
                               </td>
                               <td className="px-4 py-3 text-zinc-400 hidden sm:table-cell">
-                                {formatDate(p.created_at)}
+                                {formatDateTime(p.created_at)}
                               </td>
                             </tr>
                           ))}

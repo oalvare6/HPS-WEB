@@ -14,17 +14,28 @@ import {
   Users,
 } from "lucide-react";
 
-// Tournament entry — add more here when new events open up
-const TOURNAMENTS = [
+const PAYMENT_OPTIONS = [
   {
-    id: "spring-classic-2026",
-    name: "Spring Classic 2026 — March 27",
-    description: "Friday 7v7 Tournament | Every Friday starting Mar 27",
+    id: "full-season-payment",
+    name: "Full Season Payment",
+    description: "Full season entry — all Friday nights",
     date: "Every Friday starting Mar 27, 2026",
     time: "7:00 PM – 12:00 AM",
     location: "14602 Ambrose St, Houston TX",
     format: "Youth & Adult 7v7",
-    amountCents: 4000, // $40.00 — update when pricing is confirmed
+    amountCents: 9000,
+    badge: "Full Season",
+  },
+  {
+    id: "guest-playing-one-day",
+    name: "Guest Playing  One Day/Round Payment",
+    description: "First-timer or single-night guest entry",
+    date: "Every Friday starting Mar 27, 2026",
+    time: "7:00 PM – 12:00 AM",
+    location: "14602 Ambrose St, Houston TX",
+    format: "Youth & Adult 7v7",
+    amountCents: 1500,
+    badge: "Guest / Drop-In",
   },
 ];
 
@@ -33,11 +44,11 @@ function PayForm() {
   const cancelled = searchParams.get("cancelled") === "true";
 
   const [email, setEmail] = useState("");
-  const [selectedId, setSelectedId] = useState(TOURNAMENTS[0].id);
+  const [selectedId, setSelectedId] = useState(PAYMENT_OPTIONS[0].id);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const selected = TOURNAMENTS.find((t) => t.id === selectedId) ?? TOURNAMENTS[0];
+  const selected = PAYMENT_OPTIONS.find((t) => t.id === selectedId) ?? PAYMENT_OPTIONS[0];
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -80,23 +91,15 @@ function PayForm() {
         </div>
       )}
 
-      {/* Tournament card */}
-      <div className="dashboard-card p-6 mb-8">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-xs font-mono text-green-500 uppercase tracking-wider">
-                Registration Open
-              </span>
-            </div>
-            <h2 className="text-xl font-bold text-white">{selected.name}</h2>
-            <p className="text-zinc-400 text-sm mt-1">{selected.description}</p>
-          </div>
-          <Trophy size={24} className="text-green-500 flex-shrink-0 ml-4" />
+      {/* Event info */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <span className="text-xs font-mono text-green-500 uppercase tracking-wider">
+            Registration Open
+          </span>
         </div>
-
-        <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+        <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2 text-zinc-300">
             <Calendar size={14} className="text-green-500 flex-shrink-0" />
             <span>{selected.date}</span>
@@ -114,13 +117,45 @@ function PayForm() {
             <span>{selected.format}</span>
           </div>
         </div>
+      </div>
 
-        <div className="border-t border-zinc-700 pt-4 flex items-center justify-between">
-          <span className="text-zinc-400 text-sm">Entry fee</span>
-          <span className="text-2xl font-bold text-white">
-            ${(selected.amountCents / 100).toFixed(2)}
-          </span>
-        </div>
+      {/* Tier selection cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        {PAYMENT_OPTIONS.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => setSelectedId(opt.id)}
+            className={`dashboard-card p-5 text-left transition-all ${
+              selectedId === opt.id
+                ? "ring-2 ring-green-500 border-green-500"
+                : "hover:border-zinc-600"
+            }`}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <span
+                className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                  selectedId === opt.id
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-zinc-700 text-zinc-400"
+                }`}
+              >
+                {opt.badge}
+              </span>
+              <Trophy
+                size={20}
+                className={
+                  selectedId === opt.id ? "text-green-500" : "text-zinc-600"
+                }
+              />
+            </div>
+            <p className="text-white font-semibold mb-1">{opt.name}</p>
+            <p className="text-zinc-400 text-sm mb-3">{opt.description}</p>
+            <p className="text-2xl font-bold text-white">
+              ${(opt.amountCents / 100).toFixed(2)}
+            </p>
+          </button>
+        ))}
       </div>
 
       {/* Payment form */}

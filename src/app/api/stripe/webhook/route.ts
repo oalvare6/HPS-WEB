@@ -3,11 +3,6 @@ import { getStripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import Stripe from "stripe";
 
-// Stripe requires the raw body for signature verification — disable body parsing
-export const config = {
-  api: { bodyParser: false },
-};
-
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const sig = req.headers.get("stripe-signature") ?? "";
@@ -65,7 +60,17 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error("Failed to insert payment record:", error);
-      // Still return 200 so Stripe doesn't retry; log for manual review
+    }
+
+    if (resolvedRegistrationId) {
+      const { error: updateErr } = await supabaseAdmin
+        .from("registrations")
+        .update({ payment_status: "paid" })
+        .eq("id", resolvedRegistrationId);
+
+      if (updateErr) {
+        console.error("Failed to update registration payment_status:", updateErr);
+      }
     }
   }
 
