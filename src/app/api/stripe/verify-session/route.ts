@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error("verify-session: failed to insert payment:", error);
       return NextResponse.json(
-        { error: "Failed to record payment." },
+        { error: "Failed to record payment.", details: error.message, code: error.code },
         { status: 500 }
       );
     }
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("verify-session error:", err);
     return NextResponse.json(
-      { error: "Unexpected server error." },
+      { error: "Unexpected server error.", details: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
   }
