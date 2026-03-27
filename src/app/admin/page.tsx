@@ -17,7 +17,18 @@ import {
   DollarSign,
   ClipboardList,
   RefreshCw,
+  FileText,
+  X,
 } from "lucide-react";
+
+type LinkedPayment = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  tournament_name: string | null;
+  created_at: string;
+};
 
 type Registration = {
   id: string;
@@ -35,10 +46,12 @@ type Registration = {
   waiver_signed_at: string | null;
   waiver_submission_id: string | null;
   waiver_match_key: string;
+  waiver_document_url: string | null;
   payment_status: string;
   docuseal_status: string;
   docuseal_sign_url: string | null;
   docuseal_submission_id: number | null;
+  payments: LinkedPayment[] | null;
 };
 
 type Payment = {
@@ -55,7 +68,7 @@ type Payment = {
   registrations: { first_name: string; last_name: string } | null;
 };
 
-type SortField = "created_at" | "last_name" | "waiver_signed" | "registration_type";
+type SortField = "created_at" | "last_name" | "waiver_signed" | "registration_type" | "payment_status";
 type Filter = "all" | "signed" | "unsigned";
 type AdminTab = "registrations" | "payments";
 
@@ -66,7 +79,6 @@ export default function AdminPage() {
 
   const [activeTab, setActiveTab] = useState<AdminTab>("registrations");
 
-  // Registrations state
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState("");
@@ -75,8 +87,8 @@ export default function AdminPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [waiverViewUrl, setWaiverViewUrl] = useState<string | null>(null);
 
-  // Payments state
   const [payments, setPayments] = useState<Payment[]>([]);
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState("");
@@ -87,10 +99,7 @@ export default function AdminPage() {
     setRegLoading(true);
     fetch("/api/admin/registrations")
       .then((res) => {
-        if (res.status === 401) {
-          setAuthed(false);
-          return null;
-        }
+        if (res.status === 401) { setAuthed(false); return null; }
         return res.json();
       })
       .then((data) => {
@@ -119,14 +128,10 @@ export default function AdminPage() {
       .finally(() => setPayLoading(false));
   }, []);
 
-  useEffect(() => {
-    loadRegistrations();
-  }, []);
+  useEffect(() => { loadRegistrations(); }, []);
 
   useEffect(() => {
-    if (authed && activeTab === "payments") {
-      loadPayments();
-    }
+    if (authed && activeTab === "payments") loadPayments();
   }, [authed, activeTab, loadPayments]);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -154,7 +159,7 @@ export default function AdminPage() {
   };
 
   const handleSort = (field: SortField) => {
-    if (sortField === field) { setSortAsc(!sortAsc); }
+    if (sortField === field) setSortAsc(!sortAsc);
     else { setSortField(field); setSortAsc(true); }
   };
 
@@ -178,12 +183,14 @@ export default function AdminPage() {
       case "last_name": cmp = a.last_name.localeCompare(b.last_name); break;
       case "waiver_signed": cmp = Number(a.waiver_signed) - Number(b.waiver_signed); break;
       case "registration_type": cmp = a.registration_type.localeCompare(b.registration_type); break;
+      case "payment_status": cmp = a.payment_status.localeCompare(b.payment_status); break;
     }
     return sortAsc ? cmp : -cmp;
   });
 
   const totalSigned = registrations.filter((r) => r.waiver_signed).length;
   const totalUnsigned = registrations.filter((r) => !r.waiver_signed).length;
+  const totalPaid = registrations.filter((r) => r.payment_status === "paid").length;
 
   const totalRevenue = payments
     .filter((p) => p.status === "succeeded")
@@ -207,12 +214,21 @@ export default function AdminPage() {
   const formatCurrency = (amount: number, currency = "usd") =>
     new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount);
 
+  const getLinkedPaymentTotal = (r: Registration) => {
+    if (!r.payments?.length) return 0;
+    return r.payments
+      .filter((p) => p.status === "succeeded")
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+  };
+
   const handleExportCsv = () => {
-    const headers = ["Name","Email","Phone","DOB","Type","Waiver Signed","Signed At","Emergency Contact","Emergency Phone","Registered"];
+    const headers = ["Name","Email","Phone","DOB","Type","Waiver","Waiver Signed At","Payment Status","Amount Paid","Emergency Contact","Emergency Phone","Registered"];
     const rows = sorted.map((r) => [
       `${r.first_name} ${r.last_name}`, r.email, r.phone, r.dob, r.registration_type,
       r.waiver_signed ? "Yes" : "No",
       r.waiver_signed_at ? formatDate(r.waiver_signed_at) : "",
+      r.payment_status,
+      getLinkedPaymentTotal(r) || "",
       r.emergency_name, r.emergency_phone, formatDate(r.created_at),
     ]);
     const csv = [headers, ...rows].map((row) => row.map((v) => `"${v}"`).join(",")).join("\n");
@@ -241,6 +257,8 @@ export default function AdminPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  /* ── Login / loading gates ── */
 
   if (loginLoading && !authed) {
     return (
@@ -279,8 +297,31 @@ export default function AdminPage() {
     );
   }
 
+  /* ── Dashboard ── */
+
   return (
     <>
+      {/* Waiver PDF modal */}
+      {waiverViewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setWaiverViewUrl(null)}>
+          <div className="relative w-full max-w-3xl h-[80vh] bg-zinc-900 rounded-xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
+              <span className="text-sm font-medium text-white">Signed Waiver</span>
+              <div className="flex items-center gap-2">
+                <a href={waiverViewUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-zinc-400 hover:text-white transition-colors flex items-center gap-1">
+                  <ExternalLink size={12} /> Open in new tab
+                </a>
+                <button onClick={() => setWaiverViewUrl(null)} className="text-zinc-400 hover:text-white ml-2">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <iframe src={waiverViewUrl} className="w-full h-full border-0" title="Signed Waiver Document" />
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <section className="bg-zinc-950 text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
@@ -332,7 +373,7 @@ export default function AdminPage() {
               ) : (
                 <>
                   {/* Stats */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="dashboard-card p-4 text-center">
                       <p className="text-2xl font-bold text-white">{registrations.length}</p>
                       <p className="text-xs text-zinc-400 uppercase tracking-wide">Total</p>
@@ -344,6 +385,13 @@ export default function AdminPage() {
                     <div className="dashboard-card p-4 text-center">
                       <p className="text-2xl font-bold text-red-400">{totalUnsigned}</p>
                       <p className="text-xs text-zinc-400 uppercase tracking-wide">Pending Waiver</p>
+                    </div>
+                    <div className="dashboard-card p-4 text-center">
+                      <div className="flex justify-center mb-1">
+                        <DollarSign size={16} className="text-green-400" />
+                      </div>
+                      <p className="text-2xl font-bold text-green-400">{totalPaid}</p>
+                      <p className="text-xs text-zinc-400 uppercase tracking-wide">Paid</p>
                     </div>
                   </div>
 
@@ -376,12 +424,14 @@ export default function AdminPage() {
                               Name <SortIcon field="last_name" />
                             </th>
                             <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">Email</th>
-                            <th className="px-4 py-3 text-zinc-400 font-medium hidden lg:table-cell">Phone</th>
                             <th className="px-4 py-3 text-zinc-400 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("registration_type")}>
                               Type <SortIcon field="registration_type" />
                             </th>
                             <th className="px-4 py-3 text-zinc-400 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("waiver_signed")}>
                               Waiver <SortIcon field="waiver_signed" />
+                            </th>
+                            <th className="px-4 py-3 text-zinc-400 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("payment_status")}>
+                              Payment <SortIcon field="payment_status" />
                             </th>
                             <th className="px-4 py-3 text-zinc-400 font-medium cursor-pointer hover:text-white hidden sm:table-cell" onClick={() => handleSort("created_at")}>
                               Registered <SortIcon field="created_at" />
@@ -397,7 +447,6 @@ export default function AdminPage() {
                               >
                                 <td className="px-4 py-3 text-white font-medium">{r.first_name} {r.last_name}</td>
                                 <td className="px-4 py-3 text-zinc-300 hidden md:table-cell">{r.email}</td>
-                                <td className="px-4 py-3 text-zinc-300 hidden lg:table-cell">{r.phone}</td>
                                 <td className="px-4 py-3">
                                   <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                                     r.registration_type === "youth" ? "bg-blue-500/20 text-blue-400" : "bg-zinc-700 text-zinc-300"
@@ -417,8 +466,22 @@ export default function AdminPage() {
                                     {r.docuseal_status}
                                   </span>
                                 </td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${
+                                    r.payment_status === "paid"
+                                      ? "bg-green-500/20 text-green-400"
+                                      : r.payment_status === "pending"
+                                        ? "bg-yellow-500/20 text-yellow-400"
+                                        : "bg-zinc-700 text-zinc-400"
+                                  }`}>
+                                    {r.payment_status === "paid" ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                                    {r.payment_status}
+                                  </span>
+                                </td>
                                 <td className="px-4 py-3 text-zinc-400 hidden sm:table-cell">{formatDate(r.created_at)}</td>
                               </tr>
+
+                              {/* Expanded detail row */}
                               {expandedId === r.id && (
                                 <tr>
                                   <td colSpan={6} className="bg-zinc-800/40 px-4 py-4">
@@ -449,8 +512,47 @@ export default function AdminPage() {
                                         <p className="text-zinc-500 text-xs uppercase">Payment Status</p>
                                         <p className="text-zinc-200 capitalize">{r.payment_status}</p>
                                       </div>
-                                      <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-3">
-                                        {r.docuseal_status === "signed" && r.docuseal_submission_id && (
+
+                                      {/* Linked payments */}
+                                      {r.payments && r.payments.length > 0 && (
+                                        <div className="sm:col-span-2 lg:col-span-3">
+                                          <p className="text-zinc-500 text-xs uppercase mb-2">Payments</p>
+                                          <div className="space-y-1.5">
+                                            {r.payments.map((p) => (
+                                              <div key={p.id} className="flex items-center gap-3 bg-zinc-800/60 rounded-lg px-3 py-2">
+                                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
+                                                  p.status === "succeeded" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
+                                                }`}>
+                                                  {p.status === "succeeded" ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                                                  {p.status}
+                                                </span>
+                                                <span className="text-white font-semibold">{formatCurrency(p.amount, p.currency)}</span>
+                                                {p.tournament_name && <span className="text-zinc-400 text-xs">{p.tournament_name}</span>}
+                                                <span className="text-zinc-500 text-xs ml-auto">{formatDate(p.created_at)}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {(!r.payments || r.payments.length === 0) && (
+                                        <div className="sm:col-span-2 lg:col-span-3">
+                                          <p className="text-zinc-500 text-xs uppercase mb-1">Payments</p>
+                                          <p className="text-zinc-500 text-sm italic">No payments linked to this registration.</p>
+                                        </div>
+                                      )}
+
+                                      {/* Actions */}
+                                      <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-3 pt-2 border-t border-zinc-700/50">
+                                        {r.docuseal_status === "signed" && r.waiver_document_url && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setWaiverViewUrl(r.waiver_document_url); }}
+                                            className="inline-flex items-center gap-1.5 text-sm text-green-400 hover:text-green-300"
+                                          >
+                                            <FileText size={14} />
+                                            View Signed Waiver
+                                          </button>
+                                        )}
+                                        {r.docuseal_status === "signed" && r.docuseal_submission_id && !r.waiver_document_url && (
                                           <a
                                             href={`https://docuseal.com/submissions/${r.docuseal_submission_id}`}
                                             target="_blank" rel="noopener noreferrer"
@@ -458,7 +560,7 @@ export default function AdminPage() {
                                             className="inline-flex items-center gap-1.5 text-sm text-green-400 hover:text-green-300"
                                           >
                                             <ExternalLink size={14} />
-                                            View Signed Document
+                                            View on DocuSeal
                                           </a>
                                         )}
                                         {r.docuseal_sign_url && r.docuseal_status !== "signed" && (
@@ -553,7 +655,10 @@ export default function AdminPage() {
                             setSyncResult(`Error: ${data.error}`);
                           } else {
                             setSyncResult(`Synced ${data.synced} new payment(s), ${data.skipped} already recorded.`);
-                            if (data.synced > 0) loadPayments();
+                            if (data.synced > 0) {
+                              loadPayments();
+                              loadRegistrations();
+                            }
                           }
                         } catch {
                           setSyncResult("Sync failed.");

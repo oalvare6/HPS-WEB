@@ -10,7 +10,11 @@ export async function GET() {
     const { data, error } = await supabaseAdmin
       .from("registrations")
       .select(
-        "id, created_at, registration_type, first_name, last_name, email, phone, dob, emergency_name, emergency_phone, waiver_type, waiver_signed, waiver_signed_at, waiver_submission_id, waiver_match_key, payment_status, docuseal_status, docuseal_submission_id, docuseal_sign_url"
+        `id, created_at, registration_type, first_name, last_name, email, phone, dob,
+         emergency_name, emergency_phone, waiver_type, waiver_signed, waiver_signed_at,
+         waiver_submission_id, waiver_match_key, waiver_document_url, payment_status,
+         docuseal_status, docuseal_submission_id, docuseal_sign_url,
+         payments ( id, amount, currency, status, tournament_name, created_at )`
       )
       .order("created_at", { ascending: false });
 

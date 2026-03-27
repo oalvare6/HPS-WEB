@@ -50,12 +50,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
+    const documentUrl =
+      payload.data.submission?.combined_document_url ??
+      payload.data.documents?.[0]?.url ??
+      null;
+
     const { error: updateErr } = await supabaseAdmin
       .from("registrations")
       .update({
         waiver_signed: true,
         waiver_signed_at: payload.data.completed_at ?? new Date().toISOString(),
         docuseal_status: "signed",
+        waiver_document_url: documentUrl,
       })
       .eq("id", registration.id);
 
