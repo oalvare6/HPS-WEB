@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -12,11 +12,10 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-export default function PaySuccessPage() {
+function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
   const [verifying, setVerifying] = useState(!!sessionId);
-  const [verified, setVerified] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -29,9 +28,7 @@ export default function PaySuccessPage() {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.status === "recorded" || data.status === "already_recorded") {
-          setVerified(true);
-        } else {
+        if (data.status !== "recorded" && data.status !== "already_recorded") {
           setError(data.error ?? "Could not verify payment.");
         }
       })
@@ -118,5 +115,19 @@ export default function PaySuccessPage() {
         </div>
       </section>
     </>
+  );
+}
+
+export default function PaySuccessPage() {
+  return (
+    <Suspense
+      fallback={
+        <section className="bg-zinc-900 min-h-[60vh] flex items-center justify-center">
+          <Loader2 size={36} className="text-zinc-400 animate-spin" />
+        </section>
+      }
+    >
+      <SuccessContent />
+    </Suspense>
   );
 }
