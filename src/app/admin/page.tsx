@@ -104,7 +104,13 @@ export default function AdminPage() {
       })
       .then((data) => {
         if (!data) return;
-        if (data.error) { setRegError(data.error); return; }
+        // #region agent log
+        if (data.error) {
+          const debugInfo = data._debug ? ` [${data._debug.code}] ${data._debug.message} | hint: ${data._debug.hint} | details: ${data._debug.details}` : "";
+          setRegError(data.error + debugInfo);
+          return;
+        }
+        // #endregion
         setRegistrations(data.registrations);
         setAuthed(true);
       })

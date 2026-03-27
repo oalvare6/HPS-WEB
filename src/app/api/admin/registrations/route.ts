@@ -19,9 +19,11 @@ export async function GET() {
       .order("created_at", { ascending: false });
 
     if (error) {
+      // #region agent log
       console.error("Admin registrations fetch error:", error);
+      // #endregion
       return NextResponse.json(
-        { error: "Failed to load registrations." },
+        { error: "Failed to load registrations.", _debug: { message: error.message, code: error.code, hint: error.hint, details: error.details } },
         { status: 500 }
       );
     }
