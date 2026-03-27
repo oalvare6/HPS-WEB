@@ -16,6 +16,7 @@ import {
   Users,
   DollarSign,
   ClipboardList,
+  RefreshCw,
 } from "lucide-react";
 
 type Registration = {
@@ -79,6 +80,8 @@ export default function AdminPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState("");
 
   const loadRegistrations = () => {
     setRegLoading(true);
@@ -538,13 +541,43 @@ export default function AdminPage() {
                   </div>
 
                   {/* Controls */}
-                  <div className="flex justify-end">
+                  <div className="flex flex-wrap items-center gap-3 justify-end">
+                    <button
+                      onClick={async () => {
+                        setSyncing(true);
+                        setSyncResult("");
+                        try {
+                          const res = await fetch("/api/admin/sync-payments", { method: "POST" });
+                          const data = await res.json();
+                          if (data.error) {
+                            setSyncResult(`Error: ${data.error}`);
+                          } else {
+                            setSyncResult(`Synced ${data.synced} new payment(s), ${data.skipped} already recorded.`);
+                            if (data.synced > 0) loadPayments();
+                          }
+                        } catch {
+                          setSyncResult("Sync failed.");
+                        } finally {
+                          setSyncing(false);
+                        }
+                      }}
+                      disabled={syncing}
+                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+                      {syncing ? "Syncing…" : "Sync from Stripe"}
+                    </button>
                     <button onClick={handleExportPaymentsCsv}
                       className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors">
                       <Download size={14} />
                       Export CSV
                     </button>
                   </div>
+                  {syncResult && (
+                    <p className={`text-sm ${syncResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                      {syncResult}
+                    </p>
+                  )}
 
                   {/* Payments Table */}
                   <div className="dashboard-card overflow-hidden">

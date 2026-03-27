@@ -8,14 +8,25 @@ export async function POST(req: NextRequest) {
   const sig = req.headers.get("stripe-signature") ?? "";
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
+  // #region agent log
+  fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/webhook/route.ts:entry',message:'Webhook POST received',data:{hasSig:!!sig,hasSecret:!!webhookSecret,bodyLen:rawBody.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
+
   let event: Stripe.Event;
 
   try {
     event = getStripe().webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/webhook/route.ts:sigFail',message:'Signature verification FAILED',data:{error:String(err)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     console.error("Stripe webhook signature verification failed:", err);
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/webhook/route.ts:eventType',message:'Event received',data:{eventType:event.type},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
@@ -28,6 +39,10 @@ export async function POST(req: NextRequest) {
       typeof session.payment_intent === "string"
         ? session.payment_intent
         : (session.payment_intent?.id ?? null);
+
+    // #region agent log
+    fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/webhook/route.ts:sessionData',message:'Checkout session data',data:{email,tournamentName,registrationId,amountTotal,paymentIntentId,sessionId:session.id},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
 
     if (!email) {
       console.error("Stripe webhook: no email found in session", session.id);
@@ -47,6 +62,10 @@ export async function POST(req: NextRequest) {
       resolvedRegistrationId = reg?.id ?? null;
     }
 
+    // #region agent log
+    fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/webhook/route.ts:preInsert',message:'About to insert payment',data:{email,resolvedRegistrationId,amount:amountTotal/100},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+
     const { error } = await supabaseAdmin.from("payments").insert({
       email,
       tournament_name: tournamentName,
@@ -58,6 +77,10 @@ export async function POST(req: NextRequest) {
       status: "succeeded",
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/webhook/route.ts:postInsert',message:'Payment insert result',data:{success:!error,error:error?JSON.stringify(error):null},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+
     if (error) {
       console.error("Failed to insert payment record:", error);
     }
@@ -67,6 +90,10 @@ export async function POST(req: NextRequest) {
         .from("registrations")
         .update({ payment_status: "paid" })
         .eq("id", resolvedRegistrationId);
+
+      // #region agent log
+      fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/webhook/route.ts:regUpdate',message:'Registration payment_status update result',data:{resolvedRegistrationId,success:!updateErr,error:updateErr?JSON.stringify(updateErr):null},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
 
       if (updateErr) {
         console.error("Failed to update registration payment_status:", updateErr);

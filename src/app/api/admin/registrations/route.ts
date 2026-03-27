@@ -14,6 +14,10 @@ export async function GET() {
       )
       .order("created_at", { ascending: false });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'admin/registrations/route.ts:result',message:'Registrations query result',data:{success:!error,count:data?.length??0,error:error?JSON.stringify(error):null,paymentStatuses:data?.map((r:{email:string,payment_status:string})=>({email:r.email,payment_status:r.payment_status}))??[]},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
+
     if (error) {
       console.error("Admin registrations fetch error:", error);
       return NextResponse.json(
