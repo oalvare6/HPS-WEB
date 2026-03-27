@@ -55,8 +55,7 @@ export async function POST(request: Request) {
       payload.data.documents?.[0]?.url ??
       null;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateFields: Record<string, any> = {
+    const updateFields: Record<string, unknown> = {
       waiver_signed: true,
       waiver_signed_at: payload.data.completed_at ?? new Date().toISOString(),
       docuseal_status: "signed",
