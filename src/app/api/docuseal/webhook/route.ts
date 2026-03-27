@@ -55,19 +55,31 @@ export async function POST(request: Request) {
       payload.data.documents?.[0]?.url ??
       null;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateFields: Record<string, any> = {
+      waiver_signed: true,
+      waiver_signed_at: payload.data.completed_at ?? new Date().toISOString(),
+      docuseal_status: "signed",
+    };
+
     const { error: updateErr } = await supabaseAdmin
       .from("registrations")
-      .update({
-        waiver_signed: true,
-        waiver_signed_at: payload.data.completed_at ?? new Date().toISOString(),
-        docuseal_status: "signed",
-        waiver_document_url: documentUrl,
-      })
+      .update(updateFields)
       .eq("id", registration.id);
 
     if (updateErr) {
       console.error("DocuSeal webhook: failed to update registration", updateErr);
       return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
+    }
+
+    if (documentUrl) {
+      await supabaseAdmin
+        .from("registrations")
+        .update({ waiver_document_url: documentUrl })
+        .eq("id", registration.id)
+        .then(({ error }) => {
+          if (error) console.warn("DocuSeal webhook: waiver_document_url column may not exist yet, skipping", error.code);
+        });
     }
 
     return NextResponse.json({ ok: true });
