@@ -41,11 +41,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No email on session." }, { status: 400 });
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/verify-session/route.ts:verify',message:'Verifying session',data:{stripeSessionId:sessionId,email,tournamentName,amountTotal,paymentIntentId},timestamp:Date.now(),hypothesisId:'FIX'})}).catch(()=>{});
-    // #endregion
-
-    // Check if this payment was already recorded (idempotent)
+    // Idempotent: skip if already recorded
     const { data: existing } = await supabaseAdmin
       .from("payments")
       .select("id")
@@ -56,7 +52,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "already_recorded", paymentId: existing.id });
     }
 
-    // Resolve registration
+    // Resolve registration by email if no ID was captured at checkout
     let resolvedRegistrationId: string | null = registrationId || null;
     if (!resolvedRegistrationId) {
       const { data: reg } = await supabaseAdmin
@@ -84,14 +80,10 @@ export async function POST(req: NextRequest) {
       .select("id")
       .single();
 
-    // #region agent log
-    fetch('http://127.0.0.1:7425/ingest/32ce3c00-1017-4a1c-8ff2-742df9280f68',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'a0f19a'},body:JSON.stringify({sessionId:'a0f19a',location:'stripe/verify-session/route.ts:insertResult',message:'Payment insert result',data:{success:!error,error:error?JSON.stringify(error):null},timestamp:Date.now(),hypothesisId:'FIX'})}).catch(()=>{});
-    // #endregion
-
     if (error) {
       console.error("verify-session: failed to insert payment:", error);
       return NextResponse.json(
-        { error: "Failed to record payment.", details: error.message, code: error.code },
+        { error: "Failed to record payment." },
         { status: 500 }
       );
     }
@@ -107,7 +99,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("verify-session error:", err);
     return NextResponse.json(
-      { error: "Unexpected server error.", details: err instanceof Error ? err.message : String(err) },
+      { error: "Unexpected server error." },
       { status: 500 }
     );
   }
