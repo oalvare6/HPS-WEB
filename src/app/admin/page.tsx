@@ -94,6 +94,8 @@ export default function AdminPage() {
   const [payError, setPayError] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState("");
+  const [syncingWaivers, setSyncingWaivers] = useState(false);
+  const [waiverSyncResult, setWaiverSyncResult] = useState("");
 
   const loadRegistrations = () => {
     setRegLoading(true);
@@ -413,12 +415,44 @@ export default function AdminPage() {
                         </button>
                       ))}
                     </div>
+                    <button
+                      onClick={async () => {
+                        setSyncingWaivers(true);
+                        setWaiverSyncResult("");
+                        try {
+                          const res = await fetch("/api/admin/sync-waivers", { method: "POST" });
+                          const data = await res.json();
+                          if (data.error) {
+                            setWaiverSyncResult(`Error: ${data.error}`);
+                          } else {
+                            setWaiverSyncResult(
+                              `Synced ${data.synced} waiver(s), ${data.skipped} still pending.`
+                            );
+                            if (data.synced > 0) loadRegistrations();
+                          }
+                        } catch {
+                          setWaiverSyncResult("Sync failed.");
+                        } finally {
+                          setSyncingWaivers(false);
+                        }
+                      }}
+                      disabled={syncingWaivers}
+                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} className={syncingWaivers ? "animate-spin" : ""} />
+                      {syncingWaivers ? "Syncing…" : "Sync Waivers"}
+                    </button>
                     <button onClick={handleExportCsv}
                       className="ml-auto inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors">
                       <Download size={14} />
                       Export CSV
                     </button>
                   </div>
+                  {waiverSyncResult && (
+                    <p className={`text-sm ${waiverSyncResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                      {waiverSyncResult}
+                    </p>
+                  )}
 
                   {/* Table */}
                   <div className="dashboard-card overflow-hidden">
