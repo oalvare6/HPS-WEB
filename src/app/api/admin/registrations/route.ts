@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
 
 export async function GET() {
+
   const unauthorized = await verifyAdmin();
   if (unauthorized) return unauthorized;
 

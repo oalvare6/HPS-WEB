@@ -88,12 +88,14 @@ export default function AdminPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [waiverViewUrl, setWaiverViewUrl] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+  const [markedId, setMarkedId] = useState<string | null>(null);
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [payLoading, setPayLoading] = useState(false);
   const [payError, setPayError] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState("");
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const loadRegistrations = () => {
     setRegLoading(true);
@@ -104,13 +106,11 @@ export default function AdminPage() {
       })
       .then((data) => {
         if (!data) return;
-        // #region agent log
         if (data.error) {
           const debugInfo = data._debug ? ` [${data._debug.code}] ${data._debug.message} | hint: ${data._debug.hint} | details: ${data._debug.details}` : "";
           setRegError(data.error + debugInfo);
           return;
         }
-        // #endregion
         setRegistrations(data.registrations);
         setAuthed(true);
       })
@@ -139,6 +139,43 @@ export default function AdminPage() {
   useEffect(() => {
     if (authed && activeTab === "payments") loadPayments();
   }, [authed, activeTab, loadPayments]);
+
+  const handleSyncWaivers = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/admin/sync-waivers", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { setSyncResult(data.error || "Sync failed."); return; }
+      setSyncResult(`Synced ${data.synced} of ${data.total} pending waivers.`);
+      if (data.synced > 0) loadRegistrations();
+    } catch {
+      setSyncResult("Sync request failed.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleMarkSigned = async (id: string) => {
+    if (!window.confirm("Are you sure you want to mark this waiver as signed? This should only be done after verifying the waiver was completed.")) return;
+    setMarkingId(id);
+    try {
+      const res = await fetch("/api/admin/override-waiver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registrationId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || "Failed to override waiver."); return; }
+      setMarkedId(id);
+      loadRegistrations();
+      setTimeout(() => setMarkedId(null), 2000);
+    } catch {
+      alert("Request failed. Please try again.");
+    } finally {
+      setMarkingId(null);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -338,8 +375,8 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <Section dark className="bg-zinc-900">
-        <div className="max-w-6xl mx-auto space-y-6">
+      <Section dark className="bg-zinc-900 !py-8 md:!py-12" container={false}>
+        <div className="max-w-6xl mx-auto px-6 space-y-6">
 
           {/* Tabs */}
           <div className="flex gap-1 bg-zinc-800 rounded-lg p-1 w-fit">
@@ -371,6 +408,11 @@ export default function AdminPage() {
           {activeTab === "registrations" && (
             <>
               {regError && <p className="text-red-400">{regError}</p>}
+              {syncResult && (
+                <p className={`text-sm px-3 py-2 rounded-lg ${syncResult.startsWith("Synced") ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+                  {syncResult}
+                </p>
+              )}
               {regLoading ? (
                 <div className="flex items-center gap-3 text-zinc-400 py-8">
                   <Loader2 size={24} className="animate-spin" />
@@ -413,8 +455,13 @@ export default function AdminPage() {
                         </button>
                       ))}
                     </div>
+                    <button onClick={handleSyncWaivers} disabled={syncing}
+                      className="ml-auto inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50">
+                      <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+                      {syncing ? "Syncing…" : "Sync Waivers"}
+                    </button>
                     <button onClick={handleExportCsv}
-                      className="ml-auto inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors">
+                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors">
                       <Download size={14} />
                       Export CSV
                     </button>
@@ -548,7 +595,7 @@ export default function AdminPage() {
                                       )}
 
                                       {/* Actions */}
-                                      <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-3 pt-2 border-t border-zinc-700/50">
+                                      <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap items-center gap-3 pt-2 border-t border-zinc-700/50">
                                         {r.docuseal_status === "signed" && r.waiver_document_url && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); setWaiverViewUrl(r.waiver_document_url); }}
@@ -558,12 +605,12 @@ export default function AdminPage() {
                                             View Signed Waiver
                                           </button>
                                         )}
-                                        {r.docuseal_status === "signed" && r.docuseal_submission_id && !r.waiver_document_url && (
+                                        {r.docuseal_sign_url && (
                                           <a
-                                            href={`https://docuseal.com/submissions/${r.docuseal_submission_id}`}
+                                            href={r.docuseal_sign_url}
                                             target="_blank" rel="noopener noreferrer"
                                             onClick={(e) => e.stopPropagation()}
-                                            className="inline-flex items-center gap-1.5 text-sm text-green-400 hover:text-green-300"
+                                            className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white"
                                           >
                                             <ExternalLink size={14} />
                                             View on DocuSeal
@@ -576,6 +623,25 @@ export default function AdminPage() {
                                           >
                                             <Copy size={14} />
                                             {copiedId === r.id ? "Copied!" : "Copy Waiver Link"}
+                                          </button>
+                                        )}
+                                        {r.waiver_signed ? (
+                                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/20 text-green-400">
+                                            <CheckCircle size={12} />
+                                            Signed
+                                          </span>
+                                        ) : (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleMarkSigned(r.id); }}
+                                            disabled={markingId === r.id}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                                          >
+                                            {markingId === r.id ? (
+                                              <Loader2 size={12} className="animate-spin" />
+                                            ) : (
+                                              <CheckCircle size={12} />
+                                            )}
+                                            {markedId === r.id ? "Marked!" : markingId === r.id ? "Saving…" : "Mark as Signed"}
                                           </button>
                                         )}
                                       </div>
@@ -653,7 +719,7 @@ export default function AdminPage() {
                     <button
                       onClick={async () => {
                         setSyncing(true);
-                        setSyncResult("");
+                        setSyncResult(null);
                         try {
                           const res = await fetch("/api/admin/sync-payments", { method: "POST" });
                           const data = await res.json();
