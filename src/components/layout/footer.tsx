@@ -133,6 +133,19 @@ export function Footer() {
             </Link>
           </div>
         </div>
+
+        {/* Site credit */}
+        <div className="border-t border-zinc-800/50 mt-6 pt-4 flex justify-center">
+          <a
+            href="https://qronnect.pro"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-zinc-600 hover:text-zinc-400 transition-colors text-xs"
+          >
+            <Image src="/assets/qro-logo.png" alt="QRO" width={20} height={20} className="h-5 w-auto opacity-70" />
+            <span>Site by QRO</span>
+          </a>
+        </div>
       </div>
     </footer>
   );
