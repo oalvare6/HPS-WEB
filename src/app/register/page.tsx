@@ -130,11 +130,17 @@ export default function RegisterPage() {
               <div className="flex items-center gap-2 mb-1">
                 <User size={16} className="text-green-500" />
                 <span className="text-sm font-semibold text-zinc-200">
-                  Full Name <span className="text-red-400">*</span>
+                  Name <span className="text-red-400">*</span>
                 </span>
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
+                  <label
+                    htmlFor="firstName"
+                    className="block text-xs font-medium text-zinc-400 mb-1.5"
+                  >
+                    First name <span className="text-red-400">*</span>
+                  </label>
                   <input
                     type="text"
                     id="firstName"
@@ -147,6 +153,12 @@ export default function RegisterPage() {
                   />
                 </div>
                 <div>
+                  <label
+                    htmlFor="lastName"
+                    className="block text-xs font-medium text-zinc-400 mb-1.5"
+                  >
+                    Last name <span className="text-red-400">*</span>
+                  </label>
                   <input
                     type="text"
                     id="lastName"
@@ -250,7 +262,7 @@ export default function RegisterPage() {
                     htmlFor="emergencyName"
                     className="block text-xs font-medium text-zinc-400 mb-1.5"
                   >
-                    Contact Full Name
+                    Emergency contact name
                   </label>
                   <input
                     type="text"
@@ -258,7 +270,7 @@ export default function RegisterPage() {
                     name="emergencyName"
                     required
                     autoCapitalize="words"
-                    placeholder="Jane Doe"
+                    placeholder="First and last name"
                     className={inputClass}
                   />
                 </div>

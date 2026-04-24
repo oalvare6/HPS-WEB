@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent, Suspense } from "react";
+import { useState, FormEvent, Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -11,6 +11,7 @@ import {
   CreditCard,
   ArrowRight,
   AlertCircle,
+  CheckCircle2,
   Users,
 } from "lucide-react";
 
@@ -21,7 +22,7 @@ const PAYMENT_OPTIONS = [
     description: "Full season entry — all Friday nights",
     date: "Every Friday starting Mar 27, 2026",
     time: "7:00 PM – 12:00 AM",
-    location: "14602 Ambrose St, Houston TX",
+    location: "14062 Ambrose St, Houston TX",
     format: "Youth & Adult 7v7",
     amountCents: 9000,
     badge: "Full Season",
@@ -32,7 +33,7 @@ const PAYMENT_OPTIONS = [
     description: "First-timer or single-night guest entry",
     date: "Every Friday starting Mar 27, 2026",
     time: "7:00 PM – 12:00 AM",
-    location: "14602 Ambrose St, Houston TX",
+    location: "14062 Ambrose St, Houston TX",
     format: "Youth & Adult 7v7",
     amountCents: 1500,
     badge: "Guest / Drop-In",
@@ -42,13 +43,62 @@ const PAYMENT_OPTIONS = [
 function PayForm() {
   const searchParams = useSearchParams();
   const cancelled = searchParams.get("cancelled") === "true";
+  const registrationId = searchParams.get("registrationId") ?? "";
 
   const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
   const [selectedId, setSelectedId] = useState(PAYMENT_OPTIONS[0].id);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [registrationLoading, setRegistrationLoading] = useState(Boolean(registrationId));
+  const [registrationLoadError, setRegistrationLoadError] = useState("");
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
 
   const selected = PAYMENT_OPTIONS.find((t) => t.id === selectedId) ?? PAYMENT_OPTIONS[0];
+  const hasRegistration = Boolean(registrationId);
+
+  useEffect(() => {
+    if (!registrationId) return;
+
+    let cancelledFetch = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/registrations/${registrationId}`);
+        const data = (await res.json()) as {
+          email?: string;
+          firstName?: string;
+          paymentStatus?: string;
+          error?: string;
+        };
+
+        if (cancelledFetch) return;
+
+        if (!res.ok) {
+          setRegistrationLoadError(
+            data.error ?? "We couldn't load your registration. Please contact us."
+          );
+          return;
+        }
+
+        if (data.email) setEmail(data.email);
+        if (data.firstName) setFirstName(data.firstName);
+        if (data.paymentStatus === "paid") setAlreadyPaid(true);
+      } catch {
+        if (!cancelledFetch) {
+          setRegistrationLoadError(
+            "Network error loading your registration. Please refresh."
+          );
+        }
+      } finally {
+        if (!cancelledFetch) setRegistrationLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelledFetch = true;
+    };
+  }, [registrationId]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -63,6 +113,7 @@ function PayForm() {
           email: email.trim(),
           tournamentName: selected.name,
           amountCents: selected.amountCents,
+          registrationId: registrationId || undefined,
         }),
       });
 
@@ -74,7 +125,6 @@ function PayForm() {
         return;
       }
 
-      // Redirect to Stripe-hosted checkout
       window.location.href = data.url;
     } catch {
       setError("Network error. Please check your connection and try again.");
@@ -82,8 +132,60 @@ function PayForm() {
     }
   };
 
+  if (hasRegistration && registrationLoading) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-20 text-center text-zinc-400">
+        Loading your registration…
+      </div>
+    );
+  }
+
+  if (hasRegistration && registrationLoadError) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-20">
+        <div className="dashboard-card p-6 flex items-start gap-3 text-red-400">
+          <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold mb-1">We couldn&apos;t load your registration</p>
+            <p className="text-sm text-zinc-400">{registrationLoadError}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasRegistration && alreadyPaid) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-20">
+        <div className="dashboard-card p-8 text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-500/15 mb-4">
+            <CheckCircle2 size={28} className="text-green-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">You&apos;re all set</h2>
+          <p className="text-zinc-400 mb-6">
+            {firstName ? `${firstName}, your` : "Your"} payment is already on file. See you on the field.
+          </p>
+          <Link href="/" className="btn-primary inline-flex justify-center px-6">
+            Back to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-6 py-12 md:py-20">
+      {hasRegistration && (
+        <div className="mb-6 flex items-start gap-3 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-sm">
+          <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
+          <span>
+            <span className="font-semibold">Step 3 of 3 — Payment.</span>{" "}
+            {firstName ? `${firstName}, your` : "Your"} registration and waiver are saved
+            {email ? <> for <span className="font-mono">{email}</span></> : null}. Pick a tier and complete checkout to lock in your spot.
+          </span>
+        </div>
+      )}
+
       {cancelled && (
         <div className="mb-6 flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-yellow-400 text-sm">
           <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
@@ -164,13 +266,19 @@ function PayForm() {
           Complete Payment
         </h3>
         <p className="text-zinc-400 text-sm mb-6">
-          Enter the email you used when registering. Already registered?{" "}
-          your payment will be linked to your profile automatically.{" "}
-          Not registered yet?{" "}
-          <Link href="/register" className="text-white underline underline-offset-2">
-            Register first
-          </Link>{" "}
-          to sign your waiver, then come back here.
+          {hasRegistration ? (
+            <>Your payment will be linked to your registration automatically.</>
+          ) : (
+            <>
+              Enter the email you used when registering. Already registered?{" "}
+              your payment will be linked to your profile automatically.{" "}
+              Not registered yet?{" "}
+              <Link href="/register" className="text-white underline underline-offset-2">
+                Register first
+              </Link>{" "}
+              to sign your waiver, then come back here.
+            </>
+          )}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -189,8 +297,17 @@ function PayForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors"
+              readOnly={hasRegistration}
+              aria-readonly={hasRegistration}
+              className={`w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors ${
+                hasRegistration ? "opacity-80 cursor-not-allowed" : ""
+              }`}
             />
+            {hasRegistration && (
+              <p className="text-xs text-zinc-500 mt-1.5">
+                Locked to the email on your registration.
+              </p>
+            )}
           </div>
 
           {error && (

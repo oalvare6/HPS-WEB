@@ -1,11 +1,11 @@
 import { MapPin, Navigation, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ADDRESS = "14602 Ambrose St, Houston, TX 77045";
+const ADDRESS = "14062 Ambrose St, Houston, TX 77045";
 const GOOGLE_MAPS_URL =
-  "https://www.google.com/maps/dir/?api=1&destination=14602+Ambrose+St,+Houston,+TX+77045";
+  "https://www.google.com/maps/dir/?api=1&destination=14062+Ambrose+St,+Houston,+TX+77045";
 const GOOGLE_MAPS_EMBED_URL =
-  "https://www.google.com/maps/search/?api=1&query=14602+Ambrose+St,+Houston,+TX+77045";
+  "https://www.google.com/maps/search/?api=1&query=14062+Ambrose+St,+Houston,+TX+77045";
 
 interface LocationCardProps {
   className?: string;
@@ -27,7 +27,7 @@ export function LocationCard({ className, showMap = true, compact = false }: Loc
           <div className="aspect-video bg-zinc-800 relative overflow-hidden border-b-2 border-green-900/30">
             {/* Google Maps Embed - Satellite View */}
             <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3466.1234567890!2d-95.4189!3d29.6547!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2s14602%20Ambrose%20St%2C%20Houston%2C%20TX%2077045!5e1!3m2!1sen!2sus!4v1234567890"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3466.1234567890!2d-95.4189!3d29.6547!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2s14062%20Ambrose%20St%2C%20Houston%2C%20TX%2077045!5e1!3m2!1sen!2sus!4v1234567890"
               width="100%"
               height="100%"
               style={{ border: 0 }}

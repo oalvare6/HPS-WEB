@@ -95,15 +95,22 @@ export async function POST(request: Request) {
 
     const templateId = getTemplateId(waiverType);
 
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      `https://${request.headers.get("host")}`;
+    const completedRedirectUrl = `${baseUrl}/pay?registrationId=${inserted.id}`;
+
     const dsPayload = {
       template_id: templateId,
       send_email: false,
+      completed_redirect_url: completedRedirectUrl,
       submitters: [
         {
           role: "First Party",
           email: payload.email,
           name: `${payload.firstName} ${payload.lastName}`,
           metadata: { registration_id: inserted.id },
+          completed_redirect_url: completedRedirectUrl,
         },
       ],
     };

@@ -3,7 +3,7 @@ import Image from "next/image";
 import { MapPin, Navigation, ExternalLink } from "lucide-react";
 
 const GOOGLE_MAPS_URL =
-  "https://www.google.com/maps/dir/?api=1&destination=14602+Ambrose+St,+Houston,+TX+77045";
+  "https://www.google.com/maps/dir/?api=1&destination=14062+Ambrose+St,+Houston,+TX+77045";
 
 const WHATSAPP_URL = "https://chat.whatsapp.com/HzBW39TgVemIA6EHWMnInY";
 
@@ -49,7 +49,7 @@ export function Footer() {
             <div className="flex items-start gap-2 mt-4 text-sm">
               <MapPin size={16} className="text-white mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-zinc-400">14602 Ambrose St, Houston, TX 77045</p>
+                <p className="text-zinc-400">14062 Ambrose St, Houston, TX 77045</p>
                 <a
                   href={GOOGLE_MAPS_URL}
                   target="_blank"

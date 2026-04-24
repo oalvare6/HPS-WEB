@@ -157,7 +157,7 @@ export default function FacilityPage() {
           <div>
             <SectionHeader
               title="Location & Hours"
-              subtitle="14602 Ambrose St, Houston, TX 77045"
+              subtitle="14062 Ambrose St, Houston, TX 77045"
               dark
             />
             

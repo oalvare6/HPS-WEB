@@ -47,7 +47,7 @@ export default function EventsPage() {
                     </div>
                     <div className="flex items-center gap-2 text-zinc-300">
                       <MapPin size={14} className="text-green-500 flex-shrink-0" />
-                      <span>14602 Ambrose St, Houston TX</span>
+                      <span>14062 Ambrose St, Houston TX</span>
                     </div>
                     <div className="flex items-center gap-2 text-zinc-300">
                       <Users size={14} className="text-green-500 flex-shrink-0" />

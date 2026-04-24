@@ -5,10 +5,11 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, tournamentName, amountCents } = body as {
+    const { email, tournamentName, amountCents, registrationId } = body as {
       email: string;
       tournamentName: string;
       amountCents: number;
+      registrationId?: string;
     };
 
     if (!email || !tournamentName || !amountCents) {
@@ -18,14 +19,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Look up existing registration so we can link payment later
-    const { data: registration } = await supabaseAdmin
-      .from("registrations")
-      .select("id, first_name, last_name")
-      .eq("email", email.toLowerCase().trim())
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Prefer the explicit registrationId from the client (set when the user
+    // arrives at /pay via the post-waiver redirect). Fall back to a lookup
+    // by email so manual /pay visits still link to the most recent row.
+    let resolvedRegistrationId: string | null = null;
+    if (registrationId) {
+      const { data: byId } = await supabaseAdmin
+        .from("registrations")
+        .select("id")
+        .eq("id", registrationId)
+        .maybeSingle();
+      resolvedRegistrationId = byId?.id ?? null;
+    }
+
+    if (!resolvedRegistrationId) {
+      const { data: registration } = await supabaseAdmin
+        .from("registrations")
+        .select("id")
+        .eq("email", email.toLowerCase().trim())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      resolvedRegistrationId = registration?.id ?? null;
+    }
 
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
@@ -51,7 +67,7 @@ export async function POST(req: NextRequest) {
       metadata: {
         email: email.toLowerCase().trim(),
         tournament_name: tournamentName,
-        registration_id: registration?.id ?? "",
+        registration_id: resolvedRegistrationId ?? "",
       },
       success_url: `${baseUrl}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/pay?cancelled=true`,

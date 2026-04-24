@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Calendar, Trophy, MapPin, Navigation } from "lucide-react";
 
 const GOOGLE_MAPS_URL =
-  "https://www.google.com/maps/dir/?api=1&destination=14602+Ambrose+St,+Houston,+TX+77045";
+  "https://www.google.com/maps/dir/?api=1&destination=14062+Ambrose+St,+Houston,+TX+77045";
 
 export function QuickActionsBar() {
   return (

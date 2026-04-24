@@ -119,7 +119,7 @@ export default function Home() {
                   </div>
                   <div className="flex items-center gap-2 text-zinc-300">
                     <MapPin size={14} className="text-green-500 flex-shrink-0" />
-                    <span>14602 Ambrose St</span>
+                    <span>14062 Ambrose St</span>
                   </div>
                   <div className="flex items-center gap-2 text-zinc-300">
                     <Users size={14} className="text-green-500 flex-shrink-0" />
@@ -299,7 +299,7 @@ export default function Home() {
             
             <div className="space-y-6 text-zinc-300">
               <p className="leading-relaxed">
-                Our facility is located at <span className="text-green-400 font-semibold">14602 Ambrose St</span> in Houston. Easy access from 
+                Our facility is located at <span className="text-green-400 font-semibold">14062 Ambrose St</span> in Houston. Easy access from 
                 I-45 and 610, with on-site parking for players and spectators.
               </p>
               

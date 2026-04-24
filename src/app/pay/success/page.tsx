@@ -92,7 +92,7 @@ function SuccessContent() {
                 <span>Spring Classic 2026 — Every Friday starting Mar 27</span>
               </div>
               <p className="text-zinc-500 text-xs mt-1">
-                14602 Ambrose St · 7:00 PM – 12:00 AM
+                14062 Ambrose St · 7:00 PM – 12:00 AM
               </p>
             </div>
 
