@@ -8,20 +8,6 @@ function ensureClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  // #region agent log
-  console.error("[supabase-admin] init", {
-    hypothesisId: "A,B,C,D",
-    hasUrl: Boolean(url),
-    urlLength: typeof url === "string" ? url.length : 0,
-    hasServiceRoleKey: Boolean(key),
-    serviceRoleKeyLength: typeof key === "string" ? key.length : 0,
-    nodeEnv: process.env.NODE_ENV,
-    nextRuntime: process.env.NEXT_RUNTIME ?? null,
-    nextPhase: process.env.NEXT_PHASE ?? null,
-    vercelEnv: process.env.VERCEL_ENV ?? null,
-  });
-  // #endregion
-
   if (!url) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL environment variable.");
   }

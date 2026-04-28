@@ -32,7 +32,7 @@ export default function ContactPage() {
   return (
     <>
       {/* Hero */}
-      <section className="bg-zinc-950 text-white py-16 md:py-24 bg-tactical-grid">
+      <section className="bg-base text-white py-16 md:py-24 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             Get in Touch
@@ -45,7 +45,7 @@ export default function ContactPage() {
       </section>
 
       {/* Contact Content */}
-      <Section dark className="bg-zinc-900">
+      <Section dark className="bg-surface">
         <div className="grid md:grid-cols-2 gap-12 lg:gap-16">
           {/* Form */}
           <div>
@@ -78,7 +78,7 @@ export default function ContactPage() {
                     id="name"
                     name="name"
                     required
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
+                    className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors placeholder:text-zinc-500"
                     placeholder="Your name"
                   />
                 </div>
@@ -95,7 +95,7 @@ export default function ContactPage() {
                     id="email"
                     name="email"
                     required
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors placeholder:text-zinc-500"
+                    className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors placeholder:text-zinc-500"
                     placeholder="your@email.com"
                   />
                 </div>
@@ -110,7 +110,7 @@ export default function ContactPage() {
                   <select
                     id="subject"
                     name="subject"
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors"
+                    className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors"
                   >
                     <option value="general">General Inquiry</option>
                     <option value="registration">Tournament Registration</option>
@@ -132,7 +132,7 @@ export default function ContactPage() {
                     name="message"
                     rows={5}
                     required
-                    className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors resize-none placeholder:text-zinc-500"
+                    className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors resize-none placeholder:text-zinc-500"
                     placeholder="How can we help?"
                   />
                 </div>
@@ -156,7 +156,7 @@ export default function ContactPage() {
 
             <div className="space-y-6">
               <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 bg-surface-2 rounded-lg flex items-center justify-center flex-shrink-0">
                   <Mail size={20} className="text-white" />
                 </div>
                 <div>
@@ -209,7 +209,7 @@ export default function ContactPage() {
       </Section>
 
       {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-zinc-900" />
+      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }

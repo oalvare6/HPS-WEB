@@ -73,12 +73,12 @@ export default function RegisterPage() {
   };
 
   const inputClass =
-    "w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500/50 transition-colors placeholder:text-zinc-500";
+    "w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand/50 transition-colors placeholder:text-zinc-500";
 
   return (
     <>
       {/* Hero */}
-      <section className="bg-zinc-950 text-white py-16 md:py-24 bg-tactical-grid">
+      <section className="bg-base text-white py-16 md:py-24 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             Register for 7v7 Tournament
@@ -90,7 +90,7 @@ export default function RegisterPage() {
       </section>
 
       {/* Registration Form */}
-      <Section dark className="bg-zinc-900">
+      <Section dark className="bg-surface">
         <div className="max-w-2xl mx-auto">
           <SectionHeader
             title="Player Registration"
@@ -128,7 +128,7 @@ export default function RegisterPage() {
             {/* Name Fields */}
             <div className="space-y-2">
               <div className="flex items-center gap-2 mb-1">
-                <User size={16} className="text-green-500" />
+                <User size={16} className="text-brand" />
                 <span className="text-sm font-semibold text-zinc-200">
                   Name <span className="text-red-400">*</span>
                 </span>
@@ -176,7 +176,7 @@ export default function RegisterPage() {
             {/* Contact */}
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <Mail size={16} className="text-green-500" />
+                <Mail size={16} className="text-brand" />
                 <span className="text-sm font-semibold text-zinc-200">
                   Contact Info <span className="text-red-400">*</span>
                 </span>
@@ -224,7 +224,7 @@ export default function RegisterPage() {
             {/* Date of Birth */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <CalendarDays size={16} className="text-green-500" />
+                <CalendarDays size={16} className="text-brand" />
                 <label
                   htmlFor="dob"
                   className="text-sm font-semibold text-zinc-200"
@@ -246,7 +246,7 @@ export default function RegisterPage() {
             </div>
 
             {/* Emergency Contact */}
-            <div className="space-y-4 pt-4 border-t border-zinc-800">
+            <div className="space-y-4 pt-4 border-t border-border-token">
               <div className="flex items-center gap-2">
                 <ShieldAlert size={16} className="text-yellow-500" />
                 <span className="text-sm font-semibold text-zinc-200">
@@ -298,13 +298,13 @@ export default function RegisterPage() {
             </div>
 
             {/* Waiver Agreement */}
-            <div className="pt-4 border-t border-zinc-800">
+            <div className="pt-4 border-t border-border-token">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
                   name="waiver"
                   required
-                  className="w-5 h-5 mt-0.5 border-zinc-600 bg-zinc-800 rounded focus:ring-green-500 text-green-600"
+                  className="w-5 h-5 mt-0.5 border-border-token bg-surface-2 rounded focus:ring-brand text-brand"
                 />
                 <span className="text-sm text-zinc-400">
                   I agree to the waiver and terms of participation. I understand
@@ -335,7 +335,7 @@ export default function RegisterPage() {
       </Section>
 
       {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-zinc-900" />
+      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }

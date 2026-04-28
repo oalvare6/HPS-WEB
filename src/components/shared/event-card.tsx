@@ -21,25 +21,25 @@ export function EventCard({
   return (
     <div
       className={cn(
-        "dashboard-card p-6 hover:border-zinc-700 transition-colors",
+        "dashboard-card p-6 hover:border-border-token transition-colors",
         className
       )}
     >
       <div className="flex items-start justify-between gap-4 mb-4">
         <h3 className="font-semibold text-white">{title}</h3>
         {status === "completed" && (
-          <span className="text-xs font-medium text-zinc-400 bg-zinc-800 px-2 py-1 rounded">
+          <span className="text-xs font-medium text-zinc-400 bg-surface-2 px-2 py-1 rounded">
             Completed
           </span>
         )}
         {status === "upcoming" && (
-          <span className="text-xs font-medium text-white bg-zinc-700 px-2 py-1 rounded">
+          <span className="text-xs font-medium text-white bg-base px-2 py-1 rounded">
             Upcoming
           </span>
         )}
         {status === "registration-open" && (
-          <span className="text-xs font-bold text-white bg-green-700 px-2 py-1 rounded flex items-center gap-1 shadow-md shadow-green-900/50 border border-green-600">
-            <span className="w-1.5 h-1.5 bg-green-300 rounded-full animate-pulse" />
+          <span className="text-xs font-bold text-white bg-brand-deep px-2 py-1 rounded flex items-center gap-1 shadow-md shadow-brand/50 border border-brand">
+            <span className="w-1.5 h-1.5 bg-brand rounded-full animate-pulse" />
             Open
           </span>
         )}
@@ -47,11 +47,11 @@ export function EventCard({
 
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <Calendar size={14} className="text-green-500" />
+          <Calendar size={14} className="text-brand" />
           <span className="font-medium text-white">{date}</span>
         </div>
         <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <Users size={14} className="text-green-500" />
+          <Users size={14} className="text-brand" />
           <span>{division}</span>
           {teamCount && <span className="text-zinc-500">• {teamCount}</span>}
         </div>

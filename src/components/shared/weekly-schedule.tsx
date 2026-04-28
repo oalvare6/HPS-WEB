@@ -48,7 +48,7 @@ export function WeeklySchedule({ leagues, className }: WeeklyScheduleProps) {
           <div className="flex items-center gap-3 mb-6">
             <div className={cn(
               "w-10 h-10 rounded-lg flex items-center justify-center",
-              league.type === "youth" ? "bg-zinc-800" : "bg-zinc-800"
+              league.type === "youth" ? "bg-surface-2" : "bg-surface-2"
             )}>
               <Users 
                 size={20} 
@@ -74,11 +74,11 @@ export function WeeklySchedule({ leagues, className }: WeeklyScheduleProps) {
                 </div>
                 
                 {daySchedule.games.length > 0 ? (
-                  <div className="space-y-3 pl-6 border-l-2 border-zinc-800">
+                  <div className="space-y-3 pl-6 border-l-2 border-border-token">
                     {daySchedule.games.map((game, gameIdx) => (
                       <div 
                         key={gameIdx}
-                        className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg hover:bg-zinc-800/50 transition-colors"
+                        className="flex items-center justify-between p-3 bg-surface-2/30 rounded-lg hover:bg-surface-2/50 transition-colors"
                       >
                         <div className="flex items-center gap-3 flex-1">
                           <Clock size={14} className="text-zinc-500 flex-shrink-0" />

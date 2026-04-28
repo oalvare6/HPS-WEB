@@ -21,19 +21,19 @@ export default function Home() {
       <QuickActionsBar />
 
       {/* Hero */}
-      <section className="relative bg-zinc-950 text-white bg-tactical-grid">
+      <section className="relative bg-base text-white bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6 py-16 md:py-24 lg:py-32">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Left: Content */}
             <div>
               {/* Logo Badge */}
               <div className="mb-6">
-                <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white p-1 shadow-lg shadow-black/30">
+                <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 rounded-full bg-white p-1 shadow-lg shadow-black/30">
                   <Image
                     src="/brand/hps-badge.png"
                     alt="Houston Premier Soccer"
-                    width={100}
-                    height={100}
+                    width={200}
+                    height={200}
                     className="w-full h-full rounded-full"
                     priority
                   />
@@ -73,7 +73,7 @@ export default function Home() {
             {/* Right: Community Photo + Tournament Info */}
             <div className="space-y-4">
               {/* Community Photo */}
-              <div className="dashboard-card overflow-hidden border border-zinc-700/70 shadow-xl shadow-black/30">
+              <div className="dashboard-card overflow-hidden border border-border-token/70 shadow-xl shadow-black/30">
                 <div className="relative aspect-video">
                   <Image
                     src="/community/hps-community-7v7.png"
@@ -83,12 +83,12 @@ export default function Home() {
                     sizes="(min-width: 1024px) 520px, 100vw"
                     priority
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/85 via-zinc-950/20 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-base/85 via-base/20 to-transparent" />
                   <div className="absolute bottom-3 left-3 right-3">
                     <p className="text-sm font-semibold text-white tracking-tight">
                       Real players. Real community.
                     </p>
-                    <p className="text-xs text-green-400 font-mono mt-0.5">
+                    <p className="text-xs text-brand font-mono mt-0.5">
                       Houston 7v7 under the lights
                     </p>
                   </div>
@@ -100,29 +100,29 @@ export default function Home() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                      <span className="text-xs font-mono text-green-500 uppercase tracking-wider">Registration Open</span>
+                      <div className="w-2 h-2 bg-brand rounded-full animate-pulse" />
+                      <span className="text-xs font-mono text-brand uppercase tracking-wider">Registration Open</span>
                     </div>
                     <h2 className="text-xl font-bold text-white">Spring Classic 2026</h2>
                   </div>
-                  <Trophy size={24} className="text-green-500" />
+                  <Trophy size={24} className="text-brand" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex items-center gap-2 text-zinc-300">
-                    <Calendar size={14} className="text-green-500 flex-shrink-0" />
+                    <Calendar size={14} className="text-brand flex-shrink-0" />
                     <span>Every Friday starting Mar 27</span>
                   </div>
                   <div className="flex items-center gap-2 text-zinc-300">
-                    <Clock size={14} className="text-green-500 flex-shrink-0" />
+                    <Clock size={14} className="text-brand flex-shrink-0" />
                     <span>7:00 PM – 12:00 AM</span>
                   </div>
                   <div className="flex items-center gap-2 text-zinc-300">
-                    <MapPin size={14} className="text-green-500 flex-shrink-0" />
+                    <MapPin size={14} className="text-brand flex-shrink-0" />
                     <span>14062 Ambrose St</span>
                   </div>
                   <div className="flex items-center gap-2 text-zinc-300">
-                    <Users size={14} className="text-green-500 flex-shrink-0" />
+                    <Users size={14} className="text-brand flex-shrink-0" />
                     <span>Youth & Adult 7v7</span>
                   </div>
                 </div>
@@ -150,7 +150,7 @@ export default function Home() {
       </section>
 
       {/* What Happens Here */}
-      <Section dark className="bg-zinc-900 overflow-hidden relative">
+      <Section dark className="bg-surface overflow-hidden relative">
         <div className="absolute inset-0">
           <Image
             src="https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=1400&q=80"
@@ -158,7 +158,7 @@ export default function Home() {
             fill
             className="object-cover opacity-[0.07]"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/60 via-transparent to-zinc-950/60" />
+          <div className="absolute inset-0 bg-gradient-to-b from-base/60 via-transparent to-base/60" />
         </div>
 
         <div className="relative">
@@ -169,8 +169,8 @@ export default function Home() {
           />
 
           <div className="grid md:grid-cols-3 gap-6">
-            <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
-              <div className="aspect-video bg-zinc-800 relative">
+            <div className="dashboard-card overflow-hidden hover:border-border-token transition-colors">
+              <div className="aspect-video bg-surface-2 relative">
                 <Image
                   src="https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&q=80"
                   alt="Soccer tournament action"
@@ -193,8 +193,8 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
-              <div className="aspect-video bg-zinc-800 relative">
+            <div className="dashboard-card overflow-hidden hover:border-border-token transition-colors">
+              <div className="aspect-video bg-surface-2 relative">
                 <Image
                   src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=600&q=80"
                   alt="Soccer league match"
@@ -217,8 +217,8 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="dashboard-card overflow-hidden hover:border-zinc-700 transition-colors">
-              <div className="aspect-video bg-zinc-800 relative">
+            <div className="dashboard-card overflow-hidden hover:border-border-token transition-colors">
+              <div className="aspect-video bg-surface-2 relative">
                 <Image
                   src="https://images.unsplash.com/photo-1529900748604-07564a03e7a6?w=600&q=80"
                   alt="Soccer field at night"
@@ -245,7 +245,7 @@ export default function Home() {
       </Section>
 
       {/* Past Events */}
-      <Section dark className="bg-zinc-950 bg-tactical-grid-dense">
+      <Section dark className="bg-base bg-tactical-grid-dense">
         <SectionHeader
           title="Recent Events"
           subtitle="Completed tournaments and leagues."
@@ -288,7 +288,7 @@ export default function Home() {
       </Section>
 
       {/* Location Section */}
-      <Section dark className="bg-zinc-900">
+      <Section dark className="bg-surface">
         <div className="grid md:grid-cols-2 gap-12 items-start">
           <div>
             <SectionHeader
@@ -299,23 +299,23 @@ export default function Home() {
             
             <div className="space-y-6 text-zinc-300">
               <p className="leading-relaxed">
-                Our facility is located at <span className="text-green-400 font-semibold">14062 Ambrose St</span> in Houston. Easy access from 
+                Our facility is located at <span className="text-brand font-semibold">14062 Ambrose St</span> in Houston. Easy access from 
                 I-45 and 610, with on-site parking for players and spectators.
               </p>
               
-              <div className="p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+              <div className="p-4 bg-surface-2/50 rounded-lg border border-border-token/50">
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-green-900/40 to-green-950/40 rounded-lg flex items-center justify-center flex-shrink-0 border border-green-800/30">
-                    <Clock size={20} className="text-green-500" />
+                  <div className="w-10 h-10 bg-gradient-to-br from-brand/20 to-brand/5 rounded-lg flex items-center justify-center flex-shrink-0 border border-brand/30">
+                    <Clock size={20} className="text-brand" />
                   </div>
                   <div>
                     <p className="text-white font-semibold mb-2">Field Hours</p>
                     <div className="space-y-1 text-sm">
                       <p className="text-zinc-300">
-                        <span className="text-green-400 font-mono">Mon-Fri:</span> 5PM - 10PM
+                        <span className="text-brand font-mono">Mon-Fri:</span> 5PM - 10PM
                       </p>
                       <p className="text-zinc-300">
-                        <span className="text-green-400 font-mono">Sat-Sun:</span> 8AM - 10PM
+                        <span className="text-brand font-mono">Sat-Sun:</span> 8AM - 10PM
                       </p>
                     </div>
                   </div>
@@ -325,7 +325,7 @@ export default function Home() {
 
             <Link
               href="/facility"
-              className="inline-flex items-center gap-2 text-white hover:text-green-400 font-medium mt-6 transition-colors group"
+              className="inline-flex items-center gap-2 text-white hover:text-brand font-medium mt-6 transition-colors group"
             >
               View Facility Details
               <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
@@ -337,7 +337,7 @@ export default function Home() {
       </Section>
 
       {/* CTA Section */}
-      <Section dark className="bg-zinc-950 relative overflow-hidden">
+      <Section dark className="bg-base relative overflow-hidden">
         <div className="absolute inset-0">
           <Image
             src="https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?w=1400&q=80"
@@ -345,7 +345,7 @@ export default function Home() {
             fill
             className="object-cover opacity-[0.07]"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-zinc-950/80" />
+          <div className="absolute inset-0 bg-gradient-to-t from-base/80 via-transparent to-base/80" />
         </div>
         <div className="relative text-center max-w-2xl mx-auto">
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
@@ -367,7 +367,7 @@ export default function Home() {
       </Section>
 
       {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-zinc-950" />
+      <div className="h-20 md:hidden bg-base" />
     </>
   );
 }

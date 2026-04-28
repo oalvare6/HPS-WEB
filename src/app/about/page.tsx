@@ -6,7 +6,7 @@ export default function AboutPage() {
   return (
     <>
       {/* Hero */}
-      <section className="bg-zinc-950 text-white py-16 md:py-24 bg-tactical-grid">
+      <section className="bg-base text-white py-16 md:py-24 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             Built for 7v7 Soccer
@@ -19,7 +19,7 @@ export default function AboutPage() {
       </section>
 
       {/* Story */}
-      <Section dark className="bg-zinc-900 bg-topo-lines">
+      <Section dark className="bg-surface bg-topo-lines">
         <div className="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <SectionHeader title="The Story" dark />
@@ -58,7 +58,7 @@ export default function AboutPage() {
       </Section>
 
       {/* Values */}
-      <Section dark className="bg-zinc-950 bg-tactical-grid">
+      <Section dark className="bg-base bg-tactical-grid">
         <SectionHeader
           title="What We Stand For"
           align="center"
@@ -68,7 +68,7 @@ export default function AboutPage() {
         <div className="grid md:grid-cols-3 gap-6 mt-10">
           {/* Competition */}
           <div className="dashboard-card text-center p-8">
-            <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-16 h-16 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-6">
               <Target size={28} className="text-white" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-3">Competition</h3>
@@ -80,7 +80,7 @@ export default function AboutPage() {
 
           {/* Community */}
           <div className="dashboard-card text-center p-8">
-            <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-16 h-16 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-6">
               <Users size={28} className="text-white" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-3">Community</h3>
@@ -92,7 +92,7 @@ export default function AboutPage() {
 
           {/* Quality */}
           <div className="dashboard-card text-center p-8">
-            <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-16 h-16 bg-surface-2 rounded-full flex items-center justify-center mx-auto mb-6">
               <Award size={28} className="text-white" />
             </div>
             <h3 className="text-xl font-semibold text-white mb-3">Quality</h3>
@@ -105,7 +105,7 @@ export default function AboutPage() {
       </Section>
 
       {/* Local */}
-      <Section dark className="bg-zinc-900">
+      <Section dark className="bg-surface">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-white mb-6">
             Locally Owned. Directly Accountable.
@@ -119,7 +119,7 @@ export default function AboutPage() {
       </Section>
 
       {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-zinc-900" />
+      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }

@@ -23,7 +23,7 @@ function WhatsAppIcon({ className }: { className?: string }) {
 
 export function Footer() {
   return (
-    <footer className="bg-zinc-950 text-white border-t border-zinc-800">
+    <footer className="bg-base text-white border-t border-border-token">
       <div className="max-w-6xl mx-auto px-6 py-12 md:py-16">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 md:gap-8">
           {/* Brand */}
@@ -120,7 +120,7 @@ export function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="border-t border-zinc-800 mt-10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="border-t border-border-token mt-10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-zinc-500 text-sm">
             &copy; 2026 Houston Premier Soccer. All rights reserved.
           </p>
@@ -135,7 +135,7 @@ export function Footer() {
         </div>
 
         {/* Site credit */}
-        <div className="border-t border-zinc-800/50 mt-6 pt-4 flex justify-center">
+        <div className="border-t border-border-token/50 mt-6 pt-4 flex justify-center">
           <a
             href="https://qronnect.pro"
             target="_blank"

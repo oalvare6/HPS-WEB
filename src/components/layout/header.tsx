@@ -25,7 +25,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/80">
+    <header className="sticky top-0 z-50 bg-base/95 backdrop-blur-md border-b border-border-token/80">
       <div className="max-w-6xl mx-auto px-6">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
@@ -50,7 +50,7 @@ export function Header() {
             <StatusIndicatorCompact items={statusItems} />
 
             {/* Divider */}
-            <div className="h-6 w-px bg-zinc-800" />
+            <div className="h-6 w-px bg-border-token" />
 
             {/* Navigation */}
             <nav className="flex items-center gap-6">
@@ -90,7 +90,7 @@ export function Header() {
           )}
         >
           {/* Mobile Status Indicators */}
-          <div className="pt-4 pb-4 border-t border-zinc-800">
+          <div className="pt-4 pb-4 border-t border-border-token">
             <StatusIndicatorCompact items={statusItems} />
           </div>
 

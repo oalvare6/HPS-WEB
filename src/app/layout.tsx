@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Bebas_Neue, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -9,6 +9,17 @@ import { QroBadge } from "@/components/layout/qro-badge";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+});
+
+const bebas = Bebas_Neue({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-bebas",
+});
+
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
 });
 
 export const metadata: Metadata = {
@@ -50,7 +61,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.variable} font-sans antialiased bg-zinc-950 text-white`}>
+      <body className={`${inter.variable} ${bebas.variable} ${jetbrains.variable} font-sans antialiased bg-base text-white`}>
         <Header />
         <main className="min-h-screen">{children}</main>
         <Footer />

@@ -13,13 +13,13 @@ interface StatusIndicatorProps {
 }
 
 const statusColors: Record<StatusType, string> = {
-  open: "bg-green-500",
+  open: "bg-brand",
   closed: "bg-zinc-600",
   warning: "bg-amber-500",
 };
 
 const statusPulse: Record<StatusType, string> = {
-  open: "animate-pulse bg-green-400",
+  open: "animate-pulse bg-brand",
   closed: "bg-zinc-600",
   warning: "animate-pulse bg-amber-400",
 };

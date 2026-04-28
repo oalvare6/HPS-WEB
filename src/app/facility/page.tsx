@@ -14,7 +14,7 @@ export default function FacilityPage() {
   return (
     <>
       {/* Hero */}
-      <section className="bg-zinc-950 text-white py-16 md:py-24 bg-tactical-grid">
+      <section className="bg-base text-white py-16 md:py-24 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             The Facility
@@ -27,7 +27,7 @@ export default function FacilityPage() {
       </section>
 
       {/* Field Overview */}
-      <Section dark className="bg-zinc-900 bg-topo-lines">
+      <Section dark className="bg-surface bg-topo-lines">
         <div className="grid md:grid-cols-2 gap-12 items-start">
           <div>
             <SectionHeader
@@ -37,19 +37,19 @@ export default function FacilityPage() {
             />
             <ul className="space-y-4 text-zinc-400">
               <li className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2.5" />
+                <div className="w-1.5 h-1.5 bg-brand rounded-full mt-2.5" />
                 <span>Professional-grade turf maintained to competitive standards</span>
               </li>
               <li className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2.5" />
+                <div className="w-1.5 h-1.5 bg-brand rounded-full mt-2.5" />
                 <span>Purpose-built 7v7 field configurations</span>
               </li>
               <li className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2.5" />
+                <div className="w-1.5 h-1.5 bg-brand rounded-full mt-2.5" />
                 <span>Full lighting for evening matches and night leagues</span>
               </li>
               <li className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2.5" />
+                <div className="w-1.5 h-1.5 bg-brand rounded-full mt-2.5" />
                 <span>Regular maintenance and pre-event inspections</span>
               </li>
             </ul>
@@ -69,13 +69,13 @@ export default function FacilityPage() {
               <source src="/videos/FACILITY.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>
-            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-zinc-950/70 via-transparent to-transparent" />
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-base/70 via-transparent to-transparent" />
           </div>
         </div>
       </Section>
 
       {/* Amenities */}
-      <Section dark className="bg-zinc-950 bg-tactical-grid">
+      <Section dark className="bg-base bg-tactical-grid">
         <SectionHeader
           title="Amenities"
           subtitle="Everything you need for game day."
@@ -110,7 +110,7 @@ export default function FacilityPage() {
       </Section>
 
       {/* Field Rules */}
-      <Section dark className="bg-zinc-900">
+      <Section dark className="bg-surface">
         <SectionHeader
           title="Field Rules"
           subtitle="Help us keep the facility in top condition."
@@ -152,7 +152,7 @@ export default function FacilityPage() {
       </Section>
 
       {/* Location */}
-      <Section dark className="bg-zinc-950 bg-tactical-grid">
+      <Section dark className="bg-base bg-tactical-grid">
         <div className="grid md:grid-cols-2 gap-12 items-start">
           <div>
             <SectionHeader
@@ -194,7 +194,7 @@ export default function FacilityPage() {
       </Section>
 
       {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-zinc-950" />
+      <div className="h-20 md:hidden bg-base" />
     </>
   );
 }

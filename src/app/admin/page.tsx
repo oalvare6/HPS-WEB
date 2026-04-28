@@ -305,7 +305,7 @@ export default function AdminPage() {
 
   if (loginLoading && !authed) {
     return (
-      <Section dark className="bg-zinc-900 min-h-[60vh] flex items-center justify-center">
+      <Section dark className="bg-surface min-h-[60vh] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-zinc-400">
           <Loader2 size={40} className="animate-spin" />
         </div>
@@ -315,7 +315,7 @@ export default function AdminPage() {
 
   if (!authed) {
     return (
-      <Section dark className="bg-zinc-900 min-h-[80vh] flex items-center justify-center">
+      <Section dark className="bg-surface min-h-[80vh] flex items-center justify-center">
         <div className="dashboard-card p-8 max-w-sm w-full">
           <div className="flex flex-col items-center mb-6">
             <Lock size={32} className="text-zinc-400 mb-3" />
@@ -325,12 +325,12 @@ export default function AdminPage() {
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1">Username</label>
               <input type="text" name="username" required autoComplete="username"
-                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors" />
+                className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors" />
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1">Password</label>
               <input type="password" name="password" required autoComplete="current-password"
-                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors" />
+                className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors" />
             </div>
             {loginError && <p className="text-sm text-red-400 text-center">{loginError}</p>}
             <button type="submit" className="w-full btn-primary h-12">Log In</button>
@@ -347,8 +347,8 @@ export default function AdminPage() {
       {/* Waiver PDF modal */}
       {waiverViewUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setWaiverViewUrl(null)}>
-          <div className="relative w-full max-w-3xl h-[80vh] bg-zinc-900 rounded-xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
+          <div className="relative w-full max-w-3xl h-[80vh] bg-surface rounded-xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border-token">
               <span className="text-sm font-medium text-white">Signed Waiver</span>
               <div className="flex items-center gap-2">
                 <a href={waiverViewUrl} target="_blank" rel="noopener noreferrer"
@@ -366,7 +366,7 @@ export default function AdminPage() {
       )}
 
       {/* Header */}
-      <section className="bg-zinc-950 text-white py-12 md:py-16 bg-tactical-grid">
+      <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">Admin Dashboard</h1>
           <p className="text-zinc-400">
@@ -375,31 +375,31 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <Section dark className="bg-zinc-900 !py-8 md:!py-12" container={false}>
+      <Section dark className="bg-surface !py-8 md:!py-12" container={false}>
         <div className="max-w-6xl mx-auto px-6 space-y-6">
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-zinc-800 rounded-lg p-1 w-fit">
+          <div className="flex gap-1 bg-surface-2 rounded-lg p-1 w-fit">
             <button
               onClick={() => setActiveTab("registrations")}
               className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
-                activeTab === "registrations" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
+                activeTab === "registrations" ? "bg-base text-white" : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
               <Users size={15} />
               Registrations
-              <span className="text-xs bg-zinc-600 rounded px-1.5 py-0.5">{registrations.length}</span>
+              <span className="text-xs bg-surface-2 rounded px-1.5 py-0.5">{registrations.length}</span>
             </button>
             <button
               onClick={() => setActiveTab("payments")}
               className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
-                activeTab === "payments" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
+                activeTab === "payments" ? "bg-base text-white" : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
               <CreditCard size={15} />
               Payments
               {succeededPayments > 0 && (
-                <span className="text-xs bg-green-600 rounded px-1.5 py-0.5">{succeededPayments}</span>
+                <span className="text-xs bg-brand-deep rounded px-1.5 py-0.5">{succeededPayments}</span>
               )}
             </button>
           </div>
@@ -409,7 +409,7 @@ export default function AdminPage() {
             <>
               {regError && <p className="text-red-400">{regError}</p>}
               {syncResult && (
-                <p className={`text-sm px-3 py-2 rounded-lg ${syncResult.startsWith("Synced") ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+                <p className={`text-sm px-3 py-2 rounded-lg ${syncResult.startsWith("Synced") ? "bg-brand/10 text-brand" : "bg-red-500/10 text-red-400"}`}>
                   {syncResult}
                 </p>
               )}
@@ -427,7 +427,7 @@ export default function AdminPage() {
                       <p className="text-xs text-zinc-400 uppercase tracking-wide">Total</p>
                     </div>
                     <div className="dashboard-card p-4 text-center">
-                      <p className="text-2xl font-bold text-green-400">{totalSigned}</p>
+                      <p className="text-2xl font-bold text-brand">{totalSigned}</p>
                       <p className="text-xs text-zinc-400 uppercase tracking-wide">Waiver Signed</p>
                     </div>
                     <div className="dashboard-card p-4 text-center">
@@ -436,32 +436,32 @@ export default function AdminPage() {
                     </div>
                     <div className="dashboard-card p-4 text-center">
                       <div className="flex justify-center mb-1">
-                        <DollarSign size={16} className="text-green-400" />
+                        <DollarSign size={16} className="text-brand" />
                       </div>
-                      <p className="text-2xl font-bold text-green-400">{totalPaid}</p>
+                      <p className="text-2xl font-bold text-brand">{totalPaid}</p>
                       <p className="text-xs text-zinc-400 uppercase tracking-wide">Paid</p>
                     </div>
                   </div>
 
                   {/* Controls */}
                   <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex gap-1 bg-zinc-800 rounded-lg p-1">
+                    <div className="flex gap-1 bg-surface-2 rounded-lg p-1">
                       {(["all", "signed", "unsigned"] as Filter[]).map((f) => (
                         <button key={f} onClick={() => setFilter(f)}
                           className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                            filter === f ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
+                            filter === f ? "bg-base text-white" : "text-zinc-400 hover:text-zinc-200"
                           }`}>
                           {f === "all" ? "All" : f === "signed" ? "Signed" : "Pending"}
                         </button>
                       ))}
                     </div>
                     <button onClick={handleSyncWaivers} disabled={syncing}
-                      className="ml-auto inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50">
+                      className="ml-auto inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-border-token rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50">
                       <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
                       {syncing ? "Syncing…" : "Sync Waivers"}
                     </button>
                     <button onClick={handleExportCsv}
-                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors">
+                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-border-token rounded-lg px-3 py-1.5 transition-colors">
                       <Download size={14} />
                       Export CSV
                     </button>
@@ -472,7 +472,7 @@ export default function AdminPage() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-zinc-700 text-left">
+                          <tr className="border-b border-border-token text-left">
                             <th className="px-4 py-3 text-zinc-400 font-medium cursor-pointer hover:text-white" onClick={() => handleSort("last_name")}>
                               Name <SortIcon field="last_name" />
                             </th>
@@ -495,14 +495,14 @@ export default function AdminPage() {
                           {sorted.map((r) => (
                             <Fragment key={r.id}>
                               <tr
-                                className="border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer transition-colors"
+                                className="border-b border-border-token hover:bg-surface-2/50 cursor-pointer transition-colors"
                                 onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
                               >
                                 <td className="px-4 py-3 text-white font-medium">{r.first_name} {r.last_name}</td>
                                 <td className="px-4 py-3 text-zinc-300 hidden md:table-cell">{r.email}</td>
                                 <td className="px-4 py-3">
                                   <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                    r.registration_type === "youth" ? "bg-blue-500/20 text-blue-400" : "bg-zinc-700 text-zinc-300"
+                                    r.registration_type === "youth" ? "bg-blue-500/20 text-blue-400" : "bg-base text-zinc-300"
                                   }`}>
                                     {r.registration_type}
                                   </span>
@@ -510,10 +510,10 @@ export default function AdminPage() {
                                 <td className="px-4 py-3">
                                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${
                                     r.docuseal_status === "signed"
-                                      ? "bg-green-500/20 text-green-400"
+                                      ? "bg-brand/20 text-brand"
                                       : r.docuseal_status === "sent"
                                         ? "bg-yellow-500/20 text-yellow-400"
-                                        : "bg-zinc-700 text-zinc-400"
+                                        : "bg-base text-zinc-400"
                                   }`}>
                                     {r.docuseal_status === "signed" ? <CheckCircle size={12} /> : <XCircle size={12} />}
                                     {r.docuseal_status}
@@ -522,10 +522,10 @@ export default function AdminPage() {
                                 <td className="px-4 py-3">
                                   <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${
                                     r.payment_status === "paid"
-                                      ? "bg-green-500/20 text-green-400"
+                                      ? "bg-brand/20 text-brand"
                                       : r.payment_status === "pending"
                                         ? "bg-yellow-500/20 text-yellow-400"
-                                        : "bg-zinc-700 text-zinc-400"
+                                        : "bg-base text-zinc-400"
                                   }`}>
                                     {r.payment_status === "paid" ? <CheckCircle size={12} /> : <XCircle size={12} />}
                                     {r.payment_status}
@@ -537,7 +537,7 @@ export default function AdminPage() {
                               {/* Expanded detail row */}
                               {expandedId === r.id && (
                                 <tr>
-                                  <td colSpan={6} className="bg-zinc-800/40 px-4 py-4">
+                                  <td colSpan={6} className="bg-surface-2/40 px-4 py-4">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                                       <div>
                                         <p className="text-zinc-500 text-xs uppercase">Email</p>
@@ -572,9 +572,9 @@ export default function AdminPage() {
                                           <p className="text-zinc-500 text-xs uppercase mb-2">Payments</p>
                                           <div className="space-y-1.5">
                                             {r.payments.map((p) => (
-                                              <div key={p.id} className="flex items-center gap-3 bg-zinc-800/60 rounded-lg px-3 py-2">
+                                              <div key={p.id} className="flex items-center gap-3 bg-surface-2/60 rounded-lg px-3 py-2">
                                                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${
-                                                  p.status === "succeeded" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
+                                                  p.status === "succeeded" ? "bg-brand/20 text-brand" : "bg-yellow-500/20 text-yellow-400"
                                                 }`}>
                                                   {p.status === "succeeded" ? <CheckCircle size={10} /> : <XCircle size={10} />}
                                                   {p.status}
@@ -595,11 +595,11 @@ export default function AdminPage() {
                                       )}
 
                                       {/* Actions */}
-                                      <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap items-center gap-3 pt-2 border-t border-zinc-700/50">
+                                      <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap items-center gap-3 pt-2 border-t border-border-token/50">
                                         {r.docuseal_status === "signed" && r.waiver_document_url && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); setWaiverViewUrl(r.waiver_document_url); }}
-                                            className="inline-flex items-center gap-1.5 text-sm text-green-400 hover:text-green-300"
+                                            className="inline-flex items-center gap-1.5 text-sm text-brand hover:text-brand-hover"
                                           >
                                             <FileText size={14} />
                                             View Signed Waiver
@@ -626,7 +626,7 @@ export default function AdminPage() {
                                           </button>
                                         )}
                                         {r.waiver_signed ? (
-                                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/20 text-green-400">
+                                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-brand/20 text-brand">
                                             <CheckCircle size={12} />
                                             Signed
                                           </span>
@@ -634,7 +634,7 @@ export default function AdminPage() {
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleMarkSigned(r.id); }}
                                             disabled={markingId === r.id}
-                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-brand/20 text-brand hover:bg-brand/30 transition-colors disabled:opacity-50"
                                           >
                                             {markingId === r.id ? (
                                               <Loader2 size={12} className="animate-spin" />
@@ -682,14 +682,14 @@ export default function AdminPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="dashboard-card p-4 text-center">
                       <div className="flex justify-center mb-1">
-                        <DollarSign size={18} className="text-green-400" />
+                        <DollarSign size={18} className="text-brand" />
                       </div>
-                      <p className="text-2xl font-bold text-green-400">{formatCurrency(totalRevenue)}</p>
+                      <p className="text-2xl font-bold text-brand">{formatCurrency(totalRevenue)}</p>
                       <p className="text-xs text-zinc-400 uppercase tracking-wide">Total Revenue</p>
                     </div>
                     <div className="dashboard-card p-4 text-center">
                       <div className="flex justify-center mb-1">
-                        <CheckCircle size={18} className="text-green-400" />
+                        <CheckCircle size={18} className="text-brand" />
                       </div>
                       <p className="text-2xl font-bold text-white">{succeededPayments}</p>
                       <p className="text-xs text-zinc-400 uppercase tracking-wide">Succeeded</p>
@@ -739,19 +739,19 @@ export default function AdminPage() {
                         }
                       }}
                       disabled={syncing}
-                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-border-token rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
                     >
                       <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
                       {syncing ? "Syncing…" : "Sync from Stripe"}
                     </button>
                     <button onClick={handleExportPaymentsCsv}
-                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-zinc-700 rounded-lg px-3 py-1.5 transition-colors">
+                      className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-border-token rounded-lg px-3 py-1.5 transition-colors">
                       <Download size={14} />
                       Export CSV
                     </button>
                   </div>
                   {syncResult && (
-                    <p className={`text-sm ${syncResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+                    <p className={`text-sm ${syncResult.startsWith("Error") ? "text-red-400" : "text-brand"}`}>
                       {syncResult}
                     </p>
                   )}
@@ -761,7 +761,7 @@ export default function AdminPage() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-zinc-700 text-left">
+                          <tr className="border-b border-border-token text-left">
                             <th className="px-4 py-3 text-zinc-400 font-medium">Player</th>
                             <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">Email</th>
                             <th className="px-4 py-3 text-zinc-400 font-medium hidden lg:table-cell">Tournament</th>
@@ -772,7 +772,7 @@ export default function AdminPage() {
                         </thead>
                         <tbody>
                           {payments.map((p) => (
-                            <tr key={p.id} className="border-b border-zinc-800 hover:bg-zinc-800/30 transition-colors">
+                            <tr key={p.id} className="border-b border-border-token hover:bg-surface-2/30 transition-colors">
                               <td className="px-4 py-3 text-white font-medium">
                                 {p.registrations
                                   ? `${p.registrations.first_name} ${p.registrations.last_name}`
@@ -788,7 +788,7 @@ export default function AdminPage() {
                               <td className="px-4 py-3">
                                 <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${
                                   p.status === "succeeded"
-                                    ? "bg-green-500/20 text-green-400"
+                                    ? "bg-brand/20 text-brand"
                                     : p.status === "pending"
                                       ? "bg-yellow-500/20 text-yellow-400"
                                       : "bg-red-500/20 text-red-400"

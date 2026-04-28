@@ -15,7 +15,7 @@ export function Section({ children, className, container = true, dark = true, id
       id={id}
       className={cn(
         "py-16 md:py-24",
-        dark ? "bg-zinc-950 text-white" : "bg-white text-zinc-900",
+        dark ? "bg-base text-white" : "bg-white text-zinc-900",
         className
       )}
     >

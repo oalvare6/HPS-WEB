@@ -158,8 +158,8 @@ function PayForm() {
     return (
       <div className="max-w-2xl mx-auto px-6 py-20">
         <div className="dashboard-card p-8 text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-500/15 mb-4">
-            <CheckCircle2 size={28} className="text-green-500" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand/15 mb-4">
+            <CheckCircle2 size={28} className="text-brand" />
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">You&apos;re all set</h2>
           <p className="text-zinc-400 mb-6">
@@ -176,7 +176,7 @@ function PayForm() {
   return (
     <div className="max-w-2xl mx-auto px-6 py-12 md:py-20">
       {hasRegistration && (
-        <div className="mb-6 flex items-start gap-3 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-green-400 text-sm">
+        <div className="mb-6 flex items-start gap-3 bg-brand/10 border border-brand/30 rounded-lg px-4 py-3 text-brand text-sm">
           <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
           <span>
             <span className="font-semibold">Step 3 of 3 — Payment.</span>{" "}
@@ -196,26 +196,26 @@ function PayForm() {
       {/* Event info */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-          <span className="text-xs font-mono text-green-500 uppercase tracking-wider">
+          <div className="w-2 h-2 bg-brand rounded-full animate-pulse" />
+          <span className="text-xs font-mono text-brand uppercase tracking-wider">
             Registration Open
           </span>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2 text-zinc-300">
-            <Calendar size={14} className="text-green-500 flex-shrink-0" />
+            <Calendar size={14} className="text-brand flex-shrink-0" />
             <span>{selected.date}</span>
           </div>
           <div className="flex items-center gap-2 text-zinc-300">
-            <Clock size={14} className="text-green-500 flex-shrink-0" />
+            <Clock size={14} className="text-brand flex-shrink-0" />
             <span>{selected.time}</span>
           </div>
           <div className="flex items-center gap-2 text-zinc-300">
-            <MapPin size={14} className="text-green-500 flex-shrink-0" />
+            <MapPin size={14} className="text-brand flex-shrink-0" />
             <span>{selected.location}</span>
           </div>
           <div className="flex items-center gap-2 text-zinc-300">
-            <Users size={14} className="text-green-500 flex-shrink-0" />
+            <Users size={14} className="text-brand flex-shrink-0" />
             <span>{selected.format}</span>
           </div>
         </div>
@@ -230,16 +230,16 @@ function PayForm() {
             onClick={() => setSelectedId(opt.id)}
             className={`dashboard-card p-5 text-left transition-all ${
               selectedId === opt.id
-                ? "ring-2 ring-green-500 border-green-500"
-                : "hover:border-zinc-600"
+                ? "ring-2 ring-brand border-brand"
+                : "hover:border-border-token"
             }`}
           >
             <div className="flex items-start justify-between mb-3">
               <span
                 className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
                   selectedId === opt.id
-                    ? "bg-green-500/20 text-green-400"
-                    : "bg-zinc-700 text-zinc-400"
+                    ? "bg-brand/20 text-brand"
+                    : "bg-base text-zinc-400"
                 }`}
               >
                 {opt.badge}
@@ -247,7 +247,7 @@ function PayForm() {
               <Trophy
                 size={20}
                 className={
-                  selectedId === opt.id ? "text-green-500" : "text-zinc-600"
+                  selectedId === opt.id ? "text-brand" : "text-zinc-600"
                 }
               />
             </div>
@@ -299,7 +299,7 @@ function PayForm() {
               placeholder="you@example.com"
               readOnly={hasRegistration}
               aria-readonly={hasRegistration}
-              className={`w-full px-4 py-3 bg-zinc-800 border border-zinc-700 text-white rounded-lg placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors ${
+              className={`w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors ${
                 hasRegistration ? "opacity-80 cursor-not-allowed" : ""
               }`}
             />
@@ -345,7 +345,7 @@ function PayForm() {
 export default function PayPage() {
   return (
     <>
-      <section className="bg-zinc-950 text-white py-12 md:py-16 bg-tactical-grid">
+      <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
             Pay for Tournament
@@ -356,7 +356,7 @@ export default function PayPage() {
         </div>
       </section>
 
-      <section className="bg-zinc-900 min-h-[60vh]">
+      <section className="bg-surface min-h-[60vh]">
         <Suspense fallback={null}>
           <PayForm />
         </Suspense>

@@ -10,20 +10,20 @@ export function QuickActionsBar() {
   return (
     <>
       {/* Desktop: Sticky bar below header */}
-      <div className="hidden md:block sticky top-20 z-40 bg-zinc-900/95 backdrop-blur-sm border-b border-zinc-800">
+      <div className="hidden md:block sticky top-20 z-40 bg-surface/95 backdrop-blur-sm border-b border-border-token">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
               <Link
                 href="/events#schedule"
-                className="inline-flex items-center gap-2 bg-green-700 text-white px-4 py-2.5 text-sm font-bold rounded-md hover:bg-green-600 transition-all shadow-md shadow-green-900/30 border border-green-600"
+                className="inline-flex items-center gap-2 bg-brand-deep text-white px-4 py-2.5 text-sm font-bold rounded-md hover:bg-brand transition-all shadow-md shadow-brand/30 border border-brand"
               >
                 <Calendar size={16} />
                 Check Schedule
               </Link>
               <Link
                 href="/events#standings"
-                className="inline-flex items-center gap-2 bg-zinc-800 text-white px-4 py-2.5 text-sm font-medium rounded-md hover:bg-zinc-700 transition-colors border border-zinc-600 hover:border-green-700/50"
+                className="inline-flex items-center gap-2 bg-surface-2 text-white px-4 py-2.5 text-sm font-medium rounded-md hover:bg-base transition-colors border border-border-token hover:border-brand/50"
               >
                 <Trophy size={16} />
                 Standings
@@ -43,11 +43,11 @@ export function QuickActionsBar() {
       </div>
 
       {/* Mobile: Fixed bottom bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-zinc-900/95 backdrop-blur-sm border-t border-zinc-800 safe-area-inset-bottom">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-surface/95 backdrop-blur-sm border-t border-border-token safe-area-inset-bottom">
         <div className="grid grid-cols-2 gap-2 p-3">
           <Link
             href="/events#schedule"
-            className="flex items-center justify-center gap-2 bg-green-700 text-white h-12 text-sm font-bold rounded-lg hover:bg-green-600 transition-all shadow-lg shadow-green-900/40 border border-green-600"
+            className="flex items-center justify-center gap-2 bg-brand-deep text-white h-12 text-sm font-bold rounded-lg hover:bg-brand transition-all shadow-lg shadow-brand/40 border border-brand"
           >
             <Calendar size={18} />
             Schedule
@@ -56,7 +56,7 @@ export function QuickActionsBar() {
             href={GOOGLE_MAPS_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 bg-zinc-800 text-white h-12 text-sm font-medium rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-600 hover:border-green-700/50"
+            className="flex items-center justify-center gap-2 bg-surface-2 text-white h-12 text-sm font-medium rounded-lg hover:bg-base transition-colors border border-border-token hover:border-brand/50"
           >
             <MapPin size={18} />
             Directions
