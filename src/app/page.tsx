@@ -1,20 +1,23 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Calendar, Trophy, Users, MapPin, Clock } from "lucide-react";
+import { ArrowRight, Calendar, Trophy, Clock } from "lucide-react";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { EventCard } from "@/components/shared/event-card";
 import { LocationCard } from "@/components/shared/location-card";
 import { StatusIndicator } from "@/components/shared/status-indicator";
 import { QuickActionsBar } from "@/components/layout/quick-actions-bar";
+import { FeaturedTournamentCard } from "@/components/shared/FeaturedTournamentCard";
+import { getFeaturedTournament } from "@/lib/tournaments";
+
+export const dynamic = "force-dynamic";
 
 const statusItems = [
   { label: "Registration Open", status: "open" as const },
   { label: "Fields: Open", status: "open" as const },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const featured = await getFeaturedTournament();
   return (
     <>
       {/* Quick Actions Bar */}
@@ -95,55 +98,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Spring Classic Card */}
-              <div className="dashboard-card p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-2 h-2 bg-brand rounded-full animate-pulse" />
-                      <span className="text-xs font-mono text-brand uppercase tracking-wider">Registration Open</span>
-                    </div>
-                    <h2 className="text-xl font-bold text-white">Spring Classic 2026</h2>
-                  </div>
-                  <Trophy size={24} className="text-brand" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-zinc-300">
-                    <Calendar size={14} className="text-brand flex-shrink-0" />
-                    <span>Every Friday starting Mar 27</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-zinc-300">
-                    <Clock size={14} className="text-brand flex-shrink-0" />
-                    <span>7:00 PM – 12:00 AM</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-zinc-300">
-                    <MapPin size={14} className="text-brand flex-shrink-0" />
-                    <span>14062 Ambrose St</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-zinc-300">
-                    <Users size={14} className="text-brand flex-shrink-0" />
-                    <span>Youth & Adult 7v7</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <Link
-                    href="/register"
-                    className="btn-primary w-full justify-center text-sm"
-                  >
-                    Register Now
-                    <ArrowRight size={14} />
-                  </Link>
-                  <Link
-                    href="/pay"
-                    className="btn-secondary w-full justify-center text-sm"
-                  >
-                    Pay for Tournament
-                    <ArrowRight size={14} />
-                  </Link>
-                </div>
-              </div>
+              {featured && <FeaturedTournamentCard tournament={featured} />}
             </div>
           </div>
         </div>

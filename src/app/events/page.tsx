@@ -1,8 +1,19 @@
 import Link from "next/link";
 import { Section, SectionHeader } from "@/components/shared/section";
-import { ArrowRight, Calendar, Trophy, MapPin, Clock, Users, CreditCard } from "lucide-react";
+import { ArrowRight, Calendar, Clock, CreditCard, Users } from "lucide-react";
+import { TournamentCard } from "@/components/shared/TournamentCard";
+import { getPublicTournaments } from "@/lib/tournaments";
 
-export default function EventsPage() {
+export const dynamic = "force-dynamic";
+
+const DEFAULT_HERO_SUBTITLE =
+  "Adult 7v7 league — Spring 2026. 8 rounds of Friday night soccer, 7–10 PM.";
+
+export default async function EventsPage() {
+  const tournaments = await getPublicTournaments();
+  const featured = tournaments.find((t) => t.status === "upcoming") ?? tournaments[0];
+  const heroSubtitle = featured?.description?.trim() || DEFAULT_HERO_SUBTITLE;
+
   return (
     <>
       {/* Hero */}
@@ -11,65 +22,20 @@ export default function EventsPage() {
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             Schedule & Events
           </h1>
-          <p className="text-xl text-zinc-300 max-w-2xl">
-            Adult 7v7 league — Spring 2026. 8 rounds of Friday night soccer, 7–10 PM.
-          </p>
+          <p className="text-xl text-zinc-300 max-w-2xl">{heroSubtitle}</p>
         </div>
       </section>
 
-      {/* Spring Classic 2026 — Upcoming Tournament Banner */}
+      {/* Tournaments */}
       <Section dark className="bg-surface border-b border-border-token">
-        <div className="max-w-4xl mx-auto">
-          <div className="dashboard-card overflow-hidden">
-            <div className="bg-brand/10 border-b border-brand/20 px-6 py-3 flex items-center gap-2">
-              <div className="w-2 h-2 bg-brand rounded-full animate-pulse" />
-              <span className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
-                Upcoming — Registration &amp; Payments Open
-              </span>
+        <div className="max-w-4xl mx-auto space-y-6">
+          {tournaments.length === 0 ? (
+            <div className="dashboard-card border-2 border-dashed border-border-token p-10 text-center">
+              <p className="text-zinc-400">No upcoming events. Check back soon!</p>
             </div>
-            <div className="p-6 md:p-8">
-              <div className="flex flex-col md:flex-row md:items-center gap-6">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Trophy size={22} className="text-brand flex-shrink-0" />
-                    <h2 className="text-2xl font-bold text-white">
-                      Spring Classic 2026
-                    </h2>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm mb-4">
-                    <div className="flex items-center gap-2 text-zinc-300">
-                      <Calendar size={14} className="text-brand flex-shrink-0" />
-                      <span>Every Friday starting Mar 27, 2026</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-zinc-300">
-                      <Clock size={14} className="text-brand flex-shrink-0" />
-                      <span>7:00 PM – 10:00 PM</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-zinc-300">
-                      <MapPin size={14} className="text-brand flex-shrink-0" />
-                      <span>14062 Ambrose St, Houston TX</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-zinc-300">
-                      <Users size={14} className="text-brand flex-shrink-0" />
-                      <span>Adult 7v7</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-3 md:min-w-[200px]">
-                  <Link href="/register" className="btn-primary justify-center text-sm">
-                    <Trophy size={16} />
-                    Register Now
-                    <ArrowRight size={14} />
-                  </Link>
-                  <Link href="/pay" className="btn-secondary justify-center text-sm">
-                    <CreditCard size={16} />
-                    Pay Entry Fee
-                    <ArrowRight size={14} />
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
+          ) : (
+            tournaments.map((t) => <TournamentCard key={t.id} tournament={t} />)
+          )}
         </div>
       </Section>
 
@@ -179,7 +145,7 @@ export default function EventsPage() {
             Want to Play 7v7?
           </h2>
           <p className="text-zinc-400 mb-8">
-            Register to get updates on upcoming 7v7 leagues and tournaments. 
+            Register to get updates on upcoming 7v7 leagues and tournaments.
             We&apos;ll notify you when registration opens.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
