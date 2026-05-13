@@ -1,14 +1,5 @@
--- Per-tournament schedule entries (rounds, matchdays, sessions...).
--- Replaces the old hardcoded spring-2026 league schedule. Each tournament now
--- carries its own rounds in this table.
---
--- Idempotent: safe to re-run. The previous league_round_overrides table is
--- left in place to avoid destructive migrations; it is simply no longer read
--- or written by the app. Drop it manually when you're ready.
---
--- If you see PostgREST "Could not find the table 'public.tournament_rounds'":
--- run this entire file in Supabase Dashboard → SQL → New query → Run.
--- Or apply supabase/migrations/20260513120000_create_tournament_rounds.sql via CLI.
+-- Creates tournament_rounds (per-tournament schedule). Apply via Supabase SQL Editor
+-- or: supabase db push / supabase migration up (when project is linked).
 
 create extension if not exists pgcrypto;
 

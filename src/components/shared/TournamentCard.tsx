@@ -67,6 +67,7 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
             fill
             className="object-cover"
             sizes="(max-width: 768px) 100vw, 896px"
+            quality={85}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-base/80 via-transparent to-transparent" />
         </div>

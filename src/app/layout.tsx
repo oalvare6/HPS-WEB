@@ -61,7 +61,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.variable} ${bebas.variable} ${jetbrains.variable} font-sans antialiased bg-base text-white`}>
+      <body className={`${inter.variable} ${bebas.variable} ${jetbrains.variable} font-sans antialiased bg-base text-white`} suppressHydrationWarning>
         <Header />
         <main className="min-h-screen">{children}</main>
         <Footer />

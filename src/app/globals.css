@@ -25,6 +25,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-inter), system-ui, sans-serif;
+  line-height: 1.65;
 }
 
 html {
@@ -34,7 +35,7 @@ html {
 h1, h2 {
   font-family: var(--font-bebas), system-ui, sans-serif;
   font-weight: 400;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.06em;
 }
 
 *:focus-visible {
@@ -133,6 +134,33 @@ body {
 .btn-primary:hover {
   background-color: rgb(var(--brand));
   box-shadow: 0 10px 15px -3px rgb(var(--brand) / 0.4), 0 4px 6px -4px rgb(var(--brand) / 0.4);
+}
+
+.btn-shimmer {
+  @apply relative overflow-hidden;
+}
+
+.btn-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-120%) skewX(-18deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.24),
+    transparent
+  );
+  transition: transform 650ms ease;
+}
+
+.btn-shimmer:hover::after {
+  transform: translateX(120%) skewX(-18deg);
+}
+
+.btn-shimmer > * {
+  position: relative;
+  z-index: 1;
 }
 
 .btn-secondary {

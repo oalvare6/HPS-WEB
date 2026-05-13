@@ -6,7 +6,9 @@ import { EventCard } from "@/components/shared/event-card";
 import { LocationCard } from "@/components/shared/location-card";
 import { StatusIndicator } from "@/components/shared/status-indicator";
 import { QuickActionsBar } from "@/components/layout/quick-actions-bar";
-import { FeaturedTournamentCarousel } from "@/components/shared/FeaturedTournamentCarousel";
+import { FeaturedTournamentCard } from "@/components/shared/FeaturedTournamentCard";
+import { getPresetUrl } from "@/lib/tournament-image-presets";
+import { safeInternalLink } from "@/lib/safe-internal-link";
 import {
   getFeaturedTournaments,
   getRecentEvents,
@@ -28,6 +30,15 @@ function recentEventStatus(
   return "completed";
 }
 
+function formatFeaturedTournamentDate(start: string | null): string {
+  if (!start) return "Date TBA";
+  return new Date(start).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default async function Home() {
   const [
     { tournaments: featuredTournaments, loadError: featuredLoadError },
@@ -38,123 +49,179 @@ export default async function Home() {
     getRecentEvents(3),
     getSiteSetting("home.status_pills"),
   ]);
+  const heroTournament = featuredTournaments[0];
+  const heroTournamentHref = heroTournament
+    ? heroTournament.registration_open
+      ? safeInternalLink(heroTournament.register_url, `/events/${heroTournament.slug}`)
+      : `/events/${heroTournament.slug}`
+    : "/events";
+  const heroTournamentImage =
+    heroTournament && (heroTournament.image_url || getPresetUrl(heroTournament.image_preset));
+
   return (
     <>
       {/* Quick Actions Bar */}
       <QuickActionsBar />
 
       {/* Hero */}
-      <section className="relative bg-base text-white bg-tactical-grid">
-        <div className="max-w-6xl mx-auto px-6 py-16 md:py-24 lg:py-32">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left: Content */}
-            <div>
-              {/* Logo Badge */}
-              <div className="mb-6">
-                <div className="w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 rounded-full bg-white p-1 shadow-lg shadow-black/30">
-                  <Image
-                    src="/brand/hps-badge.png"
-                    alt="Houston Premier Soccer"
-                    width={200}
-                    height={200}
-                    className="w-full h-full rounded-full"
-                    priority
-                  />
-                </div>
+      <section className="relative overflow-hidden bg-base text-white">
+        <div className="absolute inset-0">
+          <Image
+            src="/community/field-hero.png"
+            alt="Houston Premier Soccer field under the lights"
+            fill
+            className="object-cover"
+            sizes="(min-width: 1280px) 1920px, 100vw"
+            quality={90}
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-base/90 via-base/55 to-base/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-base/85 via-base/15 to-transparent" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_26%_38%,rgba(34,211,238,0.16),transparent_30%),linear-gradient(rgba(34,211,238,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.03)_1px,transparent_1px)] bg-[length:100%_100%,56px_56px,56px_56px]" />
+        </div>
+
+        <div className="relative max-w-6xl mx-auto px-6 py-16 md:py-24 lg:py-28">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)] gap-10 lg:gap-14 items-end">
+            <div className="max-w-3xl space-y-6">
+              <div className="inline-flex rounded-full bg-white p-1.5 shadow-[0_0_50px_rgba(34,211,238,0.35)] ring-2 ring-brand/45">
+                <Image
+                  src="/brand/hps-badge.png"
+                  alt="Houston Premier Soccer"
+                  width={160}
+                  height={160}
+                  className="h-28 w-28 rounded-full sm:h-32 sm:w-32 md:h-36 md:w-36"
+                  priority
+                />
               </div>
 
-              {/* Status Indicators */}
-              <div className="mb-6">
-                <StatusIndicator items={statusItems} />
+              <StatusIndicator items={statusItems} className="rounded-full border border-white/10 bg-base/50 px-4 py-2 backdrop-blur-md" />
+
+              <div className="space-y-4">
+                <h1 className="max-w-3xl text-5xl md:text-7xl lg:text-8xl font-bold leading-tight tracking-normal drop-shadow-2xl">
+                  Houston <span className="text-brand drop-shadow-[0_0_22px_rgba(34,211,238,0.35)]">Premier</span> Soccer
+                </h1>
+                <p className="max-w-2xl text-lg md:text-xl text-zinc-200 leading-relaxed drop-shadow">
+                  Competitive 7v7, bright lights, and a field built for nights your team remembers.
+                </p>
               </div>
 
-              {/* Headline */}
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-4">
-                Houston Premier
-                <br />
-                <span className="text-zinc-400">Soccer</span>
-              </h1>
-
-              {/* Subhead */}
-              <p className="text-lg md:text-xl text-zinc-300 mb-8 max-w-lg">
-                Your local 7v7 soccer spot. Quality grass field, competitive leagues, and a community built around the beautiful game.
-              </p>
-
-              {/* Primary CTAs */}
               <div className="flex flex-col sm:flex-row gap-3">
-                <Link href="/register" className="btn-primary">
+                <Link href="/register" className="btn-primary btn-shimmer group">
                   <Trophy size={18} />
                   Register for Tournament
+                  <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
                 </Link>
-                <Link href="/events" className="btn-secondary">
+                <Link href="/events" className="btn-secondary bg-base/70 backdrop-blur-md">
                   <Calendar size={18} />
                   View Tournaments
                 </Link>
               </div>
             </div>
 
-            {/* Right: Community Photo + Tournament Info */}
-            <div className="space-y-4">
-              {/* Community Photo */}
-              <div className="dashboard-card overflow-hidden border border-border-token/70 shadow-xl shadow-black/30">
-                <div className="relative aspect-video">
-                  <Image
-                    src="/community/hps-community-7v7.png"
-                    alt="Houston Premier Soccer 7v7 community"
-                    fill
-                    className="object-cover"
-                    sizes="(min-width: 1024px) 520px, 100vw"
-                    priority
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-base/85 via-base/20 to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <p className="text-sm font-semibold text-white tracking-tight">
-                      Real players. Real community.
-                    </p>
-                    <p className="text-xs text-brand font-mono mt-0.5">
-                      Houston 7v7 under the lights
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {featuredLoadError && (
-                <p
-                  role="alert"
-                  className="rounded-lg border border-amber-500/35 bg-amber-950/25 px-4 py-3 text-sm text-amber-100"
-                >
-                  {TOURNAMENTS_LOAD_USER_MESSAGE}
-                </p>
-              )}
-              {featuredTournaments.length > 0 ? (
-                <FeaturedTournamentCarousel tournaments={featuredTournaments} />
-              ) : (
-                <div className="dashboard-card overflow-hidden border border-border-token/70 shadow-xl shadow-black/30">
-                  <div className="relative aspect-video">
-                    <Image
-                      src="/community/hps-community-7v7.png"
-                      alt="Houston Premier Soccer 7v7 community"
-                      fill
-                      className="object-cover"
-                      sizes="(min-width: 1024px) 520px, 100vw"
-                      priority
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-base/85 via-base/20 to-transparent" />
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <p className="text-sm font-semibold text-white tracking-tight">
-                        Real players. Real community.
+            <div className="dashboard-card overflow-hidden border-brand/25 bg-base/65 shadow-2xl shadow-black/50">
+              {heroTournament ? (
+                <>
+                  <Link href="#featured-tournaments" className="group block">
+                    {heroTournamentImage && (
+                      <div className="relative aspect-[16/8] bg-surface-2">
+                        <Image
+                          src={heroTournamentImage}
+                          alt={heroTournament.title}
+                          fill
+                          className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                          sizes="(min-width: 1024px) 380px, 100vw"
+                          quality={85}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-base/85 via-base/20 to-transparent" />
+                      </div>
+                    )}
+                    <div className="p-5 space-y-4">
+                      <p className="text-xs font-mono uppercase tracking-[0.24em] text-brand">
+                        Featured Tournament
                       </p>
-                      <p className="text-xs text-brand font-mono mt-0.5">
-                        Houston 7v7 under the lights
-                      </p>
+                      <div>
+                        <h2 className="text-2xl font-bold text-white transition-colors group-hover:text-brand">
+                          {heroTournament.title}
+                        </h2>
+                        <div className="mt-3 grid gap-2 text-sm text-zinc-300">
+                          <div className="flex items-center gap-2">
+                            <Calendar size={15} className="text-brand" />
+                            <span>{formatFeaturedTournamentDate(heroTournament.start_date)}</span>
+                          </div>
+                          {heroTournament.recurrence && (
+                            <div className="flex items-center gap-2">
+                              <Clock size={15} className="text-brand" />
+                              <span>{heroTournament.recurrence}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-2 text-sm font-semibold text-white transition-colors group-hover:text-brand">
+                        See all featured tournaments
+                        <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                      </span>
                     </div>
-                  </div>
+                  </Link>
+                  <Link
+                    href={heroTournamentHref}
+                    className="mx-5 mb-5 inline-flex items-center gap-2 rounded-lg border border-brand/35 bg-brand/10 px-3 py-2 text-sm font-semibold text-white hover:bg-brand/20 transition-colors group"
+                  >
+                    {heroTournament.registration_open ? "Register now" : "View tournament"}
+                    <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                  </Link>
+                </>
+              ) : (
+                <div className="p-5 space-y-4">
+                  <p className="text-xs font-mono uppercase tracking-[0.24em] text-brand">
+                    Featured Tournament
+                  </p>
+                  <h2 className="text-2xl font-bold text-white">Tournaments under the lights</h2>
+                  <p className="text-sm leading-relaxed text-zinc-300">
+                    Explore upcoming leagues, tournaments, and field events at Houston Premier Soccer.
+                  </p>
+                  <Link
+                    href="/events"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-white hover:text-brand transition-colors group"
+                  >
+                    View schedule
+                    <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                  </Link>
                 </div>
               )}
             </div>
           </div>
         </div>
       </section>
+
+      {(featuredLoadError || featuredTournaments.length > 0) && (
+        <Section id="featured-tournaments" dark className="bg-base bg-tactical-grid-dense scroll-mt-24">
+          <SectionHeader
+            title="Featured Tournaments"
+            subtitle="Upcoming competitions and registration windows."
+            dark
+          />
+          {featuredLoadError && (
+            <p
+              role="alert"
+              className="mb-6 rounded-lg border border-amber-500/35 bg-amber-950/25 px-4 py-3 text-sm text-amber-100"
+            >
+              {TOURNAMENTS_LOAD_USER_MESSAGE}
+            </p>
+          )}
+          {featuredTournaments.length > 0 && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              {featuredTournaments.map((tournament, index) => (
+                <FeaturedTournamentCard
+                  key={tournament.id}
+                  tournament={tournament}
+                  imagePriority={index === 0}
+                  highlighted={tournament.id === heroTournament?.id}
+                />
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
 
       {/* What Happens Here */}
       <Section dark className="bg-surface overflow-hidden relative">

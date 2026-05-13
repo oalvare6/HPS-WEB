@@ -48,10 +48,12 @@ const STATUS_PILL: Record<
 export function FeaturedTournamentCard({
   tournament,
   imagePriority = true,
+  highlighted = false,
 }: {
   tournament: Tournament;
   /** Avoid eager-loading every slide when multiple featured tournaments rotate. */
   imagePriority?: boolean;
+  highlighted?: boolean;
 }) {
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
   const timeRange =
@@ -63,7 +65,13 @@ export function FeaturedTournamentCard({
   const pill = STATUS_PILL[tournament.status];
 
   return (
-    <div className="dashboard-card overflow-hidden border border-border-token/70 shadow-xl shadow-black/30">
+    <div
+      className={`dashboard-card overflow-hidden border shadow-xl transition-all ${
+        highlighted
+          ? "border-brand/70 ring-2 ring-brand/50 shadow-brand/20"
+          : "border-border-token/70 shadow-black/30"
+      }`}
+    >
       {bannerUrl ? (
         <Link
           href={`/events/${tournament.slug}`}
@@ -75,6 +83,7 @@ export function FeaturedTournamentCard({
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
             sizes="(min-width: 1024px) 520px, 100vw"
+            quality={85}
             priority={imagePriority}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-base/90 via-base/25 to-transparent pointer-events-none" />
