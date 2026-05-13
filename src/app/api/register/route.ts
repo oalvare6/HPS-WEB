@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createPayResumeToken } from "@/lib/app-signing";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { upsertContactByEmail, normalizeEmail, normalizePhone } from "@/lib/contacts";
 
 type RegistrationType = "adult" | "youth";
 
@@ -13,9 +14,12 @@ interface RegistrationPayload {
   dob: string;
   emergencyName: string;
   emergencyPhone: string;
+  /** Optional during the transition; required once admin UI exposes selector. */
+  tournamentId?: string | null;
 }
 
 const VALID_REGISTRATION_TYPES = new Set<RegistrationType>(["adult", "youth"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const DOCUSEAL_API_KEY = process.env.DOCUSEAL_API_KEY!;
 const DOCUSEAL_ADULT_TEMPLATE_ID = process.env.DOCUSEAL_ADULT_TEMPLATE_ID!;
@@ -35,6 +39,38 @@ function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/**
+ * Resolve the tournament_id to attach to this registration. We trust an
+ * explicit id from the client when it is a real, registration-open tournament;
+ * otherwise we fall back to the single open tournament if there is exactly one.
+ */
+async function resolveTournamentId(
+  requested: string | null | undefined
+): Promise<string | null> {
+  if (requested && UUID_RE.test(requested)) {
+    const { data } = await supabaseAdmin
+      .from("tournaments")
+      .select("id, registration_open")
+      .eq("id", requested)
+      .maybeSingle();
+    if (data?.id && data.registration_open) {
+      return data.id;
+    }
+  }
+
+  const { data: openOnes } = await supabaseAdmin
+    .from("tournaments")
+    .select("id")
+    .eq("registration_open", true)
+    .limit(2);
+
+  if (openOnes && openOnes.length === 1) {
+    return openOnes[0].id;
+  }
+
+  return null;
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<RegistrationPayload>;
@@ -43,11 +79,12 @@ export async function POST(request: Request) {
       type: body.type as RegistrationType,
       firstName: normalizeString(body.firstName),
       lastName: normalizeString(body.lastName),
-      email: normalizeString(body.email).toLowerCase(),
+      email: normalizeEmail(normalizeString(body.email)),
       phone: normalizeString(body.phone),
       dob: normalizeString(body.dob),
       emergencyName: normalizeString(body.emergencyName),
       emergencyPhone: normalizeString(body.emergencyPhone),
+      tournamentId: typeof body.tournamentId === "string" ? body.tournamentId : null,
     };
 
     if (
@@ -68,9 +105,30 @@ export async function POST(request: Request) {
 
     const waiverType = getWaiverType(payload.type);
 
+    const { contact, loadError: contactErr } = await upsertContactByEmail({
+      first_name: payload.firstName,
+      last_name: payload.lastName,
+      email: payload.email,
+      phone: normalizePhone(payload.phone),
+      dob: payload.dob,
+      tags: ["registered"],
+    });
+
+    if (contactErr || !contact) {
+      console.error("Contact upsert failed during registration:", contactErr);
+      return NextResponse.json(
+        { error: "We couldn't save your registration right now. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    const tournamentId = await resolveTournamentId(payload.tournamentId);
+
     const { data: inserted, error } = await supabaseAdmin
       .from("registrations")
       .insert({
+        tournament_id: tournamentId,
+        contact_id: contact.id,
         registration_type: payload.type,
         first_name: payload.firstName,
         last_name: payload.lastName,
@@ -126,7 +184,11 @@ export async function POST(request: Request) {
           role: "First Party",
           email: payload.email,
           name: `${payload.firstName} ${payload.lastName}`,
-          metadata: { registration_id: inserted.id },
+          metadata: {
+            registration_id: inserted.id,
+            contact_id: contact.id,
+            tournament_id: tournamentId ?? "",
+          },
           completed_redirect_url: completedRedirectUrl,
         },
       ],

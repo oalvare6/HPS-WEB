@@ -57,6 +57,78 @@ export async function getPublicTournaments(): Promise<PublicTournamentsResult> {
 }
 
 /**
+ * Tournaments currently accepting registrations. Used by `/register` to
+ * populate the tournament selector and by the registration API to validate
+ * a posted tournament_id.
+ */
+export async function getRegistrationOpenTournaments(): Promise<PublicTournamentsResult> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournaments")
+      .select("*")
+      .eq("registration_open", true)
+      .neq("status", "cancelled")
+      .order("display_order", { ascending: true })
+      .order("start_date", { ascending: true });
+
+    if (error) {
+      console.error("[tournaments] open fetch failed:", error.message, error);
+      return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    }
+    return { tournaments: (data ?? []) as Tournament[], loadError: null };
+  } catch (err) {
+    console.error("[tournaments] open fetch failed:", err);
+    return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+  }
+}
+
+/**
+ * Tournaments currently accepting payments. Used by `/pay` to validate amount
+ * and link the payment back to a tournament.
+ */
+export async function getPaymentsOpenTournaments(): Promise<PublicTournamentsResult> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournaments")
+      .select("*")
+      .eq("payments_open", true)
+      .neq("status", "cancelled")
+      .order("display_order", { ascending: true })
+      .order("start_date", { ascending: true });
+
+    if (error) {
+      console.error("[tournaments] payments-open fetch failed:", error.message, error);
+      return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    }
+    return { tournaments: (data ?? []) as Tournament[], loadError: null };
+  } catch (err) {
+    console.error("[tournaments] payments-open fetch failed:", err);
+    return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+  }
+}
+
+/**
+ * Fetch a single tournament by id.
+ */
+export async function getTournamentById(id: string): Promise<Tournament | null> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournaments")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) {
+      console.error("[tournaments] by-id failed:", error.message);
+      return null;
+    }
+    return (data as Tournament) ?? null;
+  } catch (err) {
+    console.error("[tournaments] by-id failed:", err);
+    return null;
+  }
+}
+
+/**
  * Returns up to 3 tournaments to show in the homepage hero carousel:
  *   1. Admin-pinned (`is_featured = true`), in display_order/start_date order.
  *   2. Fallback when nothing is pinned: the next single tournament with

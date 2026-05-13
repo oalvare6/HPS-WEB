@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { recordCheckoutSessionPayment } from "@/lib/stripe-payments";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,80 +22,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const email = (
-      session.metadata?.email ??
-      session.customer_email ??
-      ""
-    )
-      .toLowerCase()
-      .trim();
-    const tournamentName = session.metadata?.tournament_name ?? null;
-    const registrationId = session.metadata?.registration_id ?? null;
-    const amountTotal = session.amount_total ?? 0;
-    const paymentIntentId =
-      typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : (session.payment_intent?.id ?? null);
+    const outcome = await recordCheckoutSessionPayment(session);
 
-    if (!email) {
-      return NextResponse.json({ error: "No email on session." }, { status: 400 });
-    }
-
-    // Idempotent: skip if already recorded
-    const { data: existing } = await supabaseAdmin
-      .from("payments")
-      .select("id")
-      .eq("stripe_session_id", session.id)
-      .maybeSingle();
-
-    if (existing) {
-      return NextResponse.json({ status: "already_recorded", paymentId: existing.id });
-    }
-
-    // Resolve registration by email if no ID was captured at checkout
-    let resolvedRegistrationId: string | null = registrationId || null;
-    if (!resolvedRegistrationId) {
-      const { data: reg } = await supabaseAdmin
-        .from("registrations")
-        .select("id")
-        .eq("email", email)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      resolvedRegistrationId = reg?.id ?? null;
-    }
-
-    const { data: payment, error } = await supabaseAdmin
-      .from("payments")
-      .insert({
-        email,
-        tournament_name: tournamentName,
-        amount: amountTotal / 100,
-        currency: session.currency ?? "usd",
-        stripe_session_id: session.id,
-        stripe_payment_intent_id: paymentIntentId,
-        registration_id: resolvedRegistrationId,
-        status: "succeeded",
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      console.error("verify-session: failed to insert payment:", error);
+    if (outcome.status === "error") {
       return NextResponse.json(
         { error: "Failed to record payment." },
         { status: 500 }
       );
     }
 
-    if (resolvedRegistrationId) {
-      await supabaseAdmin
-        .from("registrations")
-        .update({ payment_status: "paid" })
-        .eq("id", resolvedRegistrationId);
+    if (outcome.status === "skipped") {
+      return NextResponse.json(
+        { error: "Session had no associated email." },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({ status: "recorded", paymentId: payment.id });
+    return NextResponse.json({ status: outcome.status, paymentId: outcome.paymentId });
   } catch (err) {
     console.error("verify-session error:", err);
     return NextResponse.json(

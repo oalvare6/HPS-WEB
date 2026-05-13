@@ -22,6 +22,8 @@ import {
   Trophy,
   Settings,
   ArrowRight,
+  UsersRound,
+  Ticket,
 } from "lucide-react";
 
 type LinkedPayment = {
@@ -29,13 +31,30 @@ type LinkedPayment = {
   amount: number;
   currency: string;
   status: string;
+  tournament_id: string | null;
   tournament_name: string | null;
   created_at: string;
+};
+
+type LinkedContact = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  tags: string[];
+};
+
+type LinkedTournament = {
+  id: string;
+  title: string;
+  slug: string;
 };
 
 type Registration = {
   id: string;
   created_at: string;
+  tournament_id: string | null;
+  contact_id: string | null;
   registration_type: string;
   first_name: string;
   last_name: string;
@@ -54,6 +73,8 @@ type Registration = {
   docuseal_status: string;
   docuseal_sign_url: string | null;
   docuseal_submission_id: number | null;
+  tournament: LinkedTournament | null;
+  contact: LinkedContact | null;
   payments: LinkedPayment[] | null;
 };
 
@@ -63,12 +84,17 @@ type Payment = {
   email: string;
   amount: number;
   currency: string;
+  tournament_id: string | null;
   tournament_name: string | null;
+  contact_id: string | null;
+  drop_in_id: string | null;
   stripe_session_id: string | null;
   stripe_payment_intent_id: string | null;
   status: string;
   notes: string | null;
   registrations: { first_name: string; last_name: string } | null;
+  tournament: LinkedTournament | null;
+  contact: LinkedContact | null;
 };
 
 type SortField = "created_at" | "last_name" | "waiver_signed" | "registration_type" | "payment_status";
@@ -101,6 +127,26 @@ const HUB_LINKS: HubLink[] = [
       "Add, edit, reorder, feature on homepage, or post per-tournament updates.",
     icon: Trophy,
     badgeKey: "tournaments",
+  },
+  {
+    href: "/admin/contacts",
+    title: "Contacts",
+    description:
+      "Canonical people records. Search, merge duplicates, edit tags and opt-in.",
+    icon: Users,
+  },
+  {
+    href: "/admin/drop-ins",
+    title: "Drop-ins",
+    description:
+      "One-night guest plays. Create a drop-in, generate a Stripe pay link, mark paid.",
+    icon: Ticket,
+  },
+  {
+    href: "/admin/teams",
+    title: "Teams",
+    description: "Group contacts into rosters per tournament.",
+    icon: UsersRound,
   },
   {
     href: "/admin/site",
@@ -626,6 +672,7 @@ export default function AdminPage() {
                               Name <SortIcon field="last_name" />
                             </th>
                             <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">Email</th>
+                            <th className="px-4 py-3 text-zinc-400 font-medium hidden lg:table-cell">Tournament</th>
                             <th
                               className="px-4 py-3 text-zinc-400 font-medium cursor-pointer hover:text-white"
                               onClick={() => handleSort("registration_type")}
@@ -663,6 +710,19 @@ export default function AdminPage() {
                                   {r.first_name} {r.last_name}
                                 </td>
                                 <td className="px-4 py-3 text-zinc-300 hidden md:table-cell">{r.email}</td>
+                                <td className="px-4 py-3 text-zinc-300 hidden lg:table-cell">
+                                  {r.tournament ? (
+                                    <Link
+                                      href={`/admin/tournaments/${r.tournament.id}/edit`}
+                                      className="text-brand hover:underline"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {r.tournament.title}
+                                    </Link>
+                                  ) : (
+                                    <span className="text-yellow-400 text-xs">unlinked</span>
+                                  )}
+                                </td>
                                 <td className="px-4 py-3">
                                   <span
                                     className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
@@ -710,8 +770,38 @@ export default function AdminPage() {
                               {/* Expanded detail row */}
                               {expandedId === r.id && (
                                 <tr>
-                                  <td colSpan={6} className="bg-surface-2/40 px-4 py-4">
+                                  <td colSpan={7} className="bg-surface-2/40 px-4 py-4">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                                      <div>
+                                        <p className="text-zinc-500 text-xs uppercase">Tournament</p>
+                                        <p className="text-zinc-200">
+                                          {r.tournament ? (
+                                            <Link
+                                              href={`/admin/tournaments/${r.tournament.id}/edit`}
+                                              className="text-brand hover:underline"
+                                            >
+                                              {r.tournament.title}
+                                            </Link>
+                                          ) : (
+                                            <span className="text-yellow-400">Not linked to a tournament</span>
+                                          )}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-zinc-500 text-xs uppercase">Contact</p>
+                                        <p className="text-zinc-200">
+                                          {r.contact ? (
+                                            <Link
+                                              href={`/admin/contacts?q=${encodeURIComponent(r.contact.email)}`}
+                                              className="text-brand hover:underline"
+                                            >
+                                              {r.contact.first_name} {r.contact.last_name}
+                                            </Link>
+                                          ) : (
+                                            <span className="text-yellow-400">No contact link</span>
+                                          )}
+                                        </p>
+                                      </div>
                                       <div>
                                         <p className="text-zinc-500 text-xs uppercase">Email</p>
                                         <p className="text-zinc-200">{r.email}</p>
@@ -987,7 +1077,14 @@ export default function AdminPage() {
                               className="border-b border-border-token hover:bg-surface-2/30 transition-colors"
                             >
                               <td className="px-4 py-3 text-white font-medium">
-                                {p.registrations ? (
+                                {p.contact ? (
+                                  <Link
+                                    href={`/admin/contacts?q=${encodeURIComponent(p.contact.email)}`}
+                                    className="hover:text-brand"
+                                  >
+                                    {p.contact.first_name} {p.contact.last_name}
+                                  </Link>
+                                ) : p.registrations ? (
                                   `${p.registrations.first_name} ${p.registrations.last_name}`
                                 ) : (
                                   <span className="text-zinc-500 italic">Unknown</span>
@@ -995,7 +1092,21 @@ export default function AdminPage() {
                               </td>
                               <td className="px-4 py-3 text-zinc-300 hidden md:table-cell">{p.email}</td>
                               <td className="px-4 py-3 text-zinc-300 hidden lg:table-cell">
-                                {p.tournament_name ?? <span className="text-zinc-500">—</span>}
+                                {p.tournament ? (
+                                  <Link
+                                    href={`/admin/tournaments/${p.tournament.id}/edit`}
+                                    className="text-brand hover:underline"
+                                  >
+                                    {p.tournament.title}
+                                  </Link>
+                                ) : p.tournament_name ? (
+                                  <span className="text-zinc-300">
+                                    {p.tournament_name}{" "}
+                                    <span className="text-yellow-400 text-xs">(unlinked)</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-zinc-500">—</span>
+                                )}
                               </td>
                               <td className="px-4 py-3 text-white font-semibold">
                                 {formatCurrency(p.amount, p.currency)}
