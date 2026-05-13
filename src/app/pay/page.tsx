@@ -44,6 +44,7 @@ function PayForm() {
   const searchParams = useSearchParams();
   const cancelled = searchParams.get("cancelled") === "true";
   const registrationId = searchParams.get("registrationId") ?? "";
+  const payToken = searchParams.get("payToken") ?? "";
 
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -64,7 +65,8 @@ function PayForm() {
 
     (async () => {
       try {
-        const res = await fetch(`/api/registrations/${registrationId}`);
+        const qs = new URLSearchParams({ token: payToken });
+        const res = await fetch(`/api/registrations/${registrationId}?${qs}`);
         const data = (await res.json()) as {
           email?: string;
           firstName?: string;
@@ -98,7 +100,7 @@ function PayForm() {
     return () => {
       cancelledFetch = true;
     };
-  }, [registrationId]);
+  }, [registrationId, payToken]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -114,6 +116,7 @@ function PayForm() {
           tournamentName: selected.name,
           amountCents: selected.amountCents,
           registrationId: registrationId || undefined,
+          payToken: payToken || undefined,
         }),
       });
 

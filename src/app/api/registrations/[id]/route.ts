@@ -1,14 +1,23 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { verifyPayResumeToken } from "@/lib/app-signing";
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
 
   if (!id || typeof id !== "string") {
     return NextResponse.json({ error: "Missing registration id." }, { status: 400 });
+  }
+
+  const token = request.nextUrl.searchParams.get("token");
+  if (!verifyPayResumeToken(id, token)) {
+    return NextResponse.json(
+      { error: "Invalid or expired link. Open the pay link from your waiver confirmation, or enter your details below." },
+      { status: 403 }
+    );
   }
 
   const { data, error } = await supabaseAdmin

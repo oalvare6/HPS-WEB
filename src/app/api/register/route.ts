@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createPayResumeToken } from "@/lib/app-signing";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type RegistrationType = "adult" | "youth";
@@ -98,7 +99,23 @@ export async function POST(request: Request) {
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
       `https://${request.headers.get("host")}`;
-    const completedRedirectUrl = `${baseUrl}/pay?registrationId=${inserted.id}`;
+
+    let payToken: string;
+    try {
+      payToken = createPayResumeToken(inserted.id);
+    } catch (e) {
+      console.error("Pay resume token signing failed:", e);
+      return NextResponse.json(
+        { error: "Registration could not be completed (server signing misconfiguration)." },
+        { status: 500 }
+      );
+    }
+
+    const payQuery = new URLSearchParams({
+      registrationId: inserted.id,
+      payToken,
+    });
+    const completedRedirectUrl = `${baseUrl}/pay?${payQuery.toString()}`;
 
     const dsPayload = {
       template_id: templateId,

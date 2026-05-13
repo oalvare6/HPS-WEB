@@ -1,5 +1,13 @@
+import { createHash, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { signAdminSessionCookieValue } from "@/lib/app-signing";
+
+function digestEqual(a: string, b: string): boolean {
+  const ha = createHash("sha256").update(a, "utf8").digest();
+  const hb = createHash("sha256").update(b, "utf8").digest();
+  return timingSafeEqual(ha, hb);
+}
 
 export async function POST(request: Request) {
   try {
@@ -18,14 +26,25 @@ export async function POST(request: Request) {
       );
     }
 
-    if (body.username !== adminUser || body.password !== adminPassword) {
+    const userOk = digestEqual(body.username ?? "", adminUser);
+    const passOk = digestEqual(body.password ?? "", adminPassword);
+
+    if (!userOk || !passOk) {
       return NextResponse.json(
         { error: "Invalid username or password." },
         { status: 401 }
       );
     }
 
-    const token = Buffer.from(`${adminUser}:${Date.now()}`).toString("base64");
+    let token: string;
+    try {
+      token = signAdminSessionCookieValue(adminUser, 60 * 60 * 8);
+    } catch {
+      return NextResponse.json(
+        { error: "Admin session signing not configured (set ADMIN_SESSION_SECRET in production)." },
+        { status: 500 }
+      );
+    }
 
     const cookieStore = await cookies();
     cookieStore.set("admin_token", token, {
@@ -38,9 +57,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch {
-    return NextResponse.json(
-      { error: "Login failed." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Login failed." }, { status: 500 });
   }
 }

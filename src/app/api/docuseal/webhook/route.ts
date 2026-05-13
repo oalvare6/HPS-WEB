@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { verifyDocusealWebhookSignature } from "@/lib/app-signing";
 
 interface DocuSealWebhookPayload {
   event_type: string;
@@ -25,9 +26,25 @@ interface DocuSealWebhookPayload {
   };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const rawBody = await request.text();
+  const secret = process.env.DOCUSEAL_WEBHOOK_SECRET?.trim() ?? "";
+
+  if (!secret) {
+    console.error("DocuSeal webhook: DOCUSEAL_WEBHOOK_SECRET is not configured.");
+    return NextResponse.json({ error: "Webhook not configured." }, { status: 503 });
+  }
+
+  const sigHeader =
+    request.headers.get("x-docuseal-signature") ?? request.headers.get("X-Docuseal-Signature");
+
+  if (!verifyDocusealWebhookSignature(rawBody, sigHeader, secret)) {
+    console.error("DocuSeal webhook: invalid or missing signature.");
+    return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
+  }
+
   try {
-    const payload = (await request.json()) as DocuSealWebhookPayload;
+    const payload = JSON.parse(rawBody) as DocuSealWebhookPayload;
 
     if (payload.event_type !== "form.completed") {
       return NextResponse.json({ ok: true });
@@ -46,7 +63,11 @@ export async function POST(request: Request) {
       .single();
 
     if (findErr || !registration) {
-      console.error("DocuSeal webhook: registration not found for submission", submissionId, findErr);
+      console.error(
+        "DocuSeal webhook: registration not found for submission",
+        submissionId,
+        findErr
+      );
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
     }
 
@@ -77,7 +98,11 @@ export async function POST(request: Request) {
         .update({ waiver_document_url: documentUrl })
         .eq("id", registration.id)
         .then(({ error }) => {
-          if (error) console.warn("DocuSeal webhook: waiver_document_url column may not exist yet, skipping", error.code);
+          if (error)
+            console.warn(
+              "DocuSeal webhook: waiver_document_url column may not exist yet, skipping",
+              error.code
+            );
         });
     }
 

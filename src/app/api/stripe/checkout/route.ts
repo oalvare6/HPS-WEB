@@ -5,11 +5,12 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, tournamentName, amountCents, registrationId } = body as {
+    const { email, tournamentName, amountCents, registrationId, payToken } = body as {
       email: string;
       tournamentName: string;
       amountCents: number;
       registrationId?: string;
+      payToken?: string;
     };
 
     if (!email || !tournamentName || !amountCents) {
@@ -47,6 +48,10 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SITE_URL ||
       `https://${req.headers.get("host")}`;
 
+    const cancelParams = new URLSearchParams({ cancelled: "true" });
+    if (registrationId) cancelParams.set("registrationId", registrationId);
+    if (payToken) cancelParams.set("payToken", payToken);
+
     const session = await getStripe().checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
@@ -70,7 +75,7 @@ export async function POST(req: NextRequest) {
         registration_id: resolvedRegistrationId ?? "",
       },
       success_url: `${baseUrl}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/pay?cancelled=true`,
+      cancel_url: `${baseUrl}/pay?${cancelParams.toString()}`,
     });
 
     return NextResponse.json({ url: session.url });
