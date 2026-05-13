@@ -74,6 +74,13 @@ export function FeaturedTournamentCard({ tournament }: { tournament: Tournament 
             <ArrowRight size={14} />
           </Link>
         )}
+        <Link
+          href={`/events/${tournament.slug}`}
+          className="text-xs text-zinc-400 hover:text-white text-center inline-flex items-center justify-center gap-1 transition-colors mt-1"
+        >
+          View tournament details
+          <ArrowRight size={12} />
+        </Link>
       </div>
     </div>
   );

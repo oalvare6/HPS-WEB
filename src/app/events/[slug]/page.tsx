@@ -1,0 +1,347 @@
+import Image from "next/image";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Calendar,
+  Clock,
+  CreditCard,
+  Megaphone,
+  MapPin,
+  Navigation,
+  Pin,
+  Trophy,
+  Users,
+} from "lucide-react";
+import {
+  getTournamentBySlug,
+  getTournamentUpdates,
+} from "@/lib/tournaments";
+import { getSiteSetting } from "@/lib/site-settings";
+import type { Tournament, TournamentStatus, TournamentUpdate } from "@/lib/types";
+import { getPresetUrl } from "@/lib/tournament-image-presets";
+import { safeInternalLink } from "@/lib/safe-internal-link";
+
+export const dynamic = "force-dynamic";
+
+const STATUS_PILL: Record<TournamentStatus, { text: string; cls: string; dot: string }> = {
+  upcoming: {
+    text: "Upcoming",
+    cls: "text-brand bg-brand/10 border-brand/20",
+    dot: "bg-brand",
+  },
+  ongoing: {
+    text: "Ongoing",
+    cls: "text-green-400 bg-green-500/10 border-green-500/20",
+    dot: "bg-green-400",
+  },
+  completed: {
+    text: "Completed",
+    cls: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
+    dot: "bg-zinc-500",
+  },
+  cancelled: {
+    text: "Cancelled",
+    cls: "text-red-400 bg-red-500/10 border-red-500/20",
+    dot: "bg-red-400",
+  },
+};
+
+function formatDateRow(t: Tournament): string {
+  if (t.recurrence) return t.recurrence;
+  if (!t.start_date) return "Date TBA";
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  };
+  const s = new Date(t.start_date).toLocaleDateString("en-US", opts);
+  if (t.end_date) {
+    const e = new Date(t.end_date).toLocaleDateString("en-US", opts);
+    return `${s} – ${e}`;
+  }
+  return s;
+}
+
+function formatUpdateDate(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const t = await getTournamentBySlug(slug);
+  if (!t) return { title: "Tournament not found" };
+  return {
+    title: `${t.title} | Houston Premier Soccer`,
+    description:
+      t.description?.slice(0, 160) ?? `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer.`,
+  };
+}
+
+export default async function TournamentDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const tournament = await getTournamentBySlug(slug);
+  if (!tournament) notFound();
+
+  const [{ updates }, mapsUrl] = await Promise.all([
+    getTournamentUpdates(tournament.id),
+    getSiteSetting("footer.maps_url"),
+  ]);
+
+  const pill = STATUS_PILL[tournament.status];
+  const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
+  const registerHref = safeInternalLink(tournament.register_url, "/register");
+  const payHref = safeInternalLink(tournament.pay_url, "/pay");
+  const timeRange =
+    tournament.time_start && tournament.time_end
+      ? `${tournament.time_start} – ${tournament.time_end}`
+      : tournament.time_start || tournament.time_end || null;
+
+  return (
+    <>
+      {/* Header strip */}
+      <section className="bg-base text-white py-10 md:py-14 bg-tactical-grid">
+        <div className="max-w-6xl mx-auto px-6">
+          <Link
+            href="/events"
+            className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-4"
+          >
+            <ArrowLeft size={14} />
+            All events
+          </Link>
+
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold border ${pill.cls}`}
+            >
+              <span className={`w-1.5 h-1.5 ${pill.dot} rounded-full ${tournament.status === "upcoming" || tournament.status === "ongoing" ? "animate-pulse" : ""}`} />
+              {pill.text}
+            </span>
+            {tournament.registration_open && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-brand-deep text-white border border-brand">
+                Registration Open
+              </span>
+            )}
+            {tournament.payments_open && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-surface-2 text-brand border border-brand/30">
+                Payments Open
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 mb-4">
+            <Trophy size={28} className="text-brand flex-shrink-0" />
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+              {tournament.title}
+            </h1>
+          </div>
+
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-300">
+            <div className="flex items-center gap-2">
+              <Calendar size={14} className="text-brand" />
+              <span>{formatDateRow(tournament)}</span>
+            </div>
+            {timeRange && (
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-brand" />
+                <span>{timeRange}</span>
+              </div>
+            )}
+            {tournament.format && (
+              <div className="flex items-center gap-2">
+                <Users size={14} className="text-brand" />
+                <span>{tournament.format}</span>
+              </div>
+            )}
+            {tournament.location && (
+              <div className="flex items-center gap-2">
+                <MapPin size={14} className="text-brand" />
+                <span>{tournament.location}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Banner image */}
+      {bannerUrl && (
+        <div className="bg-base">
+          <div className="max-w-6xl mx-auto">
+            <div className="relative w-full aspect-[16/7] md:aspect-[16/6] bg-surface-2">
+              <Image
+                src={bannerUrl}
+                alt={tournament.title}
+                fill
+                className="object-cover"
+                unoptimized
+                priority
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-base/60 via-transparent to-transparent" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main content: description + sticky aside */}
+      <section className="bg-surface text-white py-10 md:py-14">
+        <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
+          <div className="lg:col-span-2 space-y-10">
+            {/* About */}
+            <div>
+              <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold mb-3">
+                About this tournament
+              </h2>
+              {tournament.description ? (
+                <p className="text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                  {tournament.description}
+                </p>
+              ) : (
+                <p className="text-zinc-500 italic">
+                  More details coming soon. Check back for the full rundown.
+                </p>
+              )}
+            </div>
+
+            {/* Updates feed */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Megaphone size={18} className="text-brand" />
+                <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+                  Updates
+                </h2>
+                {updates.length > 0 && (
+                  <span className="text-xs text-zinc-500">
+                    {updates.length} {updates.length === 1 ? "post" : "posts"}
+                  </span>
+                )}
+              </div>
+              {updates.length === 0 ? (
+                <div className="dashboard-card p-6 text-center text-zinc-500 text-sm border-dashed">
+                  No updates yet. Check back as the tournament gets closer.
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {updates.map((u: TournamentUpdate) => (
+                    <li
+                      key={u.id}
+                      className={`dashboard-card p-5 ${
+                        u.pinned ? "border-brand/50" : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3 mb-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          {u.pinned && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-brand/15 text-brand font-semibold uppercase tracking-wide">
+                              <Pin size={10} />
+                              Pinned
+                            </span>
+                          )}
+                          <span className="text-zinc-500">{formatUpdateDate(u.created_at)}</span>
+                        </div>
+                      </div>
+                      <p className="text-sm md:text-base text-zinc-100 whitespace-pre-wrap">
+                        {u.body}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Scores placeholder */}
+            <div>
+              <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold mb-3">
+                Scores &amp; standings
+              </h2>
+              <div className="dashboard-card p-6 text-zinc-500 text-sm border-dashed">
+                Live scores and standings will live here once the tournament gets
+                rolling. Stay tuned.
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky CTA card */}
+          <aside className="lg:col-span-1">
+            <div className="lg:sticky lg:top-28 space-y-4">
+              <div className="dashboard-card p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Trophy size={18} className="text-brand" />
+                  <h3 className="text-base font-semibold text-white">Take part</h3>
+                </div>
+                {tournament.registration_open ? (
+                  <Link
+                    href={registerHref}
+                    className="btn-primary w-full justify-center text-sm"
+                  >
+                    <Trophy size={14} />
+                    Register Now
+                    <ArrowRight size={14} />
+                  </Link>
+                ) : (
+                  <p className="text-sm text-zinc-400 italic">
+                    Registration isn&apos;t open right now. Watch this page for
+                    updates.
+                  </p>
+                )}
+                {tournament.payments_open && (
+                  <Link
+                    href={payHref}
+                    className="btn-secondary w-full justify-center text-sm"
+                  >
+                    <CreditCard size={14} />
+                    Pay Entry Fee
+                    <ArrowRight size={14} />
+                  </Link>
+                )}
+                {tournament.entry_fee != null && (
+                  <p className="text-xs text-zinc-500 text-center pt-1 border-t border-border-token/50">
+                    Entry fee: ${Number(tournament.entry_fee).toFixed(2)}
+                    {tournament.max_teams != null && ` · Max ${tournament.max_teams} teams`}
+                  </p>
+                )}
+              </div>
+
+              {tournament.location && (
+                <div className="dashboard-card p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin size={18} className="text-brand" />
+                    <h3 className="text-base font-semibold text-white">Location</h3>
+                  </div>
+                  <p className="text-sm text-zinc-300">{tournament.location}</p>
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-secondary w-full justify-center text-sm"
+                  >
+                    <Navigation size={14} />
+                    Get Directions
+                  </a>
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      {/* Bottom padding for mobile fixed bar */}
+      <div className="h-20 md:hidden bg-surface" />
+    </>
+  );
+}

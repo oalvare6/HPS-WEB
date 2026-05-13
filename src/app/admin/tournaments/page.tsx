@@ -11,10 +11,15 @@ import {
   ChevronUp,
   ChevronDown,
   Trophy,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Section } from "@/components/shared/section";
-import type { Tournament, TournamentStatus } from "@/lib/types";
+import {
+  MAX_FEATURED_TOURNAMENTS,
+  type Tournament,
+  type TournamentStatus,
+} from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 
 const STATUS_STYLES: Record<TournamentStatus, string> = {
@@ -67,6 +72,38 @@ function AdminTournamentsContent() {
     load();
   }, []);
 
+  const featuredCount = tournaments.filter((t) => t.is_featured).length;
+  const canFeatureMore = featuredCount < MAX_FEATURED_TOURNAMENTS;
+
+  const handleToggleFeatured = async (t: Tournament) => {
+    const next = !t.is_featured;
+    if (next && !canFeatureMore) {
+      toast.error(
+        `Only ${MAX_FEATURED_TOURNAMENTS} tournaments can be featured at once. Unfeature another first.`
+      );
+      return;
+    }
+    setBusyId(t.id);
+    try {
+      const res = await fetch(`/api/admin/tournaments/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_featured: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Could not update featured status.");
+        return;
+      }
+      toast.success(next ? "Featured on homepage." : "Removed from homepage.");
+      await load();
+    } catch {
+      toast.error("Could not update featured status.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleReorder = async (id: string, direction: "up" | "down") => {
     setBusyId(id);
     try {
@@ -116,6 +153,18 @@ function AdminTournamentsContent() {
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">Tournament Management</h1>
             <p className="text-zinc-400">
               {tournaments.length} tournament{tournaments.length === 1 ? "" : "s"} configured
+              <span className="mx-2 text-zinc-600">·</span>
+              <span
+                className={
+                  featuredCount === 0
+                    ? "text-zinc-500"
+                    : "text-brand font-medium"
+                }
+                title="Tournaments shown in the homepage hero carousel"
+              >
+                <Star size={12} className="inline mr-1 -mt-0.5" />
+                {featuredCount}/{MAX_FEATURED_TOURNAMENTS} featured on homepage
+              </span>
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -196,6 +245,30 @@ function AdminTournamentsContent() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => handleToggleFeatured(t)}
+                                disabled={
+                                  busyId === t.id || (!t.is_featured && !canFeatureMore)
+                                }
+                                className={`p-1.5 transition-colors disabled:opacity-30 ${
+                                  t.is_featured
+                                    ? "text-brand hover:text-brand-hover"
+                                    : "text-zinc-400 hover:text-brand"
+                                }`}
+                                title={
+                                  t.is_featured
+                                    ? "Unfeature on homepage"
+                                    : canFeatureMore
+                                      ? "Feature on homepage"
+                                      : `Max ${MAX_FEATURED_TOURNAMENTS} featured \u2014 unfeature one first`
+                                }
+                                aria-pressed={t.is_featured}
+                              >
+                                <Star
+                                  size={16}
+                                  className={t.is_featured ? "fill-current" : ""}
+                                />
+                              </button>
                               <button
                                 onClick={() => handleReorder(t.id, "up")}
                                 disabled={i === 0 || busyId === t.id}

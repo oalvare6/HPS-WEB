@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { ArrowRight, Calendar, Clock, CreditCard, Users } from "lucide-react";
 import { TournamentCard } from "@/components/shared/TournamentCard";
-import { getFeaturedTournament, getPublicTournaments } from "@/lib/tournaments";
+import { getFeaturedTournaments, getPublicTournaments } from "@/lib/tournaments";
 import { formatLeagueDateLong } from "@/lib/spring-2026-league-schedule";
 import {
   getEnhancedHighlight,
@@ -16,8 +16,9 @@ const DEFAULT_HERO_SUBTITLE =
 
 export default async function EventsPage() {
   const { tournaments, loadError: listLoadError } = await getPublicTournaments();
-  const { tournament: featuredTournament, loadError: featuredLoadError } =
-    await getFeaturedTournament();
+  const { tournaments: featuredTournaments, loadError: featuredLoadError } =
+    await getFeaturedTournaments();
+  const featuredTournament = featuredTournaments[0] ?? null;
 
   const heroSource =
     featuredTournament ??

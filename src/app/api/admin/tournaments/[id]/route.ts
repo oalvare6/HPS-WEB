@@ -6,6 +6,7 @@ import { slugify } from "@/lib/slug";
 import { sanitizeOptionalInternalPath } from "@/lib/safe-internal-link";
 import {
   assertTournamentStatus,
+  ensureFeaturedCapNotExceeded,
   parseOptionalMoney,
   parseOptionalNonNegInt,
 } from "@/lib/tournament-api-validation";
@@ -44,6 +45,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     "description", "start_date", "end_date", "time_start", "time_end",
     "recurrence", "location", "format", "entry_fee", "max_teams",
     "image_url", "image_preset", "register_url", "pay_url", "display_order",
+    "is_featured",
   ];
   for (const f of fields) {
     if (f in body) update[f] = body[f];
@@ -89,6 +91,13 @@ export async function PATCH(request: Request, ctx: Ctx) {
   }
   if ("pay_url" in update) {
     update.pay_url = sanitizeOptionalInternalPath(update.pay_url);
+  }
+  if ("is_featured" in update) {
+    update.is_featured = update.is_featured === true;
+    if (update.is_featured === true) {
+      const capError = await ensureFeaturedCapNotExceeded(id);
+      if (capError) return capError;
+    }
   }
 
   const { data, error } = await supabaseAdmin

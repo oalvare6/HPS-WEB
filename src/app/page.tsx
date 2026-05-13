@@ -6,15 +6,36 @@ import { EventCard } from "@/components/shared/event-card";
 import { LocationCard } from "@/components/shared/location-card";
 import { StatusIndicator } from "@/components/shared/status-indicator";
 import { QuickActionsBar } from "@/components/layout/quick-actions-bar";
-import { FeaturedTournamentCard } from "@/components/shared/FeaturedTournamentCard";
-import { getFeaturedTournament, TOURNAMENTS_LOAD_USER_MESSAGE } from "@/lib/tournaments";
+import { FeaturedTournamentCarousel } from "@/components/shared/FeaturedTournamentCarousel";
+import {
+  getFeaturedTournaments,
+  getRecentEvents,
+  TOURNAMENTS_LOAD_USER_MESSAGE,
+} from "@/lib/tournaments";
 import { getSiteSetting } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
+function formatRecentEventDate(start: string | null): string {
+  if (!start) return "Date TBA";
+  return new Date(start).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function recentEventStatus(
+  status: string
+): "completed" | "upcoming" | "registration-open" {
+  if (status === "upcoming") return "upcoming";
+  return "completed";
+}
+
 export default async function Home() {
-  const [{ tournament: featured, loadError: featuredLoadError }, statusItems] = await Promise.all([
-    getFeaturedTournament(),
+  const [
+    { tournaments: featuredTournaments, loadError: featuredLoadError },
+    { tournaments: recentEvents },
+    statusItems,
+  ] = await Promise.all([
+    getFeaturedTournaments(),
+    getRecentEvents(3),
     getSiteSetting("home.status_pills"),
   ]);
   return (
@@ -105,7 +126,9 @@ export default async function Home() {
                   {TOURNAMENTS_LOAD_USER_MESSAGE}
                 </p>
               )}
-              {featured && <FeaturedTournamentCard tournament={featured} />}
+              {featuredTournaments.length > 0 && (
+                <FeaturedTournamentCarousel tournaments={featuredTournaments} />
+              )}
             </div>
           </div>
         </div>
@@ -207,47 +230,42 @@ export default async function Home() {
       </Section>
 
       {/* Past Events */}
-      <Section dark className="bg-base bg-tactical-grid-dense">
-        <SectionHeader
-          title="Recent Events"
-          subtitle="Completed tournaments and leagues."
-          dark
-        />
+      {recentEvents.length > 0 && (
+        <Section dark className="bg-base bg-tactical-grid-dense">
+          <SectionHeader
+            title="Recent Events"
+            subtitle="Completed tournaments and leagues."
+            dark
+          />
 
-        <div className="grid md:grid-cols-3 gap-6">
-          <EventCard
-            title="Spring Classic 2025"
-            date="March 2025"
-            division="Youth U10-U14"
-            teamCount="24 Teams"
-            status="completed"
-          />
-          <EventCard
-            title="Friday Night 7v7"
-            date="Ongoing"
-            division="Adults 18+"
-            teamCount="12 Teams"
-            status="registration-open"
-          />
-          <EventCard
-            title="MLK Weekend Cup"
-            date="January 2025"
-            division="Open Division"
-            teamCount="16 Teams"
-            status="completed"
-          />
-        </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {recentEvents.map((t) => (
+              <Link
+                key={t.id}
+                href={`/events/${t.slug}`}
+                className="block hover:opacity-95 transition-opacity"
+              >
+                <EventCard
+                  title={t.title}
+                  date={formatRecentEventDate(t.start_date)}
+                  division={t.format ?? "7v7"}
+                  status={recentEventStatus(t.status)}
+                />
+              </Link>
+            ))}
+          </div>
 
-        <div className="mt-10 text-center">
-          <Link
-            href="/events"
-            className="inline-flex items-center gap-2 text-zinc-400 hover:text-white font-medium transition-colors"
-          >
-            View all events
-            <ArrowRight size={18} />
-          </Link>
-        </div>
-      </Section>
+          <div className="mt-10 text-center">
+            <Link
+              href="/events"
+              className="inline-flex items-center gap-2 text-zinc-400 hover:text-white font-medium transition-colors"
+            >
+              View all events
+              <ArrowRight size={18} />
+            </Link>
+          </div>
+        </Section>
+      )}
 
       {/* Location Section */}
       <Section dark className="bg-surface">

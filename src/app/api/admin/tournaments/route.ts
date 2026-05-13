@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { slugify } from "@/lib/slug";
 import { sanitizeOptionalInternalPath } from "@/lib/safe-internal-link";
 import {
+  ensureFeaturedCapNotExceeded,
   parseOptionalMoney,
   parseOptionalNonNegInt,
   parseTournamentStatus,
@@ -63,6 +64,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid display order." }, { status: 400 });
   }
 
+  const isFeatured = body.is_featured === true;
+  if (isFeatured) {
+    const capError = await ensureFeaturedCapNotExceeded(null);
+    if (capError) return capError;
+  }
+
   const row = {
     title: body.title,
     slug,
@@ -84,6 +91,7 @@ export async function POST(request: Request) {
     register_url: sanitizeOptionalInternalPath(body.register_url),
     pay_url: sanitizeOptionalInternalPath(body.pay_url),
     display_order: displayOrder,
+    is_featured: isFeatured,
   };
 
   const { data, error } = await supabaseAdmin

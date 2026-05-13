@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import type { Tournament } from "@/lib/types";
+import type { Tournament, TournamentUpdate } from "@/lib/types";
 
 /** Shown when Supabase/env fails; distinct from an legitimately empty tournament list. */
 export const TOURNAMENTS_LOAD_USER_MESSAGE =
@@ -11,9 +11,19 @@ export type PublicTournamentsResult = {
   loadError: string | null;
 };
 
-export type FeaturedTournamentResult = {
-  tournament: Tournament | null;
+export type FeaturedTournamentsResult = {
+  tournaments: Tournament[];
   /** Non-null when the featured query failed. */
+  loadError: string | null;
+};
+
+export type RecentEventsResult = {
+  tournaments: Tournament[];
+  loadError: string | null;
+};
+
+export type TournamentUpdatesResult = {
+  updates: TournamentUpdate[];
   loadError: string | null;
 };
 
@@ -37,24 +47,144 @@ export async function getPublicTournaments(): Promise<PublicTournamentsResult> {
   }
 }
 
-export async function getFeaturedTournament(): Promise<FeaturedTournamentResult> {
+/**
+ * Returns up to 3 tournaments to show in the homepage hero carousel:
+ *   1. Admin-pinned (`is_featured = true`), in display_order/start_date order.
+ *   2. Fallback: the next upcoming tournament with registration_open = true,
+ *      so the hero is never empty when nothing is pinned.
+ */
+export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResult> {
   try {
-    const { data, error } = await supabaseAdmin
+    const { data: pinned, error: pinnedErr } = await supabaseAdmin
+      .from("tournaments")
+      .select("*")
+      .eq("is_featured", true)
+      .neq("status", "cancelled")
+      .order("display_order", { ascending: true })
+      .order("start_date", { ascending: true })
+      .limit(3);
+
+    if (pinnedErr) {
+      console.error("[tournaments] featured fetch failed:", pinnedErr.message, pinnedErr);
+      return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    }
+
+    if (pinned && pinned.length > 0) {
+      return { tournaments: pinned as Tournament[], loadError: null };
+    }
+
+    const { data: fallback, error: fallbackErr } = await supabaseAdmin
       .from("tournaments")
       .select("*")
       .eq("status", "upcoming")
       .eq("registration_open", true)
       .order("start_date", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
-    if (error) {
-      console.error("[tournaments] featured fetch failed:", error.message, error);
-      return { tournament: null, loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    if (fallbackErr) {
+      console.error(
+        "[tournaments] featured fallback fetch failed:",
+        fallbackErr.message,
+        fallbackErr
+      );
+      return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
-    return { tournament: (data as Tournament | null) ?? null, loadError: null };
+    return { tournaments: (fallback ?? []) as Tournament[], loadError: null };
   } catch (err) {
     console.error("[tournaments] featured fetch failed:", err);
-    return { tournament: null, loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+  }
+}
+
+/** Single tournament by slug for the public detail page. Returns null on miss. */
+export async function getTournamentBySlug(slug: string): Promise<Tournament | null> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournaments")
+      .select("*")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (error) {
+      console.error("[tournaments] slug fetch failed:", error.message, error);
+      return null;
+    }
+    return (data as Tournament | null) ?? null;
+  } catch (err) {
+    console.error("[tournaments] slug fetch failed:", err);
+    return null;
+  }
+}
+
+/** Pinned first, then newest first. Empty array if none or on error. */
+export async function getTournamentUpdates(
+  tournamentId: string
+): Promise<TournamentUpdatesResult> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournament_updates")
+      .select("*")
+      .eq("tournament_id", tournamentId)
+      .order("pinned", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("[tournament_updates] fetch failed:", error.message, error);
+      return { updates: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    }
+    return { updates: (data ?? []) as TournamentUpdate[], loadError: null };
+  } catch (err) {
+    console.error("[tournament_updates] fetch failed:", err);
+    return { updates: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+  }
+}
+
+/**
+ * Up to N most-recently-completed tournaments, for the "Recent Events" home
+ * section. Returns an empty array when there are none (caller hides the section).
+ */
+export async function getRecentEvents(limit = 3): Promise<RecentEventsResult> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournaments")
+      .select("*")
+      .eq("status", "completed")
+      .order("start_date", { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.error("[tournaments] recent fetch failed:", error.message, error);
+      return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    }
+    return { tournaments: (data ?? []) as Tournament[], loadError: null };
+  } catch (err) {
+    console.error("[tournaments] recent fetch failed:", err);
+    return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+  }
+}
+
+/**
+ * Counts of recent updates per tournament (last 7 days), keyed by tournament_id.
+ * Used by the admin hub badge. Returns empty map on error.
+ */
+export async function getRecentUpdateCountsByTournament(): Promise<{
+  total: number;
+  byTournament: Record<string, number>;
+}> {
+  try {
+    const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabaseAdmin
+      .from("tournament_updates")
+      .select("tournament_id, created_at")
+      .gte("created_at", sinceIso);
+    if (error) {
+      console.error("[tournament_updates] recent counts failed:", error.message);
+      return { total: 0, byTournament: {} };
+    }
+    const byTournament: Record<string, number> = {};
+    for (const row of (data ?? []) as { tournament_id: string }[]) {
+      byTournament[row.tournament_id] = (byTournament[row.tournament_id] ?? 0) + 1;
+    }
+    return { total: data?.length ?? 0, byTournament };
+  } catch (err) {
+    console.error("[tournament_updates] recent counts failed:", err);
+    return { total: 0, byTournament: {} };
   }
 }

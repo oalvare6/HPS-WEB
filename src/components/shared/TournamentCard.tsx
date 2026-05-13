@@ -71,7 +71,14 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3">
               <Trophy size={22} className="text-brand flex-shrink-0" />
-              <h2 className="text-2xl font-bold text-white">{tournament.title}</h2>
+              <h2 className="text-2xl font-bold text-white">
+                <Link
+                  href={`/events/${tournament.slug}`}
+                  className="hover:text-brand transition-colors"
+                >
+                  {tournament.title}
+                </Link>
+              </h2>
             </div>
 
             {tournament.description && (
@@ -104,24 +111,29 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
             </div>
           </div>
 
-          {(tournament.registration_open || tournament.payments_open) && (
-            <div className="flex flex-col gap-3 md:min-w-[200px]">
-              {tournament.registration_open && (
-                <Link href={registerHref} className="btn-primary justify-center text-sm">
-                  <Trophy size={16} />
-                  Register Now
-                  <ArrowRight size={14} />
-                </Link>
-              )}
-              {tournament.payments_open && (
-                <Link href={payHref} className="btn-secondary justify-center text-sm">
-                  <CreditCard size={16} />
-                  Pay Entry Fee
-                  <ArrowRight size={14} />
-                </Link>
-              )}
-            </div>
-          )}
+          <div className="flex flex-col gap-3 md:min-w-[200px]">
+            {tournament.registration_open && (
+              <Link href={registerHref} className="btn-primary justify-center text-sm">
+                <Trophy size={16} />
+                Register Now
+                <ArrowRight size={14} />
+              </Link>
+            )}
+            {tournament.payments_open && (
+              <Link href={payHref} className="btn-secondary justify-center text-sm">
+                <CreditCard size={16} />
+                Pay Entry Fee
+                <ArrowRight size={14} />
+              </Link>
+            )}
+            <Link
+              href={`/events/${tournament.slug}`}
+              className="inline-flex items-center justify-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors"
+            >
+              View details
+              <ArrowRight size={14} />
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -38,6 +38,7 @@ type FormState = {
   image_url: string | null;
   image_preset: string | null;
   display_order: string;
+  is_featured: boolean;
 };
 
 function toDateInput(value: string | null): string {
@@ -68,6 +69,7 @@ function fromInitial(t: Tournament | null): FormState {
     image_url: t?.image_url ?? null,
     image_preset: t?.image_preset ?? null,
     display_order: t?.display_order != null ? String(t.display_order) : "0",
+    is_featured: t?.is_featured ?? false,
   };
 }
 
@@ -169,6 +171,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       image_url: form.image_url,
       image_preset: form.image_preset,
       display_order: form.display_order.trim() ? Number(form.display_order) : 0,
+      is_featured: form.is_featured,
     };
     try {
       const url = initial
@@ -217,7 +220,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
           label="Slug"
           required
           error={errors.slug}
-          hint="Unique handle for admin and APIs (no public /events/[slug] page yet)."
+          hint="Used for the public URL: /events/[slug]"
         >
           <input
             type="text"
@@ -497,6 +500,11 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
 
       {/* DISPLAY */}
       <Section title="Display">
+        <Toggle
+          label="Feature on homepage (max 3 at a time)"
+          checked={form.is_featured}
+          onChange={(v) => update("is_featured", v)}
+        />
         <Field label="Display Order" hint="Lower numbers shown first">
           <input
             type="number"

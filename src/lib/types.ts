@@ -46,8 +46,24 @@ export type Tournament = {
   register_url: string | null;
   pay_url: string | null;
   display_order: number;
+  is_featured: boolean;
   created_at: string;
   updated_at: string;
 };
 
 export type TournamentInput = Omit<Tournament, "id" | "created_at" | "updated_at">;
+
+export type TournamentUpdate = {
+  id: string;
+  tournament_id: string;
+  body: string;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Hard cap on how many tournaments may be featured at once. */
+export const MAX_FEATURED_TOURNAMENTS = 3;
+
+/** Hard cap on the body length of a per-tournament update. */
+export const MAX_UPDATE_BODY_LENGTH = 500;

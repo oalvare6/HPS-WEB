@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import { TournamentForm } from "@/components/admin/TournamentForm";
+import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
 import type { Tournament } from "@/lib/types";
 
 export default function EditTournamentPage({
@@ -54,7 +55,7 @@ function EditContent({ id }: { id: string }) {
       </section>
 
       <Section dark className="bg-surface !py-8 md:!py-12" container={false}>
-        <div className="max-w-4xl mx-auto px-6">
+        <div className="max-w-4xl mx-auto px-6 space-y-6">
           {loading && (
             <div className="flex items-center gap-3 text-zinc-400 py-8">
               <Loader2 size={24} className="animate-spin" />
@@ -62,7 +63,12 @@ function EditContent({ id }: { id: string }) {
             </div>
           )}
           {error && <p className="text-red-400">{error}</p>}
-          {!loading && tournament && <TournamentForm initial={tournament} />}
+          {!loading && tournament && (
+            <>
+              <TournamentForm initial={tournament} />
+              <TournamentUpdatesPanel tournamentId={tournament.id} />
+            </>
+          )}
         </div>
       </Section>
     </>

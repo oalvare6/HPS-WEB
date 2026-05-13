@@ -22,11 +22,11 @@ export function QuickActionsBar() {
                 Check Schedule
               </Link>
               <Link
-                href="/events#standings"
+                href="/events"
                 className="inline-flex items-center gap-2 bg-surface-2 text-white px-4 py-2.5 text-sm font-medium rounded-md hover:bg-base transition-colors border border-border-token hover:border-brand/50"
               >
                 <Trophy size={16} />
-                Standings
+                Tournaments
               </Link>
             </div>
             <a

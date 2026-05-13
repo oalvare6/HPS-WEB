@@ -1,4 +1,10 @@
-import { TOURNAMENT_STATUSES, type TournamentStatus } from "@/lib/types";
+import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import {
+  MAX_FEATURED_TOURNAMENTS,
+  TOURNAMENT_STATUSES,
+  type TournamentStatus,
+} from "@/lib/types";
 
 const STATUS_SET = new Set<string>(TOURNAMENT_STATUSES.map((s) => s.value));
 
@@ -25,6 +31,38 @@ export function parseOptionalNonNegInt(v: unknown): number | null | "invalid" {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) return "invalid";
   return n;
+}
+
+/**
+ * Returns a 409 response if turning `is_featured` on for the given tournament
+ * would exceed the MAX_FEATURED_TOURNAMENTS cap. `excludeId` is the row being
+ * updated (so PATCH doesn't count itself). Pass null on POST.
+ *
+ * Caller should only invoke this when `is_featured` is being set to true.
+ */
+export async function ensureFeaturedCapNotExceeded(
+  excludeId: string | null
+): Promise<NextResponse | null> {
+  let query = supabaseAdmin
+    .from("tournaments")
+    .select("id", { count: "exact", head: true })
+    .eq("is_featured", true);
+  if (excludeId) {
+    query = query.neq("id", excludeId);
+  }
+  const { count, error } = await query;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if ((count ?? 0) >= MAX_FEATURED_TOURNAMENTS) {
+    return NextResponse.json(
+      {
+        error: `Only ${MAX_FEATURED_TOURNAMENTS} tournaments can be featured at once. Unfeature another first.`,
+      },
+      { status: 409 }
+    );
+  }
+  return null;
 }
 
 export function bufferMatchesImageMime(buf: Buffer, mime: string): boolean {

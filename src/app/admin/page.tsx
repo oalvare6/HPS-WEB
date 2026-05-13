@@ -84,18 +84,24 @@ function handleAuthLost() {
   if (typeof window !== "undefined") window.location.reload();
 }
 
-const HUB_LINKS: Array<{
+type HubLink = {
   href: string;
   title: string;
   description: string;
   icon: typeof Trophy;
   external?: boolean;
-}> = [
+  /** Slot for a small badge under the description (e.g. "2 featured"). */
+  badgeKey?: "tournaments";
+};
+
+const HUB_LINKS: HubLink[] = [
   {
     href: "/admin/tournaments",
     title: "Tournaments",
-    description: "Add, edit, reorder, or take down tournaments and events.",
+    description:
+      "Add, edit, reorder, feature on homepage, or post per-tournament updates.",
     icon: Trophy,
+    badgeKey: "tournaments",
   },
   {
     href: "/admin/site",
@@ -118,6 +124,8 @@ const HUB_LINKS: Array<{
   },
 ];
 
+type OverviewStats = { featuredCount: number; updatesThisWeek: number };
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("registrations");
 
@@ -138,6 +146,17 @@ export default function AdminPage() {
   const [payError, setPayError] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  const [overviewStats, setOverviewStats] = useState<OverviewStats | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/overview-stats")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setOverviewStats(data as OverviewStats);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadRegistrations = useCallback(() => {
     setRegLoading(true);
@@ -439,6 +458,8 @@ export default function AdminPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {HUB_LINKS.map((link) => {
               const Icon = link.icon;
+              const showTournamentsBadge =
+                link.badgeKey === "tournaments" && overviewStats !== null;
               const inner = (
                 <div className="dashboard-card p-5 h-full hover:border-brand/50 transition-colors group">
                   <div className="flex items-center gap-3 mb-2">
@@ -448,6 +469,30 @@ export default function AdminPage() {
                     <h3 className="text-base font-semibold text-white">{link.title}</h3>
                   </div>
                   <p className="text-sm text-zinc-400 mb-3">{link.description}</p>
+                  {showTournamentsBadge && (
+                    <p className="text-xs text-zinc-500 mb-3">
+                      <span
+                        className={
+                          overviewStats!.featuredCount > 0
+                            ? "text-brand font-medium"
+                            : "text-zinc-500"
+                        }
+                      >
+                        {overviewStats!.featuredCount} featured
+                      </span>
+                      <span className="mx-1.5 text-zinc-600">·</span>
+                      <span
+                        className={
+                          overviewStats!.updatesThisWeek > 0
+                            ? "text-brand font-medium"
+                            : "text-zinc-500"
+                        }
+                      >
+                        {overviewStats!.updatesThisWeek} update
+                        {overviewStats!.updatesThisWeek === 1 ? "" : "s"} this week
+                      </span>
+                    </p>
+                  )}
                   <span className="inline-flex items-center gap-1 text-xs text-brand group-hover:gap-2 transition-all">
                     {link.external ? "Open" : "Open"} <ArrowRight size={12} />
                   </span>
