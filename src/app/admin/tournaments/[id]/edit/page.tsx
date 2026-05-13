@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import { TournamentForm } from "@/components/admin/TournamentForm";
+import { TournamentRoundsPanel } from "@/components/admin/TournamentRoundsPanel";
 import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
 import type { Tournament } from "@/lib/types";
 
@@ -66,6 +67,7 @@ function EditContent({ id }: { id: string }) {
           {!loading && tournament && (
             <>
               <TournamentForm initial={tournament} />
+              <TournamentRoundsPanel tournamentId={tournament.id} />
               <TournamentUpdatesPanel tournamentId={tournament.id} />
             </>
           )}

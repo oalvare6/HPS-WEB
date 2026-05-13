@@ -80,11 +80,6 @@ export async function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/events#schedule" className="text-zinc-400 hover:text-white text-sm transition-colors">
-                  Schedule
-                </Link>
-              </li>
-              <li>
                 <Link href="/facility" className="text-zinc-400 hover:text-white text-sm transition-colors">
                   Facility
                 </Link>
@@ -92,6 +87,11 @@ export async function Footer() {
               <li>
                 <Link href="/register" className="text-zinc-400 hover:text-white text-sm transition-colors">
                   Register
+                </Link>
+              </li>
+              <li>
+                <Link href="/contact" className="text-zinc-400 hover:text-white text-sm transition-colors">
+                  Contact
                 </Link>
               </li>
             </ul>

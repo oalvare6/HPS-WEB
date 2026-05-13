@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
-  Calendar,
   ExternalLink,
   LayoutDashboard,
   LogOut,
@@ -24,7 +23,6 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/admin/tournaments", label: "Tournaments", icon: Trophy },
-  { href: "/admin/schedule", label: "Schedule", icon: Calendar },
   { href: "/admin/site", label: "Site", icon: Settings },
 ];
 

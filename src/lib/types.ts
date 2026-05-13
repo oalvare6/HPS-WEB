@@ -62,8 +62,44 @@ export type TournamentUpdate = {
   updated_at: string;
 };
 
+export type TournamentRoundStatus =
+  | "scheduled"
+  | "cancelled"
+  | "rescheduled"
+  | "note";
+
+export const TOURNAMENT_ROUND_STATUSES: TournamentRoundStatus[] = [
+  "scheduled",
+  "cancelled",
+  "rescheduled",
+  "note",
+];
+
+export type TournamentRound = {
+  id: string;
+  tournament_id: string;
+  label: string;
+  /** YYYY-MM-DD or null */
+  round_date: string | null;
+  time_start: string | null;
+  time_end: string | null;
+  status: TournamentRoundStatus;
+  note: string | null;
+  /** YYYY-MM-DD or null */
+  rescheduled_to: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
 /** Hard cap on how many tournaments may be featured at once. */
 export const MAX_FEATURED_TOURNAMENTS = 3;
 
 /** Hard cap on the body length of a per-tournament update. */
 export const MAX_UPDATE_BODY_LENGTH = 500;
+
+/** Hard cap on a round's label length. */
+export const MAX_ROUND_LABEL_LENGTH = 80;
+
+/** Hard cap on a round's note length. */
+export const MAX_ROUND_NOTE_LENGTH = 280;

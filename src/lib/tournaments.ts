@@ -1,5 +1,9 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import type { Tournament, TournamentUpdate } from "@/lib/types";
+import type {
+  Tournament,
+  TournamentRound,
+  TournamentUpdate,
+} from "@/lib/types";
 
 /** Shown when Supabase/env fails; distinct from an legitimately empty tournament list. */
 export const TOURNAMENTS_LOAD_USER_MESSAGE =
@@ -27,6 +31,11 @@ export type TournamentUpdatesResult = {
   loadError: string | null;
 };
 
+export type TournamentRoundsResult = {
+  rounds: TournamentRound[];
+  loadError: string | null;
+};
+
 export async function getPublicTournaments(): Promise<PublicTournamentsResult> {
   try {
     const { data, error } = await supabaseAdmin
@@ -50,8 +59,11 @@ export async function getPublicTournaments(): Promise<PublicTournamentsResult> {
 /**
  * Returns up to 3 tournaments to show in the homepage hero carousel:
  *   1. Admin-pinned (`is_featured = true`), in display_order/start_date order.
- *   2. Fallback: the next upcoming tournament with registration_open = true,
- *      so the hero is never empty when nothing is pinned.
+ *   2. Fallback when nothing is pinned: the next single tournament with
+ *      status in ('upcoming', 'ongoing'), ordered by start_date asc. This
+ *      keeps the hero from going empty while there's anything active or
+ *      coming up. Registration-open is intentionally NOT required so an
+ *      ongoing tournament with closed sign-ups still surfaces.
  */
 export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResult> {
   try {
@@ -76,8 +88,7 @@ export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResul
     const { data: fallback, error: fallbackErr } = await supabaseAdmin
       .from("tournaments")
       .select("*")
-      .eq("status", "upcoming")
-      .eq("registration_open", true)
+      .in("status", ["upcoming", "ongoing"])
       .order("start_date", { ascending: true })
       .limit(1);
 
@@ -157,6 +168,31 @@ export async function getRecentEvents(limit = 3): Promise<RecentEventsResult> {
   } catch (err) {
     console.error("[tournaments] recent fetch failed:", err);
     return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+  }
+}
+
+/**
+ * Rounds for a tournament, sorted by sort_order then date. Empty array on
+ * miss/error so callers can render an "No schedule yet" empty state.
+ */
+export async function getTournamentRounds(
+  tournamentId: string
+): Promise<TournamentRoundsResult> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournament_rounds")
+      .select("*")
+      .eq("tournament_id", tournamentId)
+      .order("sort_order", { ascending: true })
+      .order("round_date", { ascending: true });
+    if (error) {
+      console.error("[tournament_rounds] fetch failed:", error.message, error);
+      return { rounds: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    }
+    return { rounds: (data ?? []) as TournamentRound[], loadError: null };
+  } catch (err) {
+    console.error("[tournament_rounds] fetch failed:", err);
+    return { rounds: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
   }
 }
 

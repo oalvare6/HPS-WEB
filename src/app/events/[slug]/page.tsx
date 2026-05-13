@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
+  CalendarDays,
   Calendar,
   Clock,
   CreditCard,
@@ -16,10 +17,16 @@ import {
 } from "lucide-react";
 import {
   getTournamentBySlug,
+  getTournamentRounds,
   getTournamentUpdates,
 } from "@/lib/tournaments";
 import { getSiteSetting } from "@/lib/site-settings";
-import type { Tournament, TournamentStatus, TournamentUpdate } from "@/lib/types";
+import type {
+  Tournament,
+  TournamentRound,
+  TournamentStatus,
+  TournamentUpdate,
+} from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { safeInternalLink } from "@/lib/safe-internal-link";
 
@@ -75,6 +82,20 @@ function formatUpdateDate(iso: string): string {
   });
 }
 
+function formatRoundDate(iso: string | null): string {
+  if (!iso) return "Date TBA";
+  // YYYY-MM-DD comes from a date column; build it as a local date so the day
+  // doesn't shift backwards in negative-UTC time zones.
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -99,8 +120,9 @@ export default async function TournamentDetailPage({
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
-  const [{ updates }, mapsUrl] = await Promise.all([
+  const [{ updates }, { rounds }, mapsUrl] = await Promise.all([
     getTournamentUpdates(tournament.id),
+    getTournamentRounds(tournament.id),
     getSiteSetting("footer.maps_url"),
   ]);
 
@@ -264,16 +286,80 @@ export default async function TournamentDetailPage({
               )}
             </div>
 
-            {/* Scores placeholder */}
-            <div>
-              <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold mb-3">
-                Scores &amp; standings
-              </h2>
-              <div className="dashboard-card p-6 text-zinc-500 text-sm border-dashed">
-                Live scores and standings will live here once the tournament gets
-                rolling. Stay tuned.
+            {/* Schedule (rounds) */}
+            {rounds.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <CalendarDays size={18} className="text-brand" />
+                  <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+                    Schedule
+                  </h2>
+                  <span className="text-xs text-zinc-500">
+                    {rounds.length} {rounds.length === 1 ? "round" : "rounds"}
+                  </span>
+                </div>
+                <ul className="dashboard-card divide-y divide-border-token overflow-hidden">
+                  {rounds.map((r: TournamentRound) => {
+                    const cancelled = r.status === "cancelled";
+                    const rescheduled = r.status === "rescheduled";
+                    const timeRange =
+                      r.time_start && r.time_end
+                        ? `${r.time_start} – ${r.time_end}`
+                        : r.time_start || r.time_end || null;
+                    return (
+                      <li
+                        key={r.id}
+                        className={`px-5 py-4 ${cancelled ? "opacity-70" : ""}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className={`font-medium truncate ${
+                                cancelled
+                                  ? "text-zinc-500 line-through"
+                                  : r.status === "note"
+                                    ? "text-zinc-300"
+                                    : "text-white"
+                              }`}
+                            >
+                              {r.label}
+                            </span>
+                            {cancelled && (
+                              <span className="text-xs font-mono bg-red-500/20 text-red-300 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
+                                Cancelled
+                              </span>
+                            )}
+                            {rescheduled && (
+                              <span className="text-xs font-mono bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
+                                Rescheduled
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={`text-sm text-right pl-4 flex-shrink-0 ${
+                              cancelled ? "text-zinc-500 line-through" : "text-zinc-300"
+                            }`}
+                          >
+                            {formatRoundDate(r.round_date)}
+                          </span>
+                        </div>
+                        {(timeRange || r.note || (rescheduled && r.rescheduled_to)) && (
+                          <div className="text-xs text-zinc-400 mt-1 space-x-2">
+                            {timeRange && <span>{timeRange}</span>}
+                            {rescheduled && r.rescheduled_to && (
+                              <span className="text-yellow-300">
+                                → {formatRoundDate(r.rescheduled_to)}
+                              </span>
+                            )}
+                            {r.note && <span>· {r.note}</span>}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Sticky CTA card */}

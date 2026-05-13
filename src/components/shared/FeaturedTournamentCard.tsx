@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Calendar, Clock, MapPin, Trophy, Users } from "lucide-react";
-import type { Tournament } from "@/lib/types";
+import type { Tournament, TournamentStatus } from "@/lib/types";
 import { safeInternalLink } from "@/lib/safe-internal-link";
 
 function formatDateRow(t: Tournament): string {
@@ -13,6 +13,36 @@ function formatDateRow(t: Tournament): string {
   });
 }
 
+const STATUS_PILL: Record<
+  TournamentStatus,
+  { text: string; cls: string; dot: string; pulse: boolean }
+> = {
+  upcoming: {
+    text: "Upcoming",
+    cls: "text-brand",
+    dot: "bg-brand",
+    pulse: true,
+  },
+  ongoing: {
+    text: "Ongoing",
+    cls: "text-green-400",
+    dot: "bg-green-400",
+    pulse: true,
+  },
+  completed: {
+    text: "Completed",
+    cls: "text-zinc-400",
+    dot: "bg-zinc-500",
+    pulse: false,
+  },
+  cancelled: {
+    text: "Cancelled",
+    cls: "text-red-400",
+    dot: "bg-red-400",
+    pulse: false,
+  },
+};
+
 export function FeaturedTournamentCard({ tournament }: { tournament: Tournament }) {
   const timeRange =
     tournament.time_start && tournament.time_end
@@ -20,20 +50,35 @@ export function FeaturedTournamentCard({ tournament }: { tournament: Tournament 
       : tournament.time_start || tournament.time_end;
   const registerHref = safeInternalLink(tournament.register_url, "/register");
   const payHref = safeInternalLink(tournament.pay_url, "/pay");
+  const pill = STATUS_PILL[tournament.status];
 
   return (
     <div className="dashboard-card p-5 space-y-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-2 h-2 bg-brand rounded-full animate-pulse" />
-            <span className="text-xs font-mono text-brand uppercase tracking-wider">
-              {tournament.registration_open ? "Registration Open" : tournament.status}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider font-semibold ${pill.cls}`}
+            >
+              <span
+                className={`w-2 h-2 ${pill.dot} rounded-full ${pill.pulse ? "animate-pulse" : ""}`}
+              />
+              {pill.text}
             </span>
+            {tournament.registration_open && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-semibold bg-brand/15 text-brand">
+                Registration Open
+              </span>
+            )}
+            {tournament.payments_open && !tournament.registration_open && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-semibold bg-brand/10 text-brand">
+                Payments Open
+              </span>
+            )}
           </div>
           <h2 className="text-xl font-bold text-white">{tournament.title}</h2>
         </div>
-        <Trophy size={24} className="text-brand" />
+        <Trophy size={24} className="text-brand flex-shrink-0" />
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-sm">

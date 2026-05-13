@@ -86,9 +86,9 @@ export default async function Home() {
                   <Trophy size={18} />
                   Register for Tournament
                 </Link>
-                <Link href="/events#schedule" className="btn-secondary">
+                <Link href="/events" className="btn-secondary">
                   <Calendar size={18} />
-                  Check Schedule
+                  View Tournaments
                 </Link>
               </div>
             </div>
@@ -193,10 +193,10 @@ export default async function Home() {
                   Seasonal 7v7 play with consistent scheduling. Youth development and adult recreational divisions.
                 </p>
                 <Link
-                  href="/events#schedule"
+                  href="/events"
                   className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-sm font-medium mt-4 transition-colors"
                 >
-                  View League Table
+                  View Tournaments
                   <ArrowRight size={14} />
                 </Link>
               </div>

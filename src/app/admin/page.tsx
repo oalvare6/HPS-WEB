@@ -21,7 +21,6 @@ import {
   X,
   Trophy,
   Settings,
-  Calendar,
   ArrowRight,
 } from "lucide-react";
 
@@ -108,12 +107,6 @@ const HUB_LINKS: HubLink[] = [
     title: "Site settings",
     description: "Edit homepage status pills, footer address, and shared links.",
     icon: Settings,
-  },
-  {
-    href: "/admin/schedule",
-    title: "League schedule",
-    description: "Mark a Friday round as cancelled, rescheduled, or add a note.",
-    icon: Calendar,
   },
   {
     href: "/",
