@@ -44,7 +44,7 @@ export function FeaturedTournamentCarousel({
 
   if (count === 0) return null;
   if (count === 1) {
-    return <FeaturedTournamentCard tournament={tournaments[0]} />;
+    return <FeaturedTournamentCard tournament={tournaments[0]} imagePriority />;
   }
 
   const current = tournaments[index];
@@ -61,7 +61,7 @@ export function FeaturedTournamentCarousel({
       aria-label="Featured tournaments"
     >
       <div key={current.id} aria-live="polite">
-        <FeaturedTournamentCard tournament={current} />
+        <FeaturedTournamentCard tournament={current} imagePriority={index === 0} />
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2">

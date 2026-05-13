@@ -1,6 +1,8 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Calendar, Clock, MapPin, Trophy, Users } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
+import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { safeInternalLink } from "@/lib/safe-internal-link";
 
 function formatDateRow(t: Tournament): string {
@@ -43,7 +45,15 @@ const STATUS_PILL: Record<
   },
 };
 
-export function FeaturedTournamentCard({ tournament }: { tournament: Tournament }) {
+export function FeaturedTournamentCard({
+  tournament,
+  imagePriority = true,
+}: {
+  tournament: Tournament;
+  /** Avoid eager-loading every slide when multiple featured tournaments rotate. */
+  imagePriority?: boolean;
+}) {
+  const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
@@ -53,79 +63,105 @@ export function FeaturedTournamentCard({ tournament }: { tournament: Tournament 
   const pill = STATUS_PILL[tournament.status];
 
   return (
-    <div className="dashboard-card p-5 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span
-              className={`inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider font-semibold ${pill.cls}`}
-            >
-              <span
-                className={`w-2 h-2 ${pill.dot} rounded-full ${pill.pulse ? "animate-pulse" : ""}`}
-              />
-              {pill.text}
-            </span>
-            {tournament.registration_open && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-semibold bg-brand/15 text-brand">
-                Registration Open
-              </span>
-            )}
-            {tournament.payments_open && !tournament.registration_open && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-semibold bg-brand/10 text-brand">
-                Payments Open
-              </span>
-            )}
-          </div>
-          <h2 className="text-xl font-bold text-white">{tournament.title}</h2>
-        </div>
-        <Trophy size={24} className="text-brand flex-shrink-0" />
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="flex items-center gap-2 text-zinc-300">
-          <Calendar size={14} className="text-brand flex-shrink-0" />
-          <span>{formatDateRow(tournament)}</span>
-        </div>
-        {timeRange && (
-          <div className="flex items-center gap-2 text-zinc-300">
-            <Clock size={14} className="text-brand flex-shrink-0" />
-            <span>{timeRange}</span>
-          </div>
-        )}
-        {tournament.location && (
-          <div className="flex items-center gap-2 text-zinc-300">
-            <MapPin size={14} className="text-brand flex-shrink-0" />
-            <span>{tournament.location.split(",")[0]}</span>
-          </div>
-        )}
-        {tournament.format && (
-          <div className="flex items-center gap-2 text-zinc-300">
-            <Users size={14} className="text-brand flex-shrink-0" />
-            <span>{tournament.format}</span>
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        {tournament.registration_open && (
-          <Link href={registerHref} className="btn-primary w-full justify-center text-sm">
-            Register Now
-            <ArrowRight size={14} />
-          </Link>
-        )}
-        {tournament.payments_open && (
-          <Link href={payHref} className="btn-secondary w-full justify-center text-sm">
-            Pay for Tournament
-            <ArrowRight size={14} />
-          </Link>
-        )}
+    <div className="dashboard-card overflow-hidden border border-border-token/70 shadow-xl shadow-black/30">
+      {bannerUrl ? (
         <Link
           href={`/events/${tournament.slug}`}
-          className="text-xs text-zinc-400 hover:text-white text-center inline-flex items-center justify-center gap-1 transition-colors mt-1"
+          className="relative block w-full aspect-[16/7] bg-surface-2 group"
         >
-          View tournament details
-          <ArrowRight size={12} />
+          <Image
+            src={bannerUrl}
+            alt={tournament.title}
+            fill
+            className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            sizes="(min-width: 1024px) 520px, 100vw"
+            priority={imagePriority}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-base/90 via-base/25 to-transparent pointer-events-none" />
         </Link>
+      ) : null}
+
+      <div className="p-5 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider font-semibold ${pill.cls}`}
+              >
+                <span
+                  className={`w-2 h-2 ${pill.dot} rounded-full ${pill.pulse ? "animate-pulse" : ""}`}
+                />
+                {pill.text}
+              </span>
+              {tournament.registration_open && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-semibold bg-brand/15 text-brand">
+                  Registration Open
+                </span>
+              )}
+              {tournament.payments_open && !tournament.registration_open && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-semibold bg-brand/10 text-brand">
+                  Payments Open
+                </span>
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-white">
+              <Link
+                href={`/events/${tournament.slug}`}
+                className="hover:text-brand transition-colors"
+              >
+                {tournament.title}
+              </Link>
+            </h2>
+          </div>
+          <Trophy size={24} className="text-brand flex-shrink-0" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="flex items-center gap-2 text-zinc-300">
+            <Calendar size={14} className="text-brand flex-shrink-0" />
+            <span>{formatDateRow(tournament)}</span>
+          </div>
+          {timeRange && (
+            <div className="flex items-center gap-2 text-zinc-300">
+              <Clock size={14} className="text-brand flex-shrink-0" />
+              <span>{timeRange}</span>
+            </div>
+          )}
+          {tournament.location && (
+            <div className="flex items-center gap-2 text-zinc-300">
+              <MapPin size={14} className="text-brand flex-shrink-0" />
+              <span>{tournament.location.split(",")[0]}</span>
+            </div>
+          )}
+          {tournament.format && (
+            <div className="flex items-center gap-2 text-zinc-300">
+              <Users size={14} className="text-brand flex-shrink-0" />
+              <span>{tournament.format}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          {tournament.registration_open && (
+            <Link href={registerHref} className="btn-primary w-full justify-center text-sm">
+              Register Now
+              <ArrowRight size={14} />
+            </Link>
+          )}
+          {tournament.payments_open && (
+            <Link href={payHref} className="btn-secondary w-full justify-center text-sm">
+              Pay for Tournament
+              <ArrowRight size={14} />
+            </Link>
+          )}
+          <Link
+            href={`/events/${tournament.slug}`}
+            className="text-xs text-zinc-400 hover:text-white text-center inline-flex items-center justify-center gap-1 transition-colors mt-1"
+          >
+            View tournament details
+            <ArrowRight size={12} />
+          </Link>
+        </div>
       </div>
     </div>
   );

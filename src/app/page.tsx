@@ -126,8 +126,30 @@ export default async function Home() {
                   {TOURNAMENTS_LOAD_USER_MESSAGE}
                 </p>
               )}
-              {featuredTournaments.length > 0 && (
+              {featuredTournaments.length > 0 ? (
                 <FeaturedTournamentCarousel tournaments={featuredTournaments} />
+              ) : (
+                <div className="dashboard-card overflow-hidden border border-border-token/70 shadow-xl shadow-black/30">
+                  <div className="relative aspect-video">
+                    <Image
+                      src="/community/hps-community-7v7.png"
+                      alt="Houston Premier Soccer 7v7 community"
+                      fill
+                      className="object-cover"
+                      sizes="(min-width: 1024px) 520px, 100vw"
+                      priority
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-base/85 via-base/20 to-transparent" />
+                    <div className="absolute bottom-3 left-3 right-3">
+                      <p className="text-sm font-semibold text-white tracking-tight">
+                        Real players. Real community.
+                      </p>
+                      <p className="text-xs text-brand font-mono mt-0.5">
+                        Houston 7v7 under the lights
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           </div>
