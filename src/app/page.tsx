@@ -7,17 +7,16 @@ import { LocationCard } from "@/components/shared/location-card";
 import { StatusIndicator } from "@/components/shared/status-indicator";
 import { QuickActionsBar } from "@/components/layout/quick-actions-bar";
 import { FeaturedTournamentCard } from "@/components/shared/FeaturedTournamentCard";
-import { getFeaturedTournament } from "@/lib/tournaments";
+import { getFeaturedTournament, TOURNAMENTS_LOAD_USER_MESSAGE } from "@/lib/tournaments";
+import { getSiteSetting } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
-const statusItems = [
-  { label: "Registration Open", status: "open" as const },
-  { label: "Fields: Open", status: "open" as const },
-];
-
 export default async function Home() {
-  const featured = await getFeaturedTournament();
+  const [{ tournament: featured, loadError: featuredLoadError }, statusItems] = await Promise.all([
+    getFeaturedTournament(),
+    getSiteSetting("home.status_pills"),
+  ]);
   return (
     <>
       {/* Quick Actions Bar */}
@@ -98,6 +97,14 @@ export default async function Home() {
                 </div>
               </div>
 
+              {featuredLoadError && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-amber-500/35 bg-amber-950/25 px-4 py-3 text-sm text-amber-100"
+                >
+                  {TOURNAMENTS_LOAD_USER_MESSAGE}
+                </p>
+              )}
               {featured && <FeaturedTournamentCard tournament={featured} />}
             </div>
           </div>

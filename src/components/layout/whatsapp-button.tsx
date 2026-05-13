@@ -1,9 +1,11 @@
-const WHATSAPP_URL = "https://chat.whatsapp.com/HzBW39TgVemIA6EHWMnInY";
+import { getSiteSetting } from "@/lib/site-settings";
 
-export function WhatsAppButton() {
+export async function WhatsAppButton() {
+  const whatsappUrl = await getSiteSetting("footer.whatsapp_url");
+
   return (
     <a
-      href={WHATSAPP_URL}
+      href={whatsappUrl}
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Join our WhatsApp community"

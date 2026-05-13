@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Calendar, Clock, MapPin, Trophy, Users } from "lucide-react";
 import type { Tournament } from "@/lib/types";
+import { safeInternalLink } from "@/lib/safe-internal-link";
 
 function formatDateRow(t: Tournament): string {
   if (t.recurrence) return t.recurrence;
@@ -17,8 +18,8 @@ export function FeaturedTournamentCard({ tournament }: { tournament: Tournament 
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
       : tournament.time_start || tournament.time_end;
-  const registerHref = tournament.register_url?.trim() || "/register";
-  const payHref = tournament.pay_url?.trim() || "/pay";
+  const registerHref = safeInternalLink(tournament.register_url, "/register");
+  const payHref = safeInternalLink(tournament.pay_url, "/pay");
 
   return (
     <div className="dashboard-card p-5 space-y-3">

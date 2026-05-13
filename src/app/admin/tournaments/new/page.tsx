@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { Section } from "@/components/shared/section";
-import { AdminGate } from "@/components/admin/AdminGate";
 import { TournamentForm } from "@/components/admin/TournamentForm";
 
 export default function NewTournamentPage() {
   return (
-    <AdminGate>
+    <>
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <Link
@@ -28,6 +27,6 @@ export default function NewTournamentPage() {
           <TournamentForm initial={null} />
         </div>
       </Section>
-    </AdminGate>
+    </>
   );
 }

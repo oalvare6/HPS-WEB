@@ -4,7 +4,6 @@ import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Section } from "@/components/shared/section";
-import { AdminGate } from "@/components/admin/AdminGate";
 import { TournamentForm } from "@/components/admin/TournamentForm";
 import type { Tournament } from "@/lib/types";
 
@@ -15,11 +14,7 @@ export default function EditTournamentPage({
 }) {
   const { id } = use(params);
 
-  return (
-    <AdminGate>
-      <EditContent id={id} />
-    </AdminGate>
-  );
+  return <EditContent id={id} />;
 }
 
 function EditContent({ id }: { id: string }) {

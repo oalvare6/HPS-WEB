@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Section } from "@/components/shared/section";
-import { AdminGate } from "@/components/admin/AdminGate";
 import type { Tournament, TournamentStatus } from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 
@@ -35,11 +34,7 @@ function formatDateRange(start: string | null, end: string | null): string {
 }
 
 export default function AdminTournamentsPage() {
-  return (
-    <AdminGate>
-      <AdminTournamentsContent />
-    </AdminGate>
-  );
+  return <AdminTournamentsContent />;
 }
 
 function AdminTournamentsContent() {

@@ -5,6 +5,9 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+/** Sentinel order unlikely to collide with real display_order values. */
+const TEMP_ORDER = -2_000_000;
+
 export async function PATCH(request: Request, ctx: Ctx) {
   const unauthorized = await verifyAdmin();
   if (unauthorized) return unauthorized;
@@ -37,23 +40,35 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const a = rows[idx];
   const b = rows[swapIdx];
 
-  // Ensure distinct display_order values so the swap is meaningful
-  const orderA = a.display_order ?? idx;
-  const orderB = b.display_order ?? swapIdx;
-  const newA = orderB === orderA ? orderA + (direction === "up" ? -1 : 1) : orderB;
-  const newB = orderA === orderB ? orderB + (direction === "up" ? 1 : -1) : orderA;
+  const origA = a.display_order ?? idx;
+  const origB = b.display_order ?? swapIdx;
+  const newA = origB === origA ? origA + (direction === "up" ? -1 : 1) : origB;
+  const newB = origA === origB ? origB + (direction === "up" ? 1 : -1) : origA;
 
-  const { error: errA } = await supabaseAdmin
+  const { error: err1 } = await supabaseAdmin
     .from("tournaments")
-    .update({ display_order: newA })
+    .update({ display_order: TEMP_ORDER })
     .eq("id", a.id);
-  if (errA) return NextResponse.json({ error: errA.message }, { status: 500 });
+  if (err1) return NextResponse.json({ error: err1.message }, { status: 500 });
 
-  const { error: errB } = await supabaseAdmin
+  const { error: err2 } = await supabaseAdmin
     .from("tournaments")
     .update({ display_order: newB })
     .eq("id", b.id);
-  if (errB) return NextResponse.json({ error: errB.message }, { status: 500 });
+  if (err2) {
+    await supabaseAdmin.from("tournaments").update({ display_order: origA }).eq("id", a.id);
+    return NextResponse.json({ error: err2.message }, { status: 500 });
+  }
+
+  const { error: err3 } = await supabaseAdmin
+    .from("tournaments")
+    .update({ display_order: newA })
+    .eq("id", a.id);
+  if (err3) {
+    await supabaseAdmin.from("tournaments").update({ display_order: origB }).eq("id", b.id);
+    await supabaseAdmin.from("tournaments").update({ display_order: origA }).eq("id", a.id);
+    return NextResponse.json({ error: err3.message }, { status: 500 });
+  }
 
   revalidatePath("/events");
   revalidatePath("/");

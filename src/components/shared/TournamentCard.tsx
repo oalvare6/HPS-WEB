@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
+import { safeInternalLink } from "@/lib/safe-internal-link";
 
 const STATUS_PILL: Record<TournamentStatus, { text: string; dot: string; cls: string }> = {
   upcoming: { text: "Upcoming", dot: "bg-brand", cls: "text-brand bg-brand/10 border-brand/20" },
@@ -42,8 +43,8 @@ function formatDateRow(t: Tournament): string {
 export function TournamentCard({ tournament }: { tournament: Tournament }) {
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
-  const registerHref = tournament.register_url?.trim() || "/register";
-  const payHref = tournament.pay_url?.trim() || "/pay";
+  const registerHref = safeInternalLink(tournament.register_url, "/register");
+  const payHref = safeInternalLink(tournament.pay_url, "/pay");
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`

@@ -13,6 +13,7 @@ import {
 } from "@/lib/types";
 import { TOURNAMENT_IMAGE_PRESETS, getPresetUrl } from "@/lib/tournament-image-presets";
 import { slugify } from "@/lib/slug";
+import { dateInputToIsoPreservingCalendarDay } from "@/lib/date-input";
 
 const DEFAULT_LOCATION = "14062 Ambrose St, Houston TX";
 
@@ -149,8 +150,12 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       format: form.format,
       description: form.description.trim() || null,
       status: form.status,
-      start_date: form.start_date ? new Date(form.start_date).toISOString() : null,
-      end_date: form.end_date ? new Date(form.end_date).toISOString() : null,
+      start_date: form.start_date
+        ? dateInputToIsoPreservingCalendarDay(form.start_date) ?? new Date(form.start_date).toISOString()
+        : null,
+      end_date: form.end_date
+        ? dateInputToIsoPreservingCalendarDay(form.end_date) ?? new Date(form.end_date).toISOString()
+        : null,
       recurrence: form.recurrence.trim() || null,
       time_start: form.time_start.trim(),
       time_end: form.time_end.trim(),
@@ -212,7 +217,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
           label="Slug"
           required
           error={errors.slug}
-          hint={`URL preview: /events/${form.slug || "your-tournament"}`}
+          hint="Unique handle for admin and APIs (no public /events/[slug] page yet)."
         >
           <input
             type="text"

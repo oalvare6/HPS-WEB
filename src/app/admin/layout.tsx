@@ -1,10 +1,14 @@
 import { Toaster } from "sonner";
 import type { ReactNode } from "react";
+import { AdminGate } from "@/components/admin/AdminGate";
+import { AdminShell } from "@/components/admin/AdminShell";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      {children}
+      <AdminGate>
+        <AdminShell>{children}</AdminShell>
+      </AdminGate>
       <Toaster
         position="top-right"
         theme="dark"

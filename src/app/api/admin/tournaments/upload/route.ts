@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { bufferMatchesImageMime } from "@/lib/tournament-api-validation";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 5 * 1024 * 1024; // 5MB
@@ -25,6 +26,10 @@ export async function POST(request: Request) {
   const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
   const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
+
+  if (!bufferMatchesImageMime(buffer, file.type)) {
+    return NextResponse.json({ error: "File content does not match declared image type." }, { status: 400 });
+  }
 
   const { error: uploadErr } = await supabaseAdmin.storage
     .from("tournament-images")

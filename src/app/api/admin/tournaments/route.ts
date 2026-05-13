@@ -3,6 +3,12 @@ import { revalidatePath } from "next/cache";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { slugify } from "@/lib/slug";
+import { sanitizeOptionalInternalPath } from "@/lib/safe-internal-link";
+import {
+  parseOptionalMoney,
+  parseOptionalNonNegInt,
+  parseTournamentStatus,
+} from "@/lib/tournament-api-validation";
 import type { TournamentInput } from "@/lib/types";
 
 export async function GET() {
@@ -36,10 +42,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Slug could not be generated." }, { status: 400 });
   }
 
+  const status = parseTournamentStatus(body.status, "upcoming");
+  if (status === "invalid") {
+    return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+  }
+
+  const entryFee = parseOptionalMoney(body.entry_fee);
+  if (entryFee === "invalid") {
+    return NextResponse.json({ error: "Invalid entry fee." }, { status: 400 });
+  }
+
+  const maxTeams = parseOptionalNonNegInt(body.max_teams);
+  if (maxTeams === "invalid") {
+    return NextResponse.json({ error: "Invalid max teams." }, { status: 400 });
+  }
+
+  const displayOrderRaw = body.display_order ?? 0;
+  const displayOrder = typeof displayOrderRaw === "number" ? displayOrderRaw : Number(displayOrderRaw);
+  if (!Number.isFinite(displayOrder) || !Number.isInteger(displayOrder)) {
+    return NextResponse.json({ error: "Invalid display order." }, { status: 400 });
+  }
+
   const row = {
     title: body.title,
     slug,
-    status: body.status ?? "upcoming",
+    status,
     registration_open: body.registration_open ?? false,
     payments_open: body.payments_open ?? false,
     description: body.description ?? null,
@@ -50,13 +77,13 @@ export async function POST(request: Request) {
     recurrence: body.recurrence ?? null,
     location: body.location ?? null,
     format: body.format ?? null,
-    entry_fee: body.entry_fee ?? null,
-    max_teams: body.max_teams ?? null,
+    entry_fee: entryFee,
+    max_teams: maxTeams,
     image_url: body.image_url ?? null,
     image_preset: body.image_preset ?? null,
-    register_url: body.register_url ?? null,
-    pay_url: body.pay_url ?? null,
-    display_order: body.display_order ?? 0,
+    register_url: sanitizeOptionalInternalPath(body.register_url),
+    pay_url: sanitizeOptionalInternalPath(body.pay_url),
+    display_order: displayOrder,
   };
 
   const { data, error } = await supabaseAdmin

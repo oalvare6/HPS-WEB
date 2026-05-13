@@ -1,11 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { MapPin, Navigation, ExternalLink } from "lucide-react";
-
-const GOOGLE_MAPS_URL =
-  "https://www.google.com/maps/dir/?api=1&destination=14062+Ambrose+St,+Houston,+TX+77045";
-
-const WHATSAPP_URL = "https://chat.whatsapp.com/HzBW39TgVemIA6EHWMnInY";
+import { getSiteSetting } from "@/lib/site-settings";
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -21,7 +17,15 @@ function WhatsAppIcon({ className }: { className?: string }) {
   );
 }
 
-export function Footer() {
+export async function Footer() {
+  const [address, mapsUrl, whatsappUrl, contactEmail, contactPhone] = await Promise.all([
+    getSiteSetting("footer.address"),
+    getSiteSetting("footer.maps_url"),
+    getSiteSetting("footer.whatsapp_url"),
+    getSiteSetting("contact.email"),
+    getSiteSetting("contact.phone"),
+  ]);
+
   return (
     <footer className="bg-base text-white border-t border-border-token">
       <div className="max-w-6xl mx-auto px-6 py-12 md:py-16">
@@ -49,9 +53,9 @@ export function Footer() {
             <div className="flex items-start gap-2 mt-4 text-sm">
               <MapPin size={16} className="text-white mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-zinc-400">14062 Ambrose St, Houston, TX 77045</p>
+                <p className="text-zinc-400">{address}</p>
                 <a
-                  href={GOOGLE_MAPS_URL}
+                  href={mapsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-white hover:text-zinc-300 text-xs font-medium mt-1 transition-colors"
@@ -100,13 +104,20 @@ export function Footer() {
             </h3>
             <ul className="space-y-3 text-sm text-zinc-400">
               <li>
-                <a href="mailto:houspremiersoccer@gmail.com" className="hover:text-white transition-colors">
-                  houspremiersoccer@gmail.com
+                <a href={`mailto:${contactEmail}`} className="hover:text-white transition-colors">
+                  {contactEmail}
                 </a>
               </li>
+              {contactPhone && (
+                <li>
+                  <a href={`tel:${contactPhone.replace(/[^+\d]/g, "")}`} className="hover:text-white transition-colors">
+                    {contactPhone}
+                  </a>
+                </li>
+              )}
               <li className="pt-1">
                 <a
-                  href={WHATSAPP_URL}
+                  href={whatsappUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-[#25D366] hover:text-[#20bd5a] font-medium transition-colors"
@@ -130,6 +141,13 @@ export function Footer() {
             </Link>
             <Link href="/about" className="text-zinc-500 hover:text-white text-sm transition-colors">
               About
+            </Link>
+            <Link
+              href="/admin"
+              className="text-zinc-600 hover:text-zinc-300 text-sm transition-colors"
+              title="Staff dashboard (login required)"
+            >
+              Admin
             </Link>
           </div>
         </div>
