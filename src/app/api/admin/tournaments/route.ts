@@ -107,5 +107,8 @@ export async function POST(request: Request) {
 
   revalidatePath("/events");
   revalidatePath("/");
+  if (data?.slug && typeof data.slug === "string") {
+    revalidatePath(`/events/${data.slug}`);
+  }
   return NextResponse.json({ tournament: data });
 }

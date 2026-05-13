@@ -114,6 +114,9 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
   revalidatePath("/events");
   revalidatePath("/");
+  if (data?.slug && typeof data.slug === "string") {
+    revalidatePath(`/events/${data.slug}`);
+  }
   return NextResponse.json({ tournament: data });
 }
 

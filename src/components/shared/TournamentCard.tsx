@@ -60,8 +60,14 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
       </div>
 
       {bannerUrl && (
-        <div className="relative w-full h-40 md:h-48 bg-surface-2">
-          <Image src={bannerUrl} alt={tournament.title} fill className="object-cover" unoptimized />
+        <div className="relative w-full aspect-[16/7] bg-surface-2 overflow-hidden">
+          <Image
+            src={bannerUrl}
+            alt={tournament.title}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 896px"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-base/80 via-transparent to-transparent" />
         </div>
       )}

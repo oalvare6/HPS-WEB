@@ -115,6 +115,27 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
     return Object.keys(e).length === 0;
   };
 
+  const handleClearImage = async () => {
+    update("image_url", null);
+    if (!initial?.id) return;
+    try {
+      const patchRes = await fetch(`/api/admin/tournaments/${initial.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_url: null, image_preset: null }),
+      });
+      if (!patchRes.ok) {
+        const patchData = (await patchRes.json()) as { error?: string };
+        toast.error(patchData.error || "Could not clear image on server.");
+        return;
+      }
+      router.refresh();
+      toast.success("Banner image removed from this tournament.");
+    } catch {
+      toast.error("Could not clear image on server.");
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -130,7 +151,27 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       }
       update("image_url", data.url);
       update("image_preset", null);
-      toast.success("Image uploaded.");
+
+      if (initial?.id) {
+        const patchRes = await fetch(`/api/admin/tournaments/${initial.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_url: data.url, image_preset: null }),
+        });
+        const patchData = (await patchRes.json()) as { error?: string };
+        if (!patchRes.ok) {
+          toast.error(patchData.error || "Image stored but could not attach to this tournament.");
+          return;
+        }
+        router.refresh();
+        toast.success("Image saved", {
+          description: "Stored and linked to this tournament. Other edits still need Save Tournament.",
+        });
+      } else {
+        toast.success("Image uploaded", {
+          description: "File is in storage. Click Save Tournament to attach it to this event.",
+        });
+      }
     } catch {
       toast.error("Upload failed.");
     } finally {
@@ -431,7 +472,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
                 <Upload size={20} className="text-brand" />
               )}
               <span className="text-sm text-zinc-300">
-                {uploading ? "Uploading…" : "Click to upload JPG, PNG, or WebP (max 5MB)"}
+                {uploading ? "Uploading…" : "JPG, PNG, or WebP (max 5MB). Images are resized and saved as WebP."}
               </span>
             </label>
             <input
@@ -445,7 +486,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
             {form.image_url && (
               <button
                 type="button"
-                onClick={() => update("image_url", null)}
+                onClick={() => void handleClearImage()}
                 className="text-xs text-zinc-400 hover:text-white underline"
               >
                 Clear uploaded image
@@ -489,8 +530,17 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
         {previewUrl && (
           <div className="space-y-2">
             <p className="text-xs text-zinc-500 uppercase tracking-wide">Preview</p>
-            <div className="relative w-full h-40 rounded-lg overflow-hidden bg-surface-2 border border-border-token">
-              <Image src={previewUrl} alt="Preview" fill className="object-cover" unoptimized />
+            <p className="text-xs text-zinc-500">
+              Same wide banner crop as the public event page (16:7).
+            </p>
+            <div className="relative w-full aspect-[16/7] max-h-72 rounded-lg overflow-hidden bg-surface-2 border border-border-token">
+              <Image
+                src={previewUrl}
+                alt="Banner preview"
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, 896px"
+              />
             </div>
           </div>
         )}

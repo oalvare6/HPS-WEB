@@ -211,7 +211,7 @@ export default async function TournamentDetailPage({
                 alt={tournament.title}
                 fill
                 className="object-cover"
-                unoptimized
+                sizes="(max-width: 1024px) 100vw, 1152px"
                 priority
               />
               <div className="absolute inset-0 bg-gradient-to-t from-base/60 via-transparent to-transparent" />

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Loader2,
@@ -213,12 +214,19 @@ function AdminTournamentsContent() {
                           className="border-b border-border-token last:border-b-0 hover:bg-surface-2/40 transition-colors"
                         >
                           <td className="px-4 py-3">
-                            <div className="w-10 h-10 rounded bg-surface-2 overflow-hidden flex items-center justify-center">
+                            <div className="w-20 shrink-0 rounded overflow-hidden bg-surface-2 border border-border-token aspect-[16/7] relative">
                               {thumb ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={thumb} alt="" className="w-full h-full object-cover" />
+                                <Image
+                                  src={thumb}
+                                  alt=""
+                                  fill
+                                  className="object-cover"
+                                  sizes="80px"
+                                />
                               ) : (
-                                <Trophy size={16} className="text-zinc-500" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <Trophy size={16} className="text-zinc-500" />
+                                </div>
                               )}
                             </div>
                           </td>
