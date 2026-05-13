@@ -82,13 +82,16 @@ export default function AdminContactsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <a
-              href="/api/admin/contacts/export"
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/api/admin/contacts/export";
+              }}
               className="btn-secondary text-sm inline-flex items-center gap-1.5"
             >
               <Download size={14} />
               Export CSV
-            </a>
+            </button>
             <button
               type="button"
               onClick={() => setShowCreate(true)}
