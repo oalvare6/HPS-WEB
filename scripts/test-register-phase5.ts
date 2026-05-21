@@ -133,7 +133,10 @@ async function main() {
       `[partial] collision: reg linked to email contact ${fallback?.contact_id}; needs_admin_review column not applied yet`
     );
   } else {
-    if (collisionReg?.contact_id !== newContact?.id) {
+    if (!collisionReg || !newContact?.id) {
+      throw new Error("collision registration or new contact missing");
+    }
+    if (collisionReg.contact_id !== newContact.id) {
       throw new Error("collision should link to new email contact");
     }
     if (collisionReg.needs_admin_review !== true) {
