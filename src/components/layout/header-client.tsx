@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
+import { Menu, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusIndicatorCompact } from "@/components/shared/status-indicator";
 import type { StatusPill } from "@/lib/site-settings";
@@ -16,8 +16,16 @@ const navLinks = [
   { href: "/contact", label: "Contact" },
 ];
 
-export function HeaderClient({ statusItems }: { statusItems: StatusPill[] }) {
+export function HeaderClient({
+  statusItems,
+  isAuthed,
+}: {
+  statusItems: StatusPill[];
+  isAuthed: boolean;
+}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const accountHref = isAuthed ? "/me" : "/login";
+  const accountLabel = isAuthed ? "Account" : "Sign in";
 
   return (
     <header className="sticky top-0 z-50 bg-base/95 backdrop-blur-md border-b border-border-token/80">
@@ -55,6 +63,14 @@ export function HeaderClient({ statusItems }: { statusItems: StatusPill[] }) {
                   {link.label}
                 </Link>
               ))}
+              <Link
+                href={accountHref}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+                aria-label={accountLabel}
+              >
+                <User size={14} />
+                {accountLabel}
+              </Link>
               <Link
                 href="/register"
                 className="bg-white text-zinc-900 px-4 py-2 text-sm font-medium rounded-md hover:bg-zinc-100 transition-colors"
@@ -98,6 +114,14 @@ export function HeaderClient({ statusItems }: { statusItems: StatusPill[] }) {
                 {link.label}
               </Link>
             ))}
+            <Link
+              href={accountHref}
+              className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <User size={16} />
+              {accountLabel}
+            </Link>
             <Link
               href="/register"
               className="bg-white text-zinc-900 px-4 py-3 text-center font-medium rounded-md hover:bg-zinc-100 transition-colors mt-2"

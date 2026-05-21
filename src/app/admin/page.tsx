@@ -25,6 +25,8 @@ import {
   ArrowRight,
   Ticket,
 } from "lucide-react";
+import { StatCardsSkeleton, TableSkeleton } from "@/components/shared/skeleton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 
 type LinkedContact = {
   id: string;
@@ -407,9 +409,9 @@ function AdminPageContent() {
             <>
               {payError && <p className="text-red-400">{payError}</p>}
               {payLoading ? (
-                <div className="flex items-center gap-3 text-zinc-400 py-8">
-                  <Loader2 size={24} className="animate-spin" />
-                  <span>Loading payments…</span>
+                <div className="space-y-6">
+                  <StatCardsSkeleton count={4} />
+                  <TableSkeleton rows={6} columns={6} />
                 </div>
               ) : (
                 <>
@@ -520,6 +522,39 @@ function AdminPageContent() {
                   )}
 
                   {/* Payments Table */}
+                  {payments.length === 0 ? (
+                    <AdminEmptyState
+                      icon={CreditCard}
+                      title="No payments yet"
+                      description="When players complete Stripe checkout, payments appear here. Sync from Stripe if you expect recent charges."
+                      actionLabel="Sync from Stripe"
+                      onAction={async () => {
+                        setSyncing(true);
+                        setSyncResult(null);
+                        try {
+                          const res = await fetch("/api/admin/sync-payments", {
+                            method: "POST",
+                          });
+                          const data = await res.json();
+                          if (data.error) {
+                            setSyncResult(`Error: ${data.error}`);
+                          } else {
+                            setSyncResult(
+                              `Synced ${data.synced} new payment(s), ${data.skipped} already recorded.`
+                            );
+                            if (data.synced > 0) {
+                              loadPayments();
+                              registrationsRef.current?.refresh();
+                            }
+                          }
+                        } catch {
+                          setSyncResult("Sync failed.");
+                        } finally {
+                          setSyncing(false);
+                        }
+                      }}
+                    />
+                  ) : (
                   <div className="dashboard-card overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
@@ -615,21 +650,11 @@ function AdminPageContent() {
                               </td>
                             </tr>
                           ))}
-                          {payments.length === 0 && (
-                            <tr>
-                              <td
-                                colSpan={6}
-                                className="px-4 py-8 text-center text-zinc-500"
-                              >
-                                No payments yet. Once players pay via Stripe,
-                                they&apos;ll appear here.
-                              </td>
-                            </tr>
-                          )}
                         </tbody>
                       </table>
                     </div>
                   </div>
+                  )}
                 </>
               )}
             </>

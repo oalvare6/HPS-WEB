@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import { Loader2 } from "lucide-react";
 import { Section } from "@/components/shared/section";
+import { FormFieldsSkeleton } from "@/components/shared/skeleton";
 import { TournamentForm } from "@/components/admin/TournamentForm";
 import { TournamentRoundsPanel } from "@/components/admin/TournamentRoundsPanel";
 import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
@@ -73,12 +73,7 @@ function EditContent({ id }: { id: string }) {
 
       <Section dark className="bg-surface !py-8 md:!py-12" container={false}>
         <div className="max-w-4xl mx-auto px-6 space-y-6">
-          {loading && (
-            <div className="flex items-center gap-3 text-zinc-400 py-8">
-              <Loader2 size={24} className="animate-spin" />
-              <span>Loading tournament…</span>
-            </div>
-          )}
+          {loading && <FormFieldsSkeleton fields={3} />}
           {error && <p className="text-red-400">{error}</p>}
           {!loading && tournament && (
             <>

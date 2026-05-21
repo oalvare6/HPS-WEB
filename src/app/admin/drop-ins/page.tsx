@@ -18,7 +18,10 @@ import {
   Copy,
   CheckCircle,
   Clock,
+  Filter,
 } from "lucide-react";
+import { TableSkeleton } from "@/components/shared/skeleton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/types";
 import { useQueryParam } from "@/lib/admin-url-state";
@@ -207,14 +210,28 @@ function AdminDropInsContent() {
 
         <div className="dashboard-card overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-zinc-400 inline-flex items-center justify-center gap-2 w-full">
-              <Loader2 size={16} className="animate-spin" />
-              Loading…
-            </div>
+            <TableSkeleton rows={5} columns={6} />
           ) : rows.length === 0 ? (
-            <div className="p-8 text-center text-zinc-500 text-sm">
-              No drop-ins yet. Click &quot;New drop-in&quot; to add one.
-            </div>
+            tournamentFilter || statusFilter ? (
+              <AdminEmptyState
+                icon={Filter}
+                title="No drop-ins match"
+                description="Change the tournament or status filter, or create a new drop-in for this event."
+                actionLabel="Clear filters"
+                onAction={() => {
+                  setTournamentFilter("");
+                  setStatusFilter("");
+                }}
+              />
+            ) : (
+              <AdminEmptyState
+                icon={Ticket}
+                title="No drop-ins yet"
+                description="Record a single-night guest play, then copy the Stripe pay link to send them."
+                actionLabel="New drop-in"
+                onAction={() => setShowCreate(true)}
+              />
+            )
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

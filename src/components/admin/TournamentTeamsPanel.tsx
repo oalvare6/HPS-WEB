@@ -22,6 +22,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ListRowsSkeleton } from "@/components/shared/skeleton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 
 import {
   assignRegistrationToTeam,
@@ -104,9 +106,8 @@ export default function TournamentTeamsPanel({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-3 text-zinc-400 py-8">
-        <Loader2 size={20} className="animate-spin" />
-        <span>Loading teams…</span>
+      <div className="dashboard-card overflow-hidden">
+        <ListRowsSkeleton rows={4} />
       </div>
     );
   }
@@ -137,10 +138,12 @@ export default function TournamentTeamsPanel({
       </div>
 
       {teams.length === 0 ? (
-        <div className="dashboard-card p-6 text-center text-zinc-500 text-sm">
-          No teams yet. Create one above, then assign registrants from the
-          Unassigned list below.
-        </div>
+        <AdminEmptyState
+          icon={UsersRound}
+          title="No teams yet"
+          description="Create a team above, then assign registrants from the unassigned list below."
+          className="dashboard-card p-8"
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {teams.map((team) => (

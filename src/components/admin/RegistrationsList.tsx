@@ -23,9 +23,16 @@ import {
   RefreshCw,
   Trash2,
   User,
+  Users,
   X,
   XCircle,
+  Filter,
 } from "lucide-react";
+import {
+  StatCardsSkeleton,
+  TableSkeleton,
+} from "@/components/shared/skeleton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { isContactWaiverValid } from "@/lib/contacts";
 import type { WaiverType } from "@/lib/types";
 
@@ -545,9 +552,12 @@ const RegistrationsList = forwardRef<
       )}
 
       {regLoading ? (
-        <div className="flex items-center gap-3 text-zinc-400 py-8">
-          <Loader2 size={24} className="animate-spin" />
-          <span>Loading registrations…</span>
+        <div className="space-y-6">
+          {showStatsCards && <StatCardsSkeleton count={4} />}
+          <TableSkeleton
+            rows={6}
+            columns={showTournamentColumn ? 7 : 6}
+          />
         </div>
       ) : (
         <>
@@ -1055,11 +1065,32 @@ const RegistrationsList = forwardRef<
                   })}
                   {sorted.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={colSpan}
-                        className="px-4 py-8 text-center text-zinc-500"
-                      >
-                        No registrations found.
+                      <td colSpan={colSpan} className="p-0">
+                        {filter !== "all" ? (
+                          <AdminEmptyState
+                            icon={Filter}
+                            title="No registrations match"
+                            description="Try another waiver filter or show all registrants."
+                            actionLabel="Show all"
+                            onAction={() => setFilter("all")}
+                          />
+                        ) : tournamentId ? (
+                          <AdminEmptyState
+                            icon={Users}
+                            title="No registrants yet"
+                            description="When players register for this tournament, they appear here with waiver and payment status."
+                            actionLabel="View public registration"
+                            actionHref="/register"
+                          />
+                        ) : (
+                          <AdminEmptyState
+                            icon={Users}
+                            title="No registrations yet"
+                            description="Registrations from the public signup flow will show up here. Share the register link when a tournament is open."
+                            actionLabel="Open tournaments"
+                            actionHref="/admin/tournaments"
+                          />
+                        )}
                       </td>
                     </tr>
                   )}

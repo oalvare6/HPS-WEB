@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -8,15 +8,17 @@ import {
   Calendar,
   ArrowRight,
   Home,
-  Loader2,
   AlertTriangle,
 } from "lucide-react";
+import { Skeleton } from "@/components/shared/skeleton";
+import { trackRegistrationEvent } from "@/lib/analytics";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
   const [verifying, setVerifying] = useState(!!sessionId);
   const [error, setError] = useState("");
+  const successTracked = useRef(false);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -28,9 +30,17 @@ function SuccessContent() {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.status !== "recorded" && data.status !== "already_recorded") {
-          setError(data.error ?? "Could not verify payment.");
+        if (data.status === "recorded" || data.status === "already_recorded") {
+          if (!successTracked.current) {
+            successTracked.current = true;
+            trackRegistrationEvent("registration_payment_success", {
+              session_id: sessionId,
+              status: data.status,
+            });
+          }
+          return;
         }
+        setError(data.error ?? "Could not verify payment.");
       })
       .catch(() => setError("Could not verify payment."))
       .finally(() => setVerifying(false));
@@ -51,9 +61,7 @@ function SuccessContent() {
           <div className="dashboard-card p-8 space-y-6">
             <div className="flex justify-center">
               {verifying ? (
-                <div className="w-16 h-16 rounded-full bg-surface-2/40 flex items-center justify-center">
-                  <Loader2 size={36} className="text-zinc-400 animate-spin" />
-                </div>
+                <Skeleton className="w-16 h-16 rounded-full" />
               ) : error ? (
                 <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center">
                   <AlertTriangle size={36} className="text-yellow-400" />
@@ -118,15 +126,21 @@ function SuccessContent() {
   );
 }
 
+function PaySuccessFallback() {
+  return (
+    <section className="bg-surface min-h-[60vh] flex items-center justify-center px-6">
+      <div className="dashboard-card p-8 w-full max-w-lg space-y-4">
+        <Skeleton className="w-16 h-16 rounded-full mx-auto" />
+        <Skeleton className="h-7 w-48 mx-auto" />
+        <Skeleton className="h-4 w-full max-w-sm mx-auto" />
+      </div>
+    </section>
+  );
+}
+
 export default function PaySuccessPage() {
   return (
-    <Suspense
-      fallback={
-        <section className="bg-surface min-h-[60vh] flex items-center justify-center">
-          <Loader2 size={36} className="text-zinc-400 animate-spin" />
-        </section>
-      }
-    >
+    <Suspense fallback={<PaySuccessFallback />}>
       <SuccessContent />
     </Suspense>
   );

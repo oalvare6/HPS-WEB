@@ -46,33 +46,37 @@ function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+type ResolvedTournament = { id: string; title: string } | null;
+
 /**
- * Resolve the tournament_id to attach to this registration. We trust an
- * explicit id from the client when it is a real, registration-open tournament;
- * otherwise we fall back to the single open tournament if there is exactly one.
+ * Resolve the tournament to attach to this registration. We trust an explicit
+ * id from the client when it is a real, registration-open tournament;
+ * otherwise we fall back to the single open tournament if there is exactly
+ * one. Returns the title alongside the id so the API can echo it back to
+ * the client for the post-registration confirmation card.
  */
-async function resolveTournamentId(
+async function resolveTournament(
   requested: string | null | undefined
-): Promise<string | null> {
+): Promise<ResolvedTournament> {
   if (requested && UUID_RE.test(requested)) {
     const { data } = await supabaseAdmin
       .from("tournaments")
-      .select("id, registration_open")
+      .select("id, title, registration_open")
       .eq("id", requested)
       .maybeSingle();
     if (data?.id && data.registration_open) {
-      return data.id;
+      return { id: data.id, title: data.title };
     }
   }
 
   const { data: openOnes } = await supabaseAdmin
     .from("tournaments")
-    .select("id")
+    .select("id, title")
     .eq("registration_open", true)
     .limit(2);
 
   if (openOnes && openOnes.length === 1) {
-    return openOnes[0].id;
+    return { id: openOnes[0].id, title: openOnes[0].title };
   }
 
   return null;
@@ -129,7 +133,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const tournamentId = await resolveTournamentId(payload.tournamentId);
+    const resolvedTournament = await resolveTournament(payload.tournamentId);
+    const tournamentId = resolvedTournament?.id ?? null;
+    const tournamentTitle = resolvedTournament?.title ?? null;
 
     const { data: inserted, error } = await supabaseAdmin
       .from("registrations")
@@ -245,6 +251,9 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         signUrl: completedRedirectUrl,
+        waiverSkipped: true,
+        waiverSignedAt: canonicalSignedAt,
+        tournamentTitle,
       });
     }
 

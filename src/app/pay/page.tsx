@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, FormEvent, Suspense, useEffect } from "react";
+import { useState, FormEvent, Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { FormFieldsSkeleton } from "@/components/shared/skeleton";
+import { trackRegistrationEvent } from "@/lib/analytics";
 import {
   Trophy,
   Calendar,
@@ -58,6 +60,7 @@ function PayForm() {
     entryFeeCents: number | null;
     dropInFeeCents: number | null;
   } | null>(null);
+  const paymentLinkTracked = useRef(false);
 
   const hasRegistration = Boolean(registrationId);
   const selectedTournament =
@@ -160,6 +163,13 @@ function PayForm() {
         if (data.tournamentId) {
           setSelectedTournamentId(data.tournamentId);
         }
+        if (!paymentLinkTracked.current && data.paymentStatus !== "paid") {
+          paymentLinkTracked.current = true;
+          trackRegistrationEvent("registration_payment_link_shown", {
+            source: "pay_page",
+            registration_id: registrationId,
+          });
+        }
       } catch {
         if (!cancelledFetch) {
           setRegistrationLoadError(
@@ -211,8 +221,8 @@ function PayForm() {
 
   if (hasRegistration && registrationLoading) {
     return (
-      <div className="max-w-2xl mx-auto px-6 py-20 text-center text-zinc-400">
-        Loading your registration…
+      <div className="max-w-2xl mx-auto px-6 py-12 md:py-20">
+        <FormFieldsSkeleton fields={2} />
       </div>
     );
   }
@@ -233,8 +243,8 @@ function PayForm() {
 
   if (!hasRegistration && payOptionsLoading) {
     return (
-      <div className="max-w-2xl mx-auto px-6 py-20 text-center text-zinc-400">
-        Loading payment options…
+      <div className="max-w-2xl mx-auto px-6 py-12 md:py-20">
+        <FormFieldsSkeleton fields={2} />
       </div>
     );
   }

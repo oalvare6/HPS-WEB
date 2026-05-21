@@ -138,6 +138,13 @@ export type Contact = {
   waiver_document_url: string | null;
   waiver_submission_id: number | null;
   waiver_source: "docuseal" | "admin_override" | "import" | null;
+  /**
+   * Emergency contact on the canonical person record. Added in Phase 6 so
+   * player-managed profile data persists across registrations. Nullable for
+   * backfilled rows that pre-date player accounts.
+   */
+  emergency_name: string | null;
+  emergency_phone: string | null;
   created_at: string;
   updated_at: string;
 };

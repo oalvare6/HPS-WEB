@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Section } from "@/components/shared/section";
+import { FormFieldsSkeleton } from "@/components/shared/skeleton";
 import {
   SITE_SETTING_KEYS,
   STATUS_PILL_VALUES,
@@ -130,10 +131,7 @@ export default function AdminSitePage() {
       <Section dark className="bg-surface !py-8 md:!py-12" container={false}>
         <div className="max-w-3xl mx-auto px-6 space-y-6">
           {loading ? (
-            <div className="flex items-center gap-3 text-zinc-400 py-8">
-              <Loader2 size={24} className="animate-spin" />
-              <span>Loading site settings…</span>
-            </div>
+            <FormFieldsSkeleton fields={SITE_SETTING_KEYS.length} />
           ) : error ? (
             <p className="text-red-400">{error}</p>
           ) : (

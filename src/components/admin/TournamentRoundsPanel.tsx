@@ -13,6 +13,8 @@ import {
   CalendarPlus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ListRowsSkeleton } from "@/components/shared/skeleton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import {
   MAX_ROUND_LABEL_LENGTH,
   MAX_ROUND_NOTE_LENGTH,
@@ -441,17 +443,18 @@ export function TournamentRoundsPanel({ tournamentId }: { tournamentId: string }
       {/* List */}
       <div className="space-y-3">
         {loading ? (
-          <div className="flex items-center gap-3 text-zinc-400 py-4">
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm">Loading schedule…</span>
-          </div>
+          <ListRowsSkeleton rows={3} />
         ) : error ? (
           <p className="text-red-400 text-sm">{error}</p>
         ) : rounds.length === 0 && !composerOpen ? (
-          <div className="text-center py-6 text-zinc-500 text-sm">
-            <CalendarPlus size={24} className="mx-auto mb-2 opacity-50" />
-            No rounds yet. Use &ldquo;Add round&rdquo; for the first one.
-          </div>
+          <AdminEmptyState
+            icon={CalendarPlus}
+            title="No rounds yet"
+            description="Add rounds to build the schedule players see on the public event page."
+            actionLabel="Add round"
+            onAction={() => setComposerOpen(true)}
+            className="py-6"
+          />
         ) : (
           rounds.map((r, i) => {
             const editing = editingId === r.id;

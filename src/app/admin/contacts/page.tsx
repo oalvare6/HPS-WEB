@@ -22,7 +22,10 @@ import {
   GitMerge,
   ChevronDown,
   ChevronRight,
+  Users,
 } from "lucide-react";
+import { ListRowsSkeleton } from "@/components/shared/skeleton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/types";
 import { useQueryParamsSetter } from "@/lib/admin-url-state";
@@ -201,14 +204,28 @@ function AdminContactsContent() {
         {/* List */}
         <div className="dashboard-card overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-zinc-400 inline-flex items-center justify-center gap-2 w-full">
-              <Loader2 size={16} className="animate-spin" />
-              Loading…
-            </div>
+            <ListRowsSkeleton rows={8} />
           ) : contacts.length === 0 ? (
-            <div className="p-8 text-center text-zinc-500 text-sm">
-              No contacts match. Try a different search.
-            </div>
+            search || tagFilter ? (
+              <AdminEmptyState
+                icon={Search}
+                title="No contacts match"
+                description="Try a different name, email, phone, or tag — or clear filters to see everyone."
+                actionLabel="Clear filters"
+                onAction={() => {
+                  setSearch("");
+                  setTagFilter("");
+                }}
+              />
+            ) : (
+              <AdminEmptyState
+                icon={Users}
+                title="No contacts yet"
+                description="Contacts are created when players register, pay, or when you add them manually."
+                actionLabel="New contact"
+                onAction={() => setShowCreate(true)}
+              />
+            )
           ) : (
             <ul className="divide-y divide-border-token">
               {contacts.map((c) => (

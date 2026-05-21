@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-  Loader2,
   Plus,
   Pencil,
   Trash2,
@@ -14,6 +13,8 @@ import {
   Trophy,
   Star,
 } from "lucide-react";
+import { TableSkeleton } from "@/components/shared/skeleton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { toast } from "sonner";
 import { Section } from "@/components/shared/section";
 import {
@@ -187,10 +188,7 @@ function AdminTournamentsContent() {
           {error && <p className="text-red-400">{error}</p>}
 
           {loading ? (
-            <div className="flex items-center gap-3 text-zinc-400 py-8">
-              <Loader2 size={24} className="animate-spin" />
-              <span>Loading tournaments…</span>
-            </div>
+            <TableSkeleton rows={6} columns={8} />
           ) : (
             <div className="dashboard-card overflow-hidden">
               <div className="overflow-x-auto">
@@ -350,12 +348,14 @@ function AdminTournamentsContent() {
                     })}
                     {tournaments.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-12 text-center text-zinc-500">
-                          No tournaments yet.{" "}
-                          <Link href="/admin/tournaments/new" className="text-brand hover:underline">
-                            Create the first one
-                          </Link>
-                          .
+                        <td colSpan={8} className="p-0">
+                          <AdminEmptyState
+                            icon={Trophy}
+                            title="No tournaments yet"
+                            description="Create a tournament to open registration, payments, and roster management."
+                            actionLabel="Add tournament"
+                            actionHref="/admin/tournaments/new"
+                          />
                         </td>
                       </tr>
                     )}

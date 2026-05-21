@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { MAX_UPDATE_BODY_LENGTH, type TournamentUpdate } from "@/lib/types";
+import { ListRowsSkeleton } from "@/components/shared/skeleton";
+import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 
 const inputCls =
   "w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors";
@@ -256,17 +258,16 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
       {/* List */}
       <div className="border-t border-border-token pt-5 space-y-3">
         {loading ? (
-          <div className="flex items-center gap-3 text-zinc-400 py-4">
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm">Loading updates…</span>
-          </div>
+          <ListRowsSkeleton rows={3} />
         ) : error ? (
           <p className="text-red-400 text-sm">{error}</p>
         ) : updates.length === 0 ? (
-          <div className="text-center py-6 text-zinc-500 text-sm">
-            <MessageSquarePlus size={24} className="mx-auto mb-2 opacity-50" />
-            No updates posted yet. Use the box above to post the first one.
-          </div>
+          <AdminEmptyState
+            icon={MessageSquarePlus}
+            title="No updates posted yet"
+            description="Post schedule changes or announcements — pinned updates show on the public tournament page."
+            className="py-6"
+          />
         ) : (
           updates.map((u) => {
             const editing = editingId === u.id;

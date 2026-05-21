@@ -1,6 +1,11 @@
 import { Section, SectionHeader } from "@/components/shared/section";
-import { RegistrationForm } from "@/components/register/RegistrationForm";
+import {
+  RegistrationForm,
+  type RegistrationPrefill,
+} from "@/components/register/RegistrationForm";
 import { getRegistrationOpenTournaments } from "@/lib/tournaments";
+import { getCurrentPlayer } from "@/lib/player-auth";
+import { isContactWaiverValid } from "@/lib/contacts";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +17,10 @@ export default async function RegisterPage({
   searchParams: SearchParams;
 }) {
   const { tournament: preselected = null } = await searchParams;
-  const { tournaments, loadError } = await getRegistrationOpenTournaments();
+  const [{ tournaments, loadError }, player] = await Promise.all([
+    getRegistrationOpenTournaments(),
+    getCurrentPlayer(),
+  ]);
 
   const options = tournaments.map((t) => ({
     id: t.id,
@@ -20,6 +28,20 @@ export default async function RegisterPage({
     slug: t.slug,
     format: t.format,
   }));
+
+  const prefill: RegistrationPrefill | null = player
+    ? {
+        email: player.email,
+        firstName: player.contact.first_name ?? "",
+        lastName: player.contact.last_name ?? "",
+        phone: player.contact.phone ?? "",
+        dob: player.contact.dob ?? "",
+        emergencyName: player.contact.emergency_name ?? "",
+        emergencyPhone: player.contact.emergency_phone ?? "",
+        hasAdultWaiverOnFile: isContactWaiverValid(player.contact, "adult"),
+        hasYouthWaiverOnFile: isContactWaiverValid(player.contact, "youth"),
+      }
+    : null;
 
   return (
     <>
@@ -38,7 +60,11 @@ export default async function RegisterPage({
         <div className="max-w-2xl mx-auto">
           <SectionHeader
             title="Player Registration"
-            subtitle="Fill out the form below to register. You'll sign the waiver on the next page."
+            subtitle={
+              prefill
+                ? "We've pre-filled your details. Edit them if anything has changed."
+                : "Fill out the form below to register. You'll sign the waiver on the next page."
+            }
             dark
           />
 
@@ -49,6 +75,7 @@ export default async function RegisterPage({
           <RegistrationForm
             tournaments={options}
             preselectedSlug={preselected}
+            prefill={prefill}
           />
         </div>
       </Section>

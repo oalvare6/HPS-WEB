@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState, use } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  Loader2,
   Pencil,
   CalendarRange,
   Clock,
@@ -34,6 +33,7 @@ import RegistrationsList from "@/components/admin/RegistrationsList";
 import TournamentTeamsPanel from "@/components/admin/TournamentTeamsPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { useQueryParam } from "@/lib/admin-url-state";
+import { TournamentDetailSkeleton } from "@/components/shared/skeleton";
 
 type RosterTab = "registrants" | "teams";
 
@@ -144,12 +144,7 @@ function ViewContent({ id }: { id: string }) {
 
       <Section dark className="bg-surface !py-8 md:!py-12" container={false}>
         <div className="max-w-6xl mx-auto px-6 space-y-6">
-          {loading && (
-            <div className="flex items-center gap-3 text-zinc-400 py-8">
-              <Loader2 size={24} className="animate-spin" />
-              <span>Loading tournament…</span>
-            </div>
-          )}
+          {loading && <TournamentDetailSkeleton />}
 
           {!loading && error && (
             <div className="dashboard-card p-6">
