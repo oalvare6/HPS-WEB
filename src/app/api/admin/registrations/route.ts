@@ -5,24 +5,42 @@ import { upsertContactByEmail, normalizeEmail, normalizePhone } from "@/lib/cont
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
 
   const unauthorized = await verifyAdmin();
   if (unauthorized) return unauthorized;
 
+  const tournamentIdParam = req.nextUrl.searchParams.get("tournament_id");
+  let tournamentFilter: string | null = null;
+  if (tournamentIdParam !== null && tournamentIdParam !== "") {
+    if (!UUID_RE.test(tournamentIdParam)) {
+      return NextResponse.json(
+        { error: "Invalid tournament_id." },
+        { status: 400 }
+      );
+    }
+    tournamentFilter = tournamentIdParam;
+  }
+
   try {
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("registrations")
       .select(
-        `id, created_at, tournament_id, contact_id, registration_type, first_name, last_name, email, phone, dob,
+        `id, created_at, tournament_id, contact_id, team_id, registration_type, first_name, last_name, email, phone, dob,
          emergency_name, emergency_phone, waiver_type, waiver_signed, waiver_signed_at,
          waiver_submission_id, waiver_match_key, waiver_document_url, payment_status,
          docuseal_status, docuseal_submission_id, docuseal_sign_url,
          tournament:tournaments ( id, title, slug ),
-         contact:contacts ( id, first_name, last_name, email, tags ),
+         contact:contacts ( id, first_name, last_name, email, tags, waiver_type, waiver_signed_at, waiver_expires_at ),
          payments ( id, amount, currency, status, tournament_id, tournament_name, created_at )`
       )
       .order("created_at", { ascending: false });
+
+    if (tournamentFilter) {
+      query = query.eq("tournament_id", tournamentFilter);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       // #region agent log

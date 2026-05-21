@@ -22,6 +22,7 @@ import {
   type TournamentStatus,
 } from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
+import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 
 const STATUS_STYLES: Record<TournamentStatus, string> = {
   upcoming: "bg-brand/20 text-brand",
@@ -44,6 +45,7 @@ export default function AdminTournamentsPage() {
 }
 
 function AdminTournamentsContent() {
+  useScrollRestoration("admin-tournaments");
   const router = useRouter();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,10 +210,22 @@ function AdminTournamentsContent() {
                   <tbody>
                     {tournaments.map((t, i) => {
                       const thumb = t.image_url || getPresetUrl(t.image_preset);
+                      const viewHref = `/admin/tournaments/${t.id}`;
+                      const openView = () => router.push(viewHref);
                       return (
                         <tr
                           key={t.id}
-                          className="border-b border-border-token last:border-b-0 hover:bg-surface-2/40 transition-colors"
+                          onClick={openView}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openView();
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`View ${t.title}`}
+                          className="border-b border-border-token last:border-b-0 hover:bg-surface-2/40 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset"
                         >
                           <td className="px-4 py-3">
                             <div className="w-20 shrink-0 rounded overflow-hidden bg-surface-2 border border-border-token aspect-[16/7] relative">
@@ -251,7 +265,11 @@ function AdminTournamentsContent() {
                           <td className="px-4 py-3 hidden sm:table-cell">
                             <Dot on={t.payments_open} />
                           </td>
-                          <td className="px-4 py-3">
+                          <td
+                            className="px-4 py-3"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => handleToggleFeatured(t)}

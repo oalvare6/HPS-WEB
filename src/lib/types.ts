@@ -175,6 +175,7 @@ export type Registration = {
   id: string;
   tournament_id: string | null;
   contact_id: string | null;
+  team_id: string | null;
   registration_type: RegistrationType;
   first_name: string;
   last_name: string;
@@ -197,6 +198,13 @@ export type Registration = {
   docuseal_submission_id: number | null;
   docuseal_sign_url: string | null;
   docuseal_status: DocuSealStatus;
+  /**
+   * Set by Phase 5 contact-linking when more than one distinct contact
+   * matches the registration's email or phone. The registration is still
+   * linked (to the email-canonical contact), but an admin should review the
+   * duplicate before merging.
+   */
+  needs_admin_review: boolean;
   created_at: string;
   updated_at: string;
 };

@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import { TournamentForm } from "@/components/admin/TournamentForm";
 import { TournamentRoundsPanel } from "@/components/admin/TournamentRoundsPanel";
 import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
+import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import type { Tournament } from "@/lib/types";
+import { fetchTournamentById } from "@/lib/admin-tournaments";
 
 export default function EditTournamentPage({
   params,
@@ -25,29 +26,44 @@ function EditContent({ id }: { id: string }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`/api/admin/tournaments/${id}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) {
-          setError(data.error);
-          return;
+    let cancelled = false;
+    setLoading(true);
+
+    fetchTournamentById(id)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.error || !result.data) {
+          setError(result.error ?? "Failed to load tournament.");
+          setTournament(null);
+        } else {
+          setTournament(result.data);
+          setError("");
         }
-        setTournament(data.tournament);
       })
-      .catch(() => setError("Failed to load tournament."))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   return (
     <>
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
-          <Link
-            href="/admin/tournaments"
-            className="text-sm text-zinc-400 hover:text-white transition-colors"
-          >
-            ← Back to tournaments
-          </Link>
+          <Breadcrumbs
+            items={[
+              { label: "Admin", href: "/admin" },
+              { label: "Tournaments", href: "/admin/tournaments" },
+              {
+                label: tournament?.title ?? "Tournament",
+                href: tournament ? `/admin/tournaments/${tournament.id}` : undefined,
+              },
+              { label: "Edit" },
+            ]}
+          />
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mt-3 mb-2">
             Edit Tournament
           </h1>

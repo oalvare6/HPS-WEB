@@ -8,6 +8,7 @@ import {
   normalizePhone,
   upsertContactByEmail,
 } from "@/lib/contacts";
+import { linkRegistrationToContact } from "@/lib/registration-contact-linking";
 
 type RegistrationType = "adult" | "youth";
 
@@ -156,6 +157,20 @@ export async function POST(request: Request) {
         { error: "We couldn't save your registration right now. Please try again." },
         { status: 500 }
       );
+    }
+
+    // Best-effort post-insert link. `upsertContactByEmail` above already set
+    // contact_id to the email-canonical contact; this catches the case where a
+    // different contact owns the same phone number and flags the registration
+    // for admin review. Failure here must not break the registration flow.
+    try {
+      await linkRegistrationToContact({
+        registrationId: inserted.id,
+        email: payload.email,
+        phone: payload.phone,
+      });
+    } catch (linkErr) {
+      console.warn("[register] post-insert contact link failed:", linkErr);
     }
 
     const baseUrl =

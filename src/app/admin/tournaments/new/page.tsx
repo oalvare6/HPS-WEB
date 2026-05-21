@@ -1,20 +1,21 @@
 "use client";
 
-import Link from "next/link";
 import { Section } from "@/components/shared/section";
 import { TournamentForm } from "@/components/admin/TournamentForm";
+import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 
 export default function NewTournamentPage() {
   return (
     <>
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
-          <Link
-            href="/admin/tournaments"
-            className="text-sm text-zinc-400 hover:text-white transition-colors"
-          >
-            ← Back to tournaments
-          </Link>
+          <Breadcrumbs
+            items={[
+              { label: "Admin", href: "/admin" },
+              { label: "Tournaments", href: "/admin/tournaments" },
+              { label: "New" },
+            ]}
+          />
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mt-3 mb-2">
             New Tournament
           </h1>

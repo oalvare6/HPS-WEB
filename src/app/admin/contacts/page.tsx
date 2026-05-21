@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Section } from "@/components/shared/section";
 import {
   Loader2,
@@ -18,6 +25,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/types";
+import { useQueryParamsSetter } from "@/lib/admin-url-state";
+import { useScrollRestoration } from "@/lib/use-scroll-restoration";
+import { useSearchParams } from "next/navigation";
 
 type ContactWithCounts = Contact;
 
@@ -30,10 +40,25 @@ function fullName(c: Contact): string {
 }
 
 export default function AdminContactsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminContactsContent />
+    </Suspense>
+  );
+}
+
+function AdminContactsContent() {
+  useScrollRestoration("admin-contacts");
+
+  const searchParams = useSearchParams();
+  const setUrlParams = useQueryParamsSetter();
+  const initialQ = searchParams.get("q") ?? "";
+  const initialTag = searchParams.get("tag") ?? "";
+
   const [contacts, setContacts] = useState<ContactWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
+  const [search, setSearch] = useState(initialQ);
+  const [tagFilter, setTagFilter] = useState(initialTag);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [mergeWinner, setMergeWinner] = useState<string | null>(null);
@@ -59,10 +84,27 @@ export default function AdminContactsPage() {
     }
   }, [search, tagFilter]);
 
+  // Access the URL-setter through a ref so writing to the URL (which mutates
+  // `searchParams` and therefore the setter's identity) does not retrigger
+  // this debounced effect and cause a redundant fetch.
+  const setUrlParamsRef = useRef(setUrlParams);
   useEffect(() => {
-    const t = setTimeout(fetchContacts, 200);
+    setUrlParamsRef.current = setUrlParams;
+  });
+
+  // Debounced: write the committed values to the URL and fetch in lockstep so
+  // a hard reload returns the same view, and the back button to a detail page
+  // returns to the same filter state.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setUrlParamsRef.current({
+        q: search || null,
+        tag: tagFilter || null,
+      });
+      fetchContacts();
+    }, 200);
     return () => clearTimeout(t);
-  }, [fetchContacts]);
+  }, [search, tagFilter, fetchContacts]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();

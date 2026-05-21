@@ -1,3 +1,19 @@
+-- Baseline: create public.registrations.
+--
+-- This migration backfills the migrations history for the registrations table,
+-- which was originally created via the loose `supabase/registrations.sql`
+-- script and applied manually in the Supabase SQL Editor on 2026-03-19. The
+-- timestamp on this file is set to the original apply time so it sorts before
+-- `20260513120600_alter_registrations_links.sql`, which alters this table.
+--
+-- The DDL is idempotent (`if not exists`) so re-running this against the
+-- existing prod database is a no-op.
+--
+-- Rollback (do NOT run without explicit approval; this is destructive):
+--   drop trigger if exists registrations_set_updated_at on public.registrations;
+--   drop table if exists public.registrations;
+--   -- public.set_updated_at() is shared with other triggers; do not drop it here.
+
 create extension if not exists pgcrypto;
 
 create table if not exists public.registrations (
@@ -18,13 +34,11 @@ create table if not exists public.registrations (
   waiver_signed_at timestamptz,
   waiver_submission_id text,
   waiver_match_key uuid not null default gen_random_uuid(),
-  payment_status text not null default 'pending' check (payment_status in ('pending', 'paid', 'partial', 'waived', 'refunded')),
+  payment_status text not null default 'pending'
+    check (payment_status in ('pending', 'paid', 'partial', 'waived', 'refunded')),
   payment_method text,
   payment_amount numeric(10, 2),
-  notes text,
-  docuseal_submission_id integer,
-  docuseal_sign_url text,
-  docuseal_status text not null default 'pending' check (docuseal_status in ('pending', 'sent', 'signed'))
+  notes text
 );
 
 create unique index if not exists registrations_waiver_match_key_idx
@@ -35,9 +49,6 @@ create index if not exists registrations_email_idx
 
 create index if not exists registrations_payment_status_idx
   on public.registrations (payment_status);
-
-create index if not exists registrations_docuseal_submission_id_idx
-  on public.registrations (docuseal_submission_id);
 
 create or replace function public.set_updated_at()
 returns trigger

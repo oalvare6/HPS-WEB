@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Section } from "@/components/shared/section";
 import {
   Loader2,
@@ -15,6 +21,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/types";
+import { useQueryParam } from "@/lib/admin-url-state";
+import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 
 type DropInRow = {
   id: string;
@@ -60,11 +68,37 @@ function formatDate(iso: string) {
   });
 }
 
+const DROP_IN_STATUSES = ["pending", "paid", "waived", "refunded"] as const;
+type DropInStatus = (typeof DROP_IN_STATUSES)[number];
+
+function isDropInStatus(value: string): value is DropInStatus {
+  return (DROP_IN_STATUSES as readonly string[]).includes(value);
+}
+
 export default function AdminDropInsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminDropInsContent />
+    </Suspense>
+  );
+}
+
+function AdminDropInsContent() {
+  useScrollRestoration("admin-drop-ins");
+
   const [rows, setRows] = useState<DropInRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tournamentFilter, setTournamentFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [tournamentFilter, setTournamentFilter] = useQueryParam(
+    "tournament_id",
+    "",
+  );
+  const [statusParam, setStatusParam] = useQueryParam("status", "");
+  const statusFilter: "" | DropInStatus = isDropInStatus(statusParam)
+    ? statusParam
+    : "";
+  const setStatusFilter = (next: string) => {
+    setStatusParam(next === "" ? null : next);
+  };
   const [tournaments, setTournaments] = useState<TournamentOption[]>([]);
   const [showCreate, setShowCreate] = useState(false);
 
