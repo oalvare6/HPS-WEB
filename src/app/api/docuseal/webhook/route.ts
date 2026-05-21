@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyDocusealWebhookSignature } from "@/lib/app-signing";
+import { getWaiverExpiryIso } from "@/lib/contacts";
 
 interface DocuSealWebhookPayload {
   event_type: string;
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const { data: registration, error: findErr } = await supabaseAdmin
       .from("registrations")
-      .select("id")
+      .select("id, contact_id, waiver_type")
       .eq("docuseal_submission_id", submissionId)
       .single();
 
@@ -76,9 +77,12 @@ export async function POST(request: NextRequest) {
       payload.data.documents?.[0]?.url ??
       null;
 
+    const signedAt = payload.data.completed_at ?? new Date().toISOString();
+    const expiresAt = getWaiverExpiryIso(signedAt);
+
     const updateFields: Record<string, unknown> = {
       waiver_signed: true,
-      waiver_signed_at: payload.data.completed_at ?? new Date().toISOString(),
+      waiver_signed_at: signedAt,
       docuseal_status: "signed",
     };
 
@@ -104,6 +108,23 @@ export async function POST(request: NextRequest) {
               error.code
             );
         });
+    }
+
+    if (registration.contact_id) {
+      const { error: contactErr } = await supabaseAdmin
+        .from("contacts")
+        .update({
+          waiver_type: registration.waiver_type,
+          waiver_signed_at: signedAt,
+          waiver_expires_at: expiresAt,
+          waiver_document_url: documentUrl,
+          waiver_submission_id: submissionId,
+          waiver_source: "docuseal",
+        })
+        .eq("id", registration.contact_id);
+      if (contactErr) {
+        console.warn("DocuSeal webhook: failed to update contact waiver state", contactErr.message);
+      }
     }
 
     return NextResponse.json({ ok: true });

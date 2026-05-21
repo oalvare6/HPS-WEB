@@ -22,7 +22,7 @@ export async function GET(
 
   const { data, error } = await supabaseAdmin
     .from("registrations")
-    .select("email, first_name, payment_status")
+    .select("email, first_name, payment_status, tournament_id, tournament:tournaments ( id, title, entry_fee_cents, drop_in_fee_cents )")
     .eq("id", id)
     .maybeSingle();
 
@@ -38,9 +38,15 @@ export async function GET(
     return NextResponse.json({ error: "Registration not found." }, { status: 404 });
   }
 
+  const tournament = Array.isArray(data.tournament) ? data.tournament[0] : data.tournament;
+
   return NextResponse.json({
     email: data.email,
     firstName: data.first_name,
     paymentStatus: data.payment_status,
+    tournamentId: data.tournament_id,
+    tournamentTitle: tournament?.title ?? null,
+    tournamentEntryFeeCents: tournament?.entry_fee_cents ?? null,
+    tournamentDropInFeeCents: tournament?.drop_in_fee_cents ?? null,
   });
 }

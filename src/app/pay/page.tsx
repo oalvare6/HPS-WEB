@@ -15,30 +15,24 @@ import {
   Users,
 } from "lucide-react";
 
-const PAYMENT_OPTIONS = [
-  {
-    id: "full-season-payment",
-    name: "Full Season Payment",
-    description: "Full season entry — all Friday nights",
-    date: "Every Friday starting Mar 27, 2026",
-    time: "7:00 PM – 12:00 AM",
-    location: "14062 Ambrose St, Houston TX",
-    format: "Youth & Adult 7v7",
-    amountCents: 9000,
-    badge: "Full Season",
-  },
-  {
-    id: "guest-playing-one-day",
-    name: "Guest Playing  One Day/Round Payment",
-    description: "First-timer or single-night guest entry",
-    date: "Every Friday starting Mar 27, 2026",
-    time: "7:00 PM – 12:00 AM",
-    location: "14062 Ambrose St, Houston TX",
-    format: "Youth & Adult 7v7",
-    amountCents: 1500,
-    badge: "Guest / Drop-In",
-  },
-];
+type TournamentPayOption = {
+  id: string;
+  title: string;
+  slug: string;
+  format: string | null;
+  recurrence: string | null;
+  time_start: string | null;
+  time_end: string | null;
+  location: string | null;
+  entry_fee_cents: number | null;
+  drop_in_fee_cents: number;
+};
+
+type PayKind = "entry" | "drop_in";
+
+function formatUsd(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 function PayForm() {
   const searchParams = useSearchParams();
@@ -48,15 +42,82 @@ function PayForm() {
 
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
-  const [selectedId, setSelectedId] = useState(PAYMENT_OPTIONS[0].id);
+  const [tournaments, setTournaments] = useState<TournamentPayOption[]>([]);
+  const [selectedTournamentId, setSelectedTournamentId] = useState("");
+  const [selectedPayKind, setSelectedPayKind] = useState<PayKind>("entry");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [payOptionsLoading, setPayOptionsLoading] = useState(true);
+  const [payOptionsError, setPayOptionsError] = useState("");
   const [registrationLoading, setRegistrationLoading] = useState(Boolean(registrationId));
   const [registrationLoadError, setRegistrationLoadError] = useState("");
   const [alreadyPaid, setAlreadyPaid] = useState(false);
+  const [registrationTournament, setRegistrationTournament] = useState<{
+    id: string | null;
+    title: string | null;
+    entryFeeCents: number | null;
+    dropInFeeCents: number | null;
+  } | null>(null);
 
-  const selected = PAYMENT_OPTIONS.find((t) => t.id === selectedId) ?? PAYMENT_OPTIONS[0];
   const hasRegistration = Boolean(registrationId);
+  const selectedTournament =
+    tournaments.find((t) => t.id === selectedTournamentId) ??
+    tournaments[0] ??
+    null;
+
+  const selectedAmountCents = hasRegistration
+    ? registrationTournament?.entryFeeCents ?? null
+    : selectedPayKind === "drop_in"
+      ? (selectedTournament?.drop_in_fee_cents ?? null)
+      : (selectedTournament?.entry_fee_cents ?? null);
+
+  const selectedPayTitle = hasRegistration
+    ? registrationTournament?.title ?? "Tournament Entry"
+    : selectedPayKind === "drop_in"
+      ? `${selectedTournament?.title ?? "Tournament"} — Drop-in`
+      : (selectedTournament?.title ?? "Tournament Entry");
+
+  useEffect(() => {
+    let cancelledFetch = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/pay/options");
+        const data = (await res.json()) as {
+          tournaments?: TournamentPayOption[];
+          error?: string;
+        };
+        if (cancelledFetch) return;
+        if (!res.ok) {
+          setPayOptionsError(data.error ?? "Could not load current payment options.");
+          return;
+        }
+        const options = data.tournaments ?? [];
+        setTournaments(options);
+        if (options.length > 0) {
+          setSelectedTournamentId((prev) => prev || options[0].id);
+        }
+      } catch {
+        if (!cancelledFetch) {
+          setPayOptionsError("Network error loading payment options. Please refresh.");
+        }
+      } finally {
+        if (!cancelledFetch) setPayOptionsLoading(false);
+      }
+    })();
+    return () => {
+      cancelledFetch = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTournament) return;
+    if (selectedPayKind === "entry" && !selectedTournament.entry_fee_cents) {
+      setSelectedPayKind("drop_in");
+    }
+    if (selectedPayKind === "drop_in" && !selectedTournament.drop_in_fee_cents) {
+      setSelectedPayKind("entry");
+    }
+  }, [selectedTournament, selectedPayKind]);
 
   useEffect(() => {
     if (!registrationId) return;
@@ -71,6 +132,10 @@ function PayForm() {
           email?: string;
           firstName?: string;
           paymentStatus?: string;
+          tournamentId?: string | null;
+          tournamentTitle?: string | null;
+          tournamentEntryFeeCents?: number | null;
+          tournamentDropInFeeCents?: number | null;
           error?: string;
         };
 
@@ -86,6 +151,15 @@ function PayForm() {
         if (data.email) setEmail(data.email);
         if (data.firstName) setFirstName(data.firstName);
         if (data.paymentStatus === "paid") setAlreadyPaid(true);
+        setRegistrationTournament({
+          id: data.tournamentId ?? null,
+          title: data.tournamentTitle ?? null,
+          entryFeeCents: data.tournamentEntryFeeCents ?? null,
+          dropInFeeCents: data.tournamentDropInFeeCents ?? null,
+        });
+        if (data.tournamentId) {
+          setSelectedTournamentId(data.tournamentId);
+        }
       } catch {
         if (!cancelledFetch) {
           setRegistrationLoadError(
@@ -113,8 +187,8 @@ function PayForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
-          tournamentName: selected.name,
-          amountCents: selected.amountCents,
+          tournamentId: hasRegistration ? undefined : selectedTournament?.id,
+          payKind: hasRegistration ? "entry" : selectedPayKind,
           registrationId: registrationId || undefined,
           payToken: payToken || undefined,
         }),
@@ -151,6 +225,28 @@ function PayForm() {
           <div>
             <p className="font-semibold mb-1">We couldn&apos;t load your registration</p>
             <p className="text-sm text-zinc-400">{registrationLoadError}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasRegistration && payOptionsLoading) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-20 text-center text-zinc-400">
+        Loading payment options…
+      </div>
+    );
+  }
+
+  if (!hasRegistration && payOptionsError) {
+    return (
+      <div className="max-w-2xl mx-auto px-6 py-20">
+        <div className="dashboard-card p-6 flex items-start gap-3 text-red-400">
+          <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold mb-1">We couldn&apos;t load payment options</p>
+            <p className="text-sm text-zinc-400">{payOptionsError}</p>
           </div>
         </div>
       </div>
@@ -196,72 +292,132 @@ function PayForm() {
         </div>
       )}
 
+      {!hasRegistration && selectedTournament && (
+        <div className="mb-6 space-y-2">
+          <label htmlFor="tournamentId" className="block text-sm font-medium text-zinc-300">
+            Tournament
+          </label>
+          <select
+            id="tournamentId"
+            name="tournamentId"
+            value={selectedTournament.id}
+            onChange={(e) => setSelectedTournamentId(e.target.value)}
+            className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors"
+          >
+            {tournaments.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Event info */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-2 h-2 bg-brand rounded-full animate-pulse" />
           <span className="text-xs font-mono text-brand uppercase tracking-wider">
-            Registration Open
+            Payments Open
           </span>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2 text-zinc-300">
             <Calendar size={14} className="text-brand flex-shrink-0" />
-            <span>{selected.date}</span>
+            <span>{selectedTournament?.recurrence ?? "Schedule posted in events."}</span>
           </div>
           <div className="flex items-center gap-2 text-zinc-300">
             <Clock size={14} className="text-brand flex-shrink-0" />
-            <span>{selected.time}</span>
+            <span>
+              {selectedTournament?.time_start && selectedTournament?.time_end
+                ? `${selectedTournament.time_start} – ${selectedTournament.time_end}`
+                : "See tournament page"}
+            </span>
           </div>
           <div className="flex items-center gap-2 text-zinc-300">
             <MapPin size={14} className="text-brand flex-shrink-0" />
-            <span>{selected.location}</span>
+            <span>{selectedTournament?.location ?? "Houston Premier Soccer"}</span>
           </div>
           <div className="flex items-center gap-2 text-zinc-300">
             <Users size={14} className="text-brand flex-shrink-0" />
-            <span>{selected.format}</span>
+            <span>{selectedTournament?.format ?? "Tournament"}</span>
           </div>
         </div>
       </div>
 
-      {/* Tier selection cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-        {PAYMENT_OPTIONS.map((opt) => (
-          <button
-            key={opt.id}
-            type="button"
-            onClick={() => setSelectedId(opt.id)}
-            className={`dashboard-card p-5 text-left transition-all ${
-              selectedId === opt.id
-                ? "ring-2 ring-brand border-brand"
-                : "hover:border-border-token"
-            }`}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <span
-                className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
-                  selectedId === opt.id
-                    ? "bg-brand/20 text-brand"
-                    : "bg-base text-zinc-400"
-                }`}
-              >
-                {opt.badge}
-              </span>
-              <Trophy
-                size={20}
-                className={
-                  selectedId === opt.id ? "text-brand" : "text-zinc-600"
-                }
-              />
-            </div>
-            <p className="text-white font-semibold mb-1">{opt.name}</p>
-            <p className="text-zinc-400 text-sm mb-3">{opt.description}</p>
-            <p className="text-2xl font-bold text-white">
-              ${(opt.amountCents / 100).toFixed(2)}
-            </p>
-          </button>
-        ))}
-      </div>
+      {!hasRegistration && selectedTournament && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+          {selectedTournament.entry_fee_cents ? (
+            <button
+              type="button"
+              onClick={() => setSelectedPayKind("entry")}
+              className={`dashboard-card p-5 text-left transition-all ${
+                selectedPayKind === "entry"
+                  ? "ring-2 ring-brand border-brand"
+                  : "hover:border-border-token"
+              }`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                    selectedPayKind === "entry"
+                      ? "bg-brand/20 text-brand"
+                      : "bg-base text-zinc-400"
+                  }`}
+                >
+                  Full Tournament
+                </span>
+                <Trophy
+                  size={20}
+                  className={selectedPayKind === "entry" ? "text-brand" : "text-zinc-600"}
+                />
+              </div>
+              <p className="text-white font-semibold mb-1">Tournament Entry</p>
+              <p className="text-zinc-400 text-sm mb-3">
+                Full tournament registration payment.
+              </p>
+              <p className="text-2xl font-bold text-white">
+                {formatUsd(selectedTournament.entry_fee_cents)}
+              </p>
+            </button>
+          ) : null}
+
+          {selectedTournament.drop_in_fee_cents ? (
+            <button
+              type="button"
+              onClick={() => setSelectedPayKind("drop_in")}
+              className={`dashboard-card p-5 text-left transition-all ${
+                selectedPayKind === "drop_in"
+                  ? "ring-2 ring-brand border-brand"
+                  : "hover:border-border-token"
+              }`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                    selectedPayKind === "drop_in"
+                      ? "bg-brand/20 text-brand"
+                      : "bg-base text-zinc-400"
+                  }`}
+                >
+                  Guest / Drop-In
+                </span>
+                <Trophy
+                  size={20}
+                  className={selectedPayKind === "drop_in" ? "text-brand" : "text-zinc-600"}
+                />
+              </div>
+              <p className="text-white font-semibold mb-1">Single Round / Guest</p>
+              <p className="text-zinc-400 text-sm mb-3">
+                One-day guest play or drop-in payment.
+              </p>
+              <p className="text-2xl font-bold text-white">
+                {formatUsd(selectedTournament.drop_in_fee_cents)}
+              </p>
+            </button>
+          ) : null}
+        </div>
+      )}
 
       {/* Payment form */}
       <div className="dashboard-card p-6">
@@ -270,7 +426,10 @@ function PayForm() {
         </h3>
         <p className="text-zinc-400 text-sm mb-6">
           {hasRegistration ? (
-            <>Your payment will be linked to your registration automatically.</>
+            <>
+              Your payment for <span className="text-zinc-200">{selectedPayTitle}</span> will be
+              linked to your registration automatically.
+            </>
           ) : (
             <>
               Enter the email you used when registering. Already registered?{" "}
@@ -322,7 +481,7 @@ function PayForm() {
 
           <button
             type="submit"
-            disabled={loading || !email}
+            disabled={loading || !email || !selectedAmountCents}
             className="btn-primary w-full justify-center h-12 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -330,11 +489,17 @@ function PayForm() {
             ) : (
               <>
                 <CreditCard size={18} />
-                Pay ${(selected.amountCents / 100).toFixed(2)} with Card
+                {selectedAmountCents ? `Pay ${formatUsd(selectedAmountCents)} with Card` : "Amount unavailable"}
                 <ArrowRight size={16} />
               </>
             )}
           </button>
+
+          {!selectedAmountCents && (
+            <p className="text-xs text-yellow-400 text-center">
+              This payment option has no configured amount yet. Please contact support.
+            </p>
+          )}
 
           <p className="text-xs text-zinc-500 text-center">
             Powered by Stripe. Your card details are never stored on our servers.

@@ -4,6 +4,7 @@ import { verifyAdmin } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { slugify } from "@/lib/slug";
 import { sanitizeOptionalInternalPath } from "@/lib/safe-internal-link";
+import { syncTournamentStripePricing } from "@/lib/stripe";
 import {
   assertTournamentStatus,
   ensureFeaturedCapNotExceeded,
@@ -70,6 +71,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Invalid entry fee." }, { status: 400 });
     }
     update.entry_fee = v;
+    update.entry_fee_cents =
+      typeof v === "number" ? Math.max(0, Math.round(v * 100)) : null;
   }
   if ("max_teams" in update) {
     const v = parseOptionalNonNegInt(update.max_teams);
@@ -100,7 +103,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     }
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data: updated, error } = await supabaseAdmin
     .from("tournaments")
     .update(update)
     .eq("id", id)
@@ -112,12 +115,48 @@ export async function PATCH(request: Request, ctx: Ctx) {
     return NextResponse.json({ error: error.message }, { status });
   }
 
+  let tournament = updated;
+  if (updated) {
+    try {
+      const stripeRefs = await syncTournamentStripePricing({
+        tournamentId: updated.id,
+        title: updated.title,
+        slug: updated.slug,
+        entryFeeCents: updated.entry_fee_cents,
+        stripeProductId: updated.stripe_product_id,
+        stripePriceId: updated.stripe_price_id,
+      });
+
+      if (
+        stripeRefs.stripeProductId !== updated.stripe_product_id ||
+        stripeRefs.stripePriceId !== updated.stripe_price_id
+      ) {
+        const { data: syncedRow, error: syncSaveErr } = await supabaseAdmin
+          .from("tournaments")
+          .update({
+            stripe_product_id: stripeRefs.stripeProductId,
+            stripe_price_id: stripeRefs.stripePriceId,
+          })
+          .eq("id", id)
+          .select()
+          .single();
+        if (!syncSaveErr && syncedRow) {
+          tournament = syncedRow;
+        } else if (syncSaveErr) {
+          console.error("Stripe refs save failed after tournament update:", syncSaveErr.message);
+        }
+      }
+    } catch (stripeErr) {
+      console.error("Stripe auto-sync failed after tournament update:", stripeErr);
+    }
+  }
+
   revalidatePath("/events");
   revalidatePath("/");
-  if (data?.slug && typeof data.slug === "string") {
-    revalidatePath(`/events/${data.slug}`);
+  if (tournament?.slug && typeof tournament.slug === "string") {
+    revalidatePath(`/events/${tournament.slug}`);
   }
-  return NextResponse.json({ tournament: data });
+  return NextResponse.json({ tournament });
 }
 
 export async function DELETE(_request: Request, ctx: Ctx) {

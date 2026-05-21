@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
+import { getWaiverExpiryIso } from "@/lib/contacts";
 
 export async function POST() {
   const unauthorized = await verifyAdmin();
@@ -17,7 +18,7 @@ export async function POST() {
   try {
     const { data: pending, error: fetchErr } = await supabaseAdmin
       .from("registrations")
-      .select("id, docuseal_submission_id, first_name, last_name")
+      .select("id, contact_id, waiver_type, docuseal_submission_id, first_name, last_name")
       .eq("docuseal_status", "sent")
       .not("docuseal_submission_id", "is", null);
 
@@ -54,18 +55,38 @@ export async function POST() {
         if (completed) {
           const completedAt = submitters.find(
             (s: { status?: string }) => s.status === "completed"
-          )?.completed_at;
+          )?.completed_at ?? new Date().toISOString();
+          const expiresAt = getWaiverExpiryIso(completedAt);
 
           const { error: updateErr } = await supabaseAdmin
             .from("registrations")
             .update({
               waiver_signed: true,
-              waiver_signed_at: completedAt ?? new Date().toISOString(),
+              waiver_signed_at: completedAt,
               docuseal_status: "signed",
             })
             .eq("id", reg.id);
 
           if (!updateErr) {
+            if (reg.contact_id) {
+              const { error: contactErr } = await supabaseAdmin
+                .from("contacts")
+                .update({
+                  waiver_type: reg.waiver_type,
+                  waiver_signed_at: completedAt,
+                  waiver_expires_at: expiresAt,
+                  waiver_submission_id: reg.docuseal_submission_id,
+                  waiver_source: "docuseal",
+                })
+                .eq("id", reg.contact_id);
+              if (contactErr) {
+                console.warn(
+                  "Sync: contact canonical waiver update failed",
+                  reg.contact_id,
+                  contactErr.message
+                );
+              }
+            }
             synced++;
             results.push({ name: `${reg.first_name} ${reg.last_name}`, status: "signed", updated: true });
           } else {

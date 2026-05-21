@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { createPayResumeToken } from "@/lib/app-signing";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import { upsertContactByEmail, normalizeEmail, normalizePhone } from "@/lib/contacts";
+import {
+  getWaiverExpiryIso,
+  isContactWaiverValid,
+  normalizeEmail,
+  normalizePhone,
+  upsertContactByEmail,
+} from "@/lib/contacts";
 
 type RegistrationType = "adult" | "youth";
 
@@ -152,8 +158,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const templateId = getTemplateId(waiverType);
-
     const baseUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
       `https://${request.headers.get("host")}`;
@@ -174,6 +178,62 @@ export async function POST(request: Request) {
       payToken,
     });
     const completedRedirectUrl = `${baseUrl}/pay?${payQuery.toString()}`;
+    const canSkipWaiver = isContactWaiverValid(contact, waiverType);
+
+    if (canSkipWaiver) {
+      const canonicalSignedAt = contact.waiver_signed_at ?? new Date().toISOString();
+      const canonicalExpiresAt =
+        contact.waiver_expires_at ?? getWaiverExpiryIso(canonicalSignedAt);
+
+      const { error: markSignedErr } = await supabaseAdmin
+        .from("registrations")
+        .update({
+          waiver_signed: true,
+          waiver_signed_at: canonicalSignedAt,
+          waiver_document_url: contact.waiver_document_url,
+          docuseal_status: "signed",
+          docuseal_submission_id: contact.waiver_submission_id,
+        })
+        .eq("id", inserted.id);
+
+      if (markSignedErr) {
+        console.error("Registration waiver-skip update failed:", markSignedErr);
+        return NextResponse.json(
+          { error: "We couldn't finalize your registration right now. Please try again." },
+          { status: 500 }
+        );
+      }
+
+      const contactPatch: Record<string, unknown> = {};
+      if (!contact.waiver_signed_at) {
+        contactPatch.waiver_signed_at = canonicalSignedAt;
+      }
+      if (!contact.waiver_expires_at && canonicalExpiresAt) {
+        contactPatch.waiver_expires_at = canonicalExpiresAt;
+      }
+      if (!contact.waiver_source) {
+        contactPatch.waiver_source = "import";
+      }
+      if (!contact.waiver_type) {
+        contactPatch.waiver_type = waiverType;
+      }
+      if (Object.keys(contactPatch).length > 0) {
+        const { error: contactPatchErr } = await supabaseAdmin
+          .from("contacts")
+          .update(contactPatch)
+          .eq("id", contact.id);
+        if (contactPatchErr) {
+          console.warn("Contact canonical waiver patch failed:", contactPatchErr.message);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        signUrl: completedRedirectUrl,
+      });
+    }
+
+    const templateId = getTemplateId(waiverType);
 
     const dsPayload = {
       template_id: templateId,

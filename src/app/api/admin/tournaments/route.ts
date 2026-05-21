@@ -4,6 +4,7 @@ import { verifyAdmin } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { slugify } from "@/lib/slug";
 import { sanitizeOptionalInternalPath } from "@/lib/safe-internal-link";
+import { syncTournamentStripePricing } from "@/lib/stripe";
 import {
   ensureFeaturedCapNotExceeded,
   parseOptionalMoney,
@@ -52,6 +53,8 @@ export async function POST(request: Request) {
   if (entryFee === "invalid") {
     return NextResponse.json({ error: "Invalid entry fee." }, { status: 400 });
   }
+  const entryFeeCents =
+    typeof entryFee === "number" ? Math.max(0, Math.round(entryFee * 100)) : null;
 
   const maxTeams = parseOptionalNonNegInt(body.max_teams);
   if (maxTeams === "invalid") {
@@ -85,6 +88,7 @@ export async function POST(request: Request) {
     location: body.location ?? null,
     format: body.format ?? null,
     entry_fee: entryFee,
+    entry_fee_cents: entryFeeCents,
     max_teams: maxTeams,
     image_url: body.image_url ?? null,
     image_preset: body.image_preset ?? null,
@@ -94,7 +98,7 @@ export async function POST(request: Request) {
     is_featured: isFeatured,
   };
 
-  const { data, error } = await supabaseAdmin
+  const { data: inserted, error } = await supabaseAdmin
     .from("tournaments")
     .insert(row)
     .select()
@@ -105,10 +109,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status });
   }
 
+  let tournament = inserted;
+  if (inserted) {
+    try {
+      const stripeRefs = await syncTournamentStripePricing({
+        tournamentId: inserted.id,
+        title: inserted.title,
+        slug: inserted.slug,
+        entryFeeCents: inserted.entry_fee_cents,
+        stripeProductId: inserted.stripe_product_id,
+        stripePriceId: inserted.stripe_price_id,
+      });
+      if (
+        stripeRefs.stripeProductId !== inserted.stripe_product_id ||
+        stripeRefs.stripePriceId !== inserted.stripe_price_id
+      ) {
+        const { data: syncedRow, error: syncSaveErr } = await supabaseAdmin
+          .from("tournaments")
+          .update({
+            stripe_product_id: stripeRefs.stripeProductId,
+            stripe_price_id: stripeRefs.stripePriceId,
+          })
+          .eq("id", inserted.id)
+          .select()
+          .single();
+        if (!syncSaveErr && syncedRow) {
+          tournament = syncedRow;
+        } else if (syncSaveErr) {
+          console.error("Stripe refs save failed after tournament create:", syncSaveErr.message);
+        }
+      }
+    } catch (stripeErr) {
+      console.error("Stripe auto-sync failed after tournament create:", stripeErr);
+    }
+  }
+
   revalidatePath("/events");
   revalidatePath("/");
-  if (data?.slug && typeof data.slug === "string") {
-    revalidatePath(`/events/${data.slug}`);
+  if (tournament?.slug && typeof tournament.slug === "string") {
+    revalidatePath(`/events/${tournament.slug}`);
   }
-  return NextResponse.json({ tournament: data });
+  return NextResponse.json({ tournament });
 }

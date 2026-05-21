@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { upsertContactByEmail, normalizeEmail } from "@/lib/contacts";
+import { verifyPayResumeToken } from "@/lib/app-signing";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -17,19 +18,17 @@ type CheckoutBody = {
   registrationId?: string;
   /** Resume token from /api/register. */
   payToken?: string;
-  /** Legacy fallback for the existing /pay tier UI. */
-  tournamentName?: string;
-  amountCents?: number;
 };
 
 type ResolvedCheckout = {
   amountCents: number;
   productName: string;
   productDescription: string;
+  stripePriceId: string | null;
   tournamentId: string | null;
   tournamentName: string | null;
   dropInId: string | null;
-  payKind: "entry" | "drop_in" | "legacy";
+  payKind: "entry" | "drop_in";
 };
 
 async function resolveTournamentCheckout(
@@ -42,7 +41,7 @@ async function resolveTournamentCheckout(
 
   const { data: t, error } = await supabaseAdmin
     .from("tournaments")
-    .select("id, title, entry_fee_cents, drop_in_fee_cents, payments_open, status")
+    .select("id, title, entry_fee_cents, drop_in_fee_cents, stripe_price_id, payments_open, status")
     .eq("id", tournamentId)
     .maybeSingle();
 
@@ -74,6 +73,7 @@ async function resolveTournamentCheckout(
       kind === "drop_in"
         ? "Houston Premier Soccer — Single-night drop-in"
         : "Houston Premier Soccer — Tournament Entry Fee",
+    stripePriceId: kind === "entry" ? (t.stripe_price_id ?? null) : null,
     tournamentId: t.id,
     tournamentName: t.title,
     dropInId: null,
@@ -118,6 +118,7 @@ async function resolveDropInCheckout(
     amountCents: data.amount_cents,
     productName: t?.title ? `${t.title} — Drop-in` : "Drop-in",
     productDescription: "Houston Premier Soccer — Single-night drop-in",
+    stripePriceId: null,
     tournamentId: data.tournament_id ?? null,
     tournamentName: t?.title ?? null,
     dropInId: data.id,
@@ -135,8 +136,59 @@ export async function POST(req: NextRequest) {
     }
 
     let resolved: ResolvedCheckout;
+    let resolvedRegistrationId: string | null = null;
+    let checkoutEmail = email;
 
-    if (body.dropInId) {
+    if (body.registrationId) {
+      if (!UUID_RE.test(body.registrationId)) {
+        return NextResponse.json({ error: "Invalid registration id." }, { status: 400 });
+      }
+      if (!verifyPayResumeToken(body.registrationId, body.payToken)) {
+        return NextResponse.json(
+          { error: "Invalid or expired payment link. Start from your registration link." },
+          { status: 403 }
+        );
+      }
+
+      const { data: registration, error: registrationErr } = await supabaseAdmin
+        .from("registrations")
+        .select("id, email, payment_status, tournament_id")
+        .eq("id", body.registrationId)
+        .maybeSingle();
+
+      if (registrationErr || !registration) {
+        return NextResponse.json({ error: "Registration not found." }, { status: 404 });
+      }
+      if (registration.payment_status === "paid") {
+        return NextResponse.json({ error: "This registration is already paid." }, { status: 400 });
+      }
+
+      const registrationEmail = normalizeEmail(registration.email ?? "");
+      if (!registrationEmail) {
+        return NextResponse.json(
+          { error: "Registration email is missing. Please contact support." },
+          { status: 400 }
+        );
+      }
+      if (registrationEmail !== email) {
+        return NextResponse.json(
+          { error: "Email does not match this registration." },
+          { status: 403 }
+        );
+      }
+      if (!registration.tournament_id) {
+        return NextResponse.json(
+          { error: "Registration is not linked to a tournament yet. Please contact support." },
+          { status: 400 }
+        );
+      }
+
+      const r = await resolveTournamentCheckout(registration.tournament_id, body.payKind);
+      if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
+      resolved = r;
+      resolvedRegistrationId = registration.id;
+      checkoutEmail = registrationEmail;
+    } else if (body.dropInId) {
       const r = await resolveDropInCheckout(body.dropInId);
       if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
       resolved = r;
@@ -144,40 +196,18 @@ export async function POST(req: NextRequest) {
       const r = await resolveTournamentCheckout(body.tournamentId, body.payKind);
       if ("error" in r) return NextResponse.json({ error: r.error }, { status: r.status });
       resolved = r;
-    } else if (body.amountCents && body.tournamentName) {
-      // Legacy path used by the current /pay tier UI. Server still computes
-      // metadata for the webhook so contact_id can be linked.
-      resolved = {
-        amountCents: body.amountCents,
-        productName: body.tournamentName,
-        productDescription: "Houston Premier Soccer — Tournament Entry Fee",
-        tournamentId: null,
-        tournamentName: body.tournamentName,
-        dropInId: null,
-        payKind: "legacy",
-      };
     } else {
       return NextResponse.json(
-        { error: "Provide tournamentId, dropInId, or legacy tournamentName + amountCents." },
+        { error: "Provide tournamentId, dropInId, or a valid registrationId + payToken." },
         { status: 400 }
       );
-    }
-
-    let resolvedRegistrationId: string | null = null;
-    if (body.registrationId && UUID_RE.test(body.registrationId)) {
-      const { data: byId } = await supabaseAdmin
-        .from("registrations")
-        .select("id")
-        .eq("id", body.registrationId)
-        .maybeSingle();
-      resolvedRegistrationId = byId?.id ?? null;
     }
 
     if (!resolvedRegistrationId) {
       let query = supabaseAdmin
         .from("registrations")
         .select("id")
-        .eq("email", email)
+        .eq("email", checkoutEmail)
         .order("created_at", { ascending: false })
         .limit(1);
       if (resolved.tournamentId) {
@@ -190,7 +220,7 @@ export async function POST(req: NextRequest) {
     const { contact } = await upsertContactByEmail({
       first_name: "",
       last_name: "",
-      email,
+      email: checkoutEmail,
       tags: ["paying"],
     });
 
@@ -199,28 +229,29 @@ export async function POST(req: NextRequest) {
       `https://${req.headers.get("host")}`;
 
     const cancelParams = new URLSearchParams({ cancelled: "true" });
-    if (body.registrationId) cancelParams.set("registrationId", body.registrationId);
+    if (resolvedRegistrationId) cancelParams.set("registrationId", resolvedRegistrationId);
     if (body.payToken) cancelParams.set("payToken", body.payToken);
 
     const session = await getStripe().checkout.sessions.create({
       mode: "payment",
-      payment_method_types: ["card"],
-      customer_email: email,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "usd",
-            unit_amount: resolved.amountCents,
-            product_data: {
-              name: resolved.productName,
-              description: resolved.productDescription,
+      customer_email: checkoutEmail,
+      line_items: resolved.stripePriceId
+        ? [{ quantity: 1, price: resolved.stripePriceId }]
+        : [
+            {
+              quantity: 1,
+              price_data: {
+                currency: "usd",
+                unit_amount: resolved.amountCents,
+                product_data: {
+                  name: resolved.productName,
+                  description: resolved.productDescription,
+                },
+              },
             },
-          },
-        },
-      ],
+          ],
       metadata: {
-        email,
+        email: checkoutEmail,
         tournament_id: resolved.tournamentId ?? "",
         tournament_name: resolved.tournamentName ?? resolved.productName,
         registration_id: resolvedRegistrationId ?? "",

@@ -3,6 +3,7 @@ import type { Contact, ContactInput } from "@/lib/types";
 
 const CONTACTS_LOAD_USER_MESSAGE =
   "We couldn't load contacts right now. Please try again.";
+export const WAIVER_VALIDITY_DAYS = 365;
 
 /**
  * Normalize an email for lookup/dedupe. Postgres `citext` is case-insensitive,
@@ -22,6 +23,30 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   if (!trimmed) return null;
   const digits = trimmed.replace(/[^\d+]/g, "");
   return digits || null;
+}
+
+export function getWaiverExpiryIso(
+  signedAtIso: string | null | undefined,
+  days = WAIVER_VALIDITY_DAYS
+): string | null {
+  if (!signedAtIso) return null;
+  const signedAtMs = Date.parse(signedAtIso);
+  if (Number.isNaN(signedAtMs)) return null;
+  return new Date(signedAtMs + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+export function isContactWaiverValid(
+  contact: Pick<Contact, "waiver_type" | "waiver_signed_at" | "waiver_expires_at"> | null,
+  waiverType: "adult" | "youth",
+  now = Date.now()
+): boolean {
+  if (!contact) return false;
+  if (!contact.waiver_signed_at) return false;
+  if (contact.waiver_type !== waiverType) return false;
+  if (!contact.waiver_expires_at) return false;
+  const expiresMs = Date.parse(contact.waiver_expires_at);
+  if (Number.isNaN(expiresMs)) return false;
+  return expiresMs > now;
 }
 
 /**

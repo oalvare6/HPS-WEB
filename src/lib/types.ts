@@ -132,6 +132,12 @@ export type Contact = {
   notes: string | null;
   tags: string[];
   marketing_opt_in: boolean;
+  waiver_type: WaiverType | null;
+  waiver_signed_at: string | null;
+  waiver_expires_at: string | null;
+  waiver_document_url: string | null;
+  waiver_submission_id: number | null;
+  waiver_source: "docuseal" | "admin_override" | "import" | null;
   created_at: string;
   updated_at: string;
 };

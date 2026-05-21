@@ -69,14 +69,47 @@ create table if not exists public.contacts (
   notes text,
   tags text[] not null default '{}',
   marketing_opt_in boolean not null default true,
+  waiver_type text check (waiver_type is null or waiver_type in ('adult', 'youth')),
+  waiver_signed_at timestamptz,
+  waiver_expires_at timestamptz,
+  waiver_document_url text,
+  waiver_submission_id integer,
+  waiver_source text
+    check (waiver_source is null or waiver_source in ('docuseal', 'admin_override', 'import')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.contacts
+  add column if not exists waiver_type text
+    check (waiver_type is null or waiver_type in ('adult', 'youth'));
+
+alter table public.contacts
+  add column if not exists waiver_signed_at timestamptz;
+
+alter table public.contacts
+  add column if not exists waiver_expires_at timestamptz;
+
+alter table public.contacts
+  add column if not exists waiver_document_url text;
+
+alter table public.contacts
+  add column if not exists waiver_submission_id integer;
+
+alter table public.contacts
+  add column if not exists waiver_source text
+    check (
+      waiver_source is null
+      or waiver_source in ('docuseal', 'admin_override', 'import')
+    );
 
 create unique index if not exists contacts_email_unique_idx on public.contacts (email);
 create index if not exists contacts_phone_idx on public.contacts (phone) where phone is not null;
 create index if not exists contacts_tags_gin_idx on public.contacts using gin (tags);
 create index if not exists contacts_last_first_idx on public.contacts (last_name, first_name);
+create index if not exists contacts_waiver_expires_idx
+  on public.contacts (waiver_expires_at desc)
+  where waiver_expires_at is not null;
 
 create or replace function public.set_updated_at_contacts()
 returns trigger language plpgsql as $$
