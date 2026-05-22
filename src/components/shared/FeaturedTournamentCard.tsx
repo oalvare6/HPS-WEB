@@ -61,7 +61,13 @@ export function FeaturedTournamentCard({
       ? `${tournament.time_start} – ${tournament.time_end}`
       : tournament.time_start || tournament.time_end;
   const registerHref = safeInternalLink(tournament.register_url, "/register");
-  const payHref = safeInternalLink(tournament.pay_url, "/pay");
+  const payHrefBase = safeInternalLink(tournament.pay_url, "/pay");
+  // See TournamentCard for the rationale: default `/pay` carries the slug so
+  // the pay screen can preselect or smart-redirect to Stripe.
+  const payHref =
+    payHrefBase === "/pay"
+      ? `/pay?tournament=${encodeURIComponent(tournament.slug)}`
+      : payHrefBase;
   const pill = STATUS_PILL[tournament.status];
 
   return (

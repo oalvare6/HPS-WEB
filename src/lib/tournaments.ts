@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import type {
   Tournament,
   TournamentRound,
+  TournamentStatus,
   TournamentUpdate,
 } from "@/lib/types";
 
@@ -176,6 +177,54 @@ export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResul
   } catch (err) {
     console.error("[tournaments] featured fetch failed:", err);
     return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+  }
+}
+
+/**
+ * Slim tournament row keyed by slug, used by the smart pay redirect on
+ * `/pay?tournament=<slug>`. Returns `null` for an unknown slug, a cancelled
+ * tournament, or a tournament with `payments_open=false`. The minimal shape
+ * matches what `<PayForm />` needs to render a preselected tournament
+ * immediately without waiting for `/api/pay/options` to finish.
+ */
+export type PayableTournament = {
+  id: string;
+  title: string;
+  slug: string;
+  format: string | null;
+  recurrence: string | null;
+  time_start: string | null;
+  time_end: string | null;
+  location: string | null;
+  entry_fee_cents: number | null;
+  drop_in_fee_cents: number;
+  payments_open: boolean;
+  status: TournamentStatus;
+};
+
+export async function getPayableTournamentBySlug(
+  slug: string
+): Promise<PayableTournament | null> {
+  if (!slug || typeof slug !== "string") return null;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournaments")
+      .select(
+        "id, title, slug, format, recurrence, time_start, time_end, location, entry_fee_cents, drop_in_fee_cents, payments_open, status"
+      )
+      .eq("slug", slug)
+      .maybeSingle();
+    if (error) {
+      console.error("[tournaments] payable-by-slug failed:", error.message);
+      return null;
+    }
+    if (!data) return null;
+    if (data.status === "cancelled") return null;
+    if (!data.payments_open) return null;
+    return data as PayableTournament;
+  } catch (err) {
+    console.error("[tournaments] payable-by-slug failed:", err);
+    return null;
   }
 }
 

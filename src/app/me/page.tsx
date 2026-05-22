@@ -1,16 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  ArrowRight,
   CalendarDays,
   CheckCircle2,
   CreditCard,
+  Key,
   LogOut,
+  Mail,
   ShieldAlert,
   ShieldCheck,
   Trophy,
 } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import {
+  getCurrentAuthUser,
   getCurrentPlayer,
   getPlayerProfileData,
   type PlayerRegistrationRow,
@@ -20,11 +24,20 @@ import { MeProfileForm } from "./MeProfileForm";
 
 export const dynamic = "force-dynamic";
 
+type SignInMethod = {
+  key: string;
+  label: string;
+  description: string;
+};
+
 export default async function MePage() {
   const player = await getCurrentPlayer();
   if (!player) {
     redirect("/login?next=/me");
   }
+
+  const user = await getCurrentAuthUser();
+  const signInMethods = describeSignInMethods(user);
 
   const { contact } = player;
   const { registrations, payments } = await getPlayerProfileData(contact.id);
@@ -89,6 +102,21 @@ export default async function MePage() {
           </section>
 
           <section>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">
+                Account &amp; sign-in
+              </h2>
+              <Link
+                href="/me/security"
+                className="inline-flex items-center gap-1 text-xs text-brand hover:underline"
+              >
+                Manage password <ArrowRight size={12} />
+              </Link>
+            </div>
+            <SignInMethodsCard methods={signInMethods} />
+          </section>
+
+          <section id="registrations" className="scroll-mt-24">
             <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">
               Current registrations
             </h2>
@@ -377,4 +405,110 @@ function EmptyState({
       )}
     </div>
   );
+}
+
+/**
+ * Render the player's connected sign-in methods, derived from the Supabase
+ * Auth user surface:
+ *
+ *   - `identities[]` lists every linked provider (email, google, apple, ...).
+ *   - `user_metadata.has_password` (set by Phase 11's password-write
+ *     surfaces) tells us whether the email identity is "Email + password"
+ *     or "Magic link only".
+ *
+ * If `user` is null (defensive — `/me` is gated server-side, so this
+ * shouldn't happen in practice) we fall back to a single "Magic link"
+ * row so the UI never goes empty.
+ */
+function describeSignInMethods(
+  user: Awaited<ReturnType<typeof getCurrentAuthUser>>
+): SignInMethod[] {
+  if (!user) {
+    return [
+      {
+        key: "magic",
+        label: "Magic link only",
+        description: "Sign in by clicking a link emailed to you.",
+      },
+    ];
+  }
+
+  const identities = Array.isArray(user.identities) ? user.identities : [];
+  const meta = (user.user_metadata ?? {}) as { has_password?: boolean };
+  const hasPassword = Boolean(meta.has_password);
+
+  const methods: SignInMethod[] = [];
+
+  if (identities.some((i) => i.provider === "email")) {
+    methods.push(
+      hasPassword
+        ? {
+            key: "email-password",
+            label: "Email + password",
+            description: "Sign in with your email address and password.",
+          }
+        : {
+            key: "magic",
+            label: "Magic link only",
+            description:
+              "Sign in by clicking a one-tap link emailed to you. Set a password from Security to add a second option.",
+          }
+    );
+  }
+
+  if (identities.some((i) => i.provider === "google")) {
+    methods.push({
+      key: "google",
+      label: "Google",
+      description: "Sign in with your Google account.",
+    });
+  }
+
+  if (identities.some((i) => i.provider === "apple")) {
+    methods.push({
+      key: "apple",
+      label: "Apple",
+      description: "Sign in with your Apple ID.",
+    });
+  }
+
+  if (methods.length === 0) {
+    methods.push({
+      key: "magic",
+      label: "Magic link only",
+      description: "Sign in by clicking a one-tap link emailed to you.",
+    });
+  }
+
+  return methods;
+}
+
+function SignInMethodsCard({ methods }: { methods: SignInMethod[] }) {
+  return (
+    <div className="dashboard-card overflow-hidden">
+      <ul className="divide-y divide-border-token">
+        {methods.map((m) => (
+          <li
+            key={m.key}
+            className="flex items-start gap-3 px-5 py-4"
+          >
+            <div className="w-9 h-9 rounded-lg bg-surface-2 text-brand flex items-center justify-center shrink-0">
+              <SignInMethodIcon methodKey={m.key} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">{m.label}</p>
+              <p className="text-xs text-zinc-400 mt-0.5">{m.description}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SignInMethodIcon({ methodKey }: { methodKey: string }) {
+  if (methodKey === "email-password") return <Key size={16} />;
+  if (methodKey === "google" || methodKey === "apple")
+    return <ShieldCheck size={16} />;
+  return <Mail size={16} />;
 }

@@ -1,3 +1,5 @@
+import { cache } from "react";
+import type { User } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeEmail } from "@/lib/contacts";
@@ -18,23 +20,45 @@ export type CurrentPlayer = {
 };
 
 /**
+ * Validate the current Supabase Auth session against the server and return
+ * the underlying `User` (or `null`).
+ *
+ * Wrapped in React's `cache()` so multiple Server Components in a single
+ * request — e.g. the global header AND the page itself both wanting to
+ * know whether someone is signed in — share one Supabase round-trip.
+ *
+ * NEVER swap this for `getSession()`. `getSession()` reads the cookie
+ * without re-validating it; `getUser()` re-validates the JWT against
+ * Supabase Auth and is the only correct gate for server rendering.
+ */
+export const getCurrentAuthUser = cache(async (): Promise<User | null> => {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user) return null;
+    return user;
+  } catch (err) {
+    console.error("[player-auth] getCurrentAuthUser failed:", err);
+    return null;
+  }
+});
+
+/**
  * Resolve the currently logged-in player. Returns `null` when there is no
  * valid Supabase session, or when something is so wrong server-side that we
  * cannot produce a contact row.
  *
- * IMPORTANT: This calls `supabase.auth.getUser()`, which validates the JWT
- * against Supabase Auth (not just reads the cookie). Do not swap to
- * `getSession()` — getSession trusts the cookie blindly and is unsafe for
- * server gating.
+ * Wrapped in React's `cache()` so it dedupes per request (see
+ * `getCurrentAuthUser` above for the underlying auth call). Multiple
+ * `getCurrentPlayer()` calls in the same render path collapse to a single
+ * Supabase auth round-trip + at most one contact lookup.
  */
-export async function getCurrentPlayer(): Promise<CurrentPlayer | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) return null;
+export const getCurrentPlayer = cache(async (): Promise<CurrentPlayer | null> => {
+  const user = await getCurrentAuthUser();
+  if (!user) return null;
   const email = normalizeEmail(user.email ?? "");
   if (!email) return null;
 
@@ -53,15 +77,23 @@ export async function getCurrentPlayer(): Promise<CurrentPlayer | null> {
     return { userId: user.id, email, contact: existing as Contact };
   }
 
+  // Name extraction handles the metadata shapes our auth surfaces deliver:
+  //   - magic link / password registration: first_name, last_name, full_name
+  //   - Google OAuth: given_name, family_name, full_name (and `name` as alias)
+  //   - Apple OAuth: name (single string, only on the very first authorization
+  //     — Apple does NOT resend it on subsequent sign-ins, by design)
   const meta = (user.user_metadata ?? {}) as {
     full_name?: string;
+    name?: string;
     first_name?: string;
+    given_name?: string;
     last_name?: string;
+    family_name?: string;
   };
-  const first = (meta.first_name ?? "").trim();
-  const last = (meta.last_name ?? "").trim();
-  const fullName = (meta.full_name ?? "").trim();
-  const [fallbackFirst, ...fallbackRest] = fullName.split(/\s+/).filter(Boolean);
+  const first = (meta.first_name ?? meta.given_name ?? "").trim();
+  const last = (meta.last_name ?? meta.family_name ?? "").trim();
+  const composite = (meta.full_name ?? meta.name ?? "").trim();
+  const [fallbackFirst, ...fallbackRest] = composite.split(/\s+/).filter(Boolean);
 
   const { data: inserted, error: insertErr } = await supabaseAdmin
     .from("contacts")
@@ -82,6 +114,46 @@ export async function getCurrentPlayer(): Promise<CurrentPlayer | null> {
   }
 
   return { userId: user.id, email, contact: inserted as Contact };
+});
+
+/**
+ * Does the given email already have an `auth.users` row? Used by the
+ * post-checkout claim flow to decide between offering a "Claim your
+ * account" magic-link card vs. nudging the player to sign in.
+ *
+ * Implementation note: GoTrue's admin API doesn't expose a typed
+ * `getUserByEmail` in supabase-js. We page through `listUsers` (capped at
+ * 1000 per page) and filter in JS. For HPS launch scale this is a single
+ * round-trip; revisit when the user count climbs.
+ *
+ * Failures (missing service-role key, network blip, GoTrue downtime)
+ * return `false`. The downstream UX of showing the claim card to a user
+ * who actually has an account is harmless: `signInWithOtp` on an existing
+ * user simply sends a normal magic link.
+ */
+export async function hasAuthUserForEmail(email: string): Promise<boolean> {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (error) {
+      console.error(
+        "[player-auth] hasAuthUserForEmail listUsers failed:",
+        error.message
+      );
+      return false;
+    }
+    return data.users.some(
+      (u) => normalizeEmail(u.email ?? "") === normalized
+    );
+  } catch (err) {
+    console.error("[player-auth] hasAuthUserForEmail threw:", err);
+    return false;
+  }
 }
 
 export type PlayerRegistrationRow = {

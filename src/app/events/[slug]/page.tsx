@@ -129,7 +129,14 @@ export default async function TournamentDetailPage({
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
   const registerHref = safeInternalLink(tournament.register_url, "/register");
-  const payHref = safeInternalLink(tournament.pay_url, "/pay");
+  const payHrefBase = safeInternalLink(tournament.pay_url, "/pay");
+  // Default `/pay` carries the tournament slug so the pay screen can
+  // preselect the right tournament — and smart-redirect logged-in players
+  // with a pending registration straight to the Stripe-bound paid-flow form.
+  const payHref =
+    payHrefBase === "/pay"
+      ? `/pay?tournament=${encodeURIComponent(tournament.slug)}`
+      : payHrefBase;
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`

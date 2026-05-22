@@ -3,9 +3,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { Menu, User, X } from "lucide-react";
+import { LogOut, Menu, ShieldCheck, Trophy, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusIndicatorCompact } from "@/components/shared/status-indicator";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 import type { StatusPill } from "@/lib/site-settings";
 
 const navLinks = [
@@ -19,13 +20,15 @@ const navLinks = [
 export function HeaderClient({
   statusItems,
   isAuthed,
+  displayName,
 }: {
   statusItems: StatusPill[];
   isAuthed: boolean;
+  displayName: string | null;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const accountHref = isAuthed ? "/me" : "/login";
-  const accountLabel = isAuthed ? "Account" : "Sign in";
+  const closeMobile = () => setMobileMenuOpen(false);
+  const safeDisplayName = (displayName ?? "").trim() || "Account";
 
   return (
     <header className="sticky top-0 z-50 bg-base/95 backdrop-blur-md border-b border-border-token/80">
@@ -63,14 +66,18 @@ export function HeaderClient({
                   {link.label}
                 </Link>
               ))}
-              <Link
-                href={accountHref}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
-                aria-label={accountLabel}
-              >
-                <User size={14} />
-                {accountLabel}
-              </Link>
+              {isAuthed ? (
+                <AccountMenu displayName={safeDisplayName} />
+              ) : (
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+                  aria-label="Sign in"
+                >
+                  <User size={14} />
+                  Sign in
+                </Link>
+              )}
               <Link
                 href="/register"
                 className="bg-white text-zinc-900 px-4 py-2 text-sm font-medium rounded-md hover:bg-zinc-100 transition-colors"
@@ -95,7 +102,7 @@ export function HeaderClient({
         <div
           className={cn(
             "md:hidden overflow-hidden transition-all duration-200",
-            mobileMenuOpen ? "max-h-[500px] pb-6" : "max-h-0"
+            mobileMenuOpen ? "max-h-[640px] pb-6" : "max-h-0"
           )}
         >
           {/* Mobile Status Indicators */}
@@ -109,23 +116,32 @@ export function HeaderClient({
                 key={link.href}
                 href={link.href}
                 className="text-base font-medium text-zinc-400 hover:text-white transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={closeMobile}
               >
                 {link.label}
               </Link>
             ))}
-            <Link
-              href={accountHref}
-              className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <User size={16} />
-              {accountLabel}
-            </Link>
+
+            {isAuthed ? (
+              <MobileAccountSection
+                displayName={safeDisplayName}
+                onNavigate={closeMobile}
+              />
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
+                onClick={closeMobile}
+              >
+                <User size={16} />
+                Sign in
+              </Link>
+            )}
+
             <Link
               href="/register"
               className="bg-white text-zinc-900 px-4 py-3 text-center font-medium rounded-md hover:bg-zinc-100 transition-colors mt-2"
-              onClick={() => setMobileMenuOpen(false)}
+              onClick={closeMobile}
             >
               Register for Tournament
             </Link>
@@ -133,5 +149,57 @@ export function HeaderClient({
         </div>
       </div>
     </header>
+  );
+}
+
+function MobileAccountSection({
+  displayName,
+  onNavigate,
+}: {
+  displayName: string;
+  onNavigate: () => void;
+}) {
+  return (
+    <div className="pt-2 border-t border-border-token mt-2">
+      <p className="text-xs uppercase tracking-wider text-zinc-500 mb-3">
+        Signed in as{" "}
+        <span className="text-zinc-300 font-medium">{displayName}</span>
+      </p>
+      <div className="flex flex-col gap-3">
+        <Link
+          href="/me"
+          onClick={onNavigate}
+          className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
+        >
+          <User size={16} />
+          Profile
+        </Link>
+        <Link
+          href="/me#registrations"
+          onClick={onNavigate}
+          className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
+        >
+          <Trophy size={16} />
+          My registrations
+        </Link>
+        <Link
+          href="/me/security"
+          onClick={onNavigate}
+          className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
+        >
+          <ShieldCheck size={16} />
+          Security
+        </Link>
+        <form action="/auth/signout" method="post" onSubmit={onNavigate}>
+          <button
+            type="submit"
+            className="w-full inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
+          >
+            <LogOut size={16} />
+            Sign out
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }

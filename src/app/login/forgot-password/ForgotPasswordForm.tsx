@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Mail, Loader2, CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 const RESEND_COOLDOWN_SEC = 60;
@@ -9,7 +9,14 @@ const RESEND_COOLDOWN_SEC = 60;
 const inputClass =
   "w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand/50 transition-colors placeholder:text-zinc-500";
 
-export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
+/**
+ * Sends a password-recovery email via `supabase.auth.resetPasswordForEmail`.
+ *
+ * `redirectTo` is set to `<origin>/auth/callback?next=/auth/reset` so the
+ * existing PKCE callback handles session creation, then forwards the user
+ * to the in-app "set a new password" surface.
+ */
+export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
@@ -30,28 +37,23 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
     return () => window.clearInterval(id);
   }, [sentTo, cooldownSec]);
 
-  const sendMagicLink = useCallback(
-    async (targetEmail: string) => {
-      const supabase = createSupabaseBrowserClient();
-      const callbackUrl = new URL("/auth/callback", window.location.origin);
-      if (nextPath) callbackUrl.searchParams.set("next", nextPath);
+  const sendResetEmail = useCallback(async (targetEmail: string) => {
+    const supabase = createSupabaseBrowserClient();
+    const redirectUrl = new URL("/auth/callback", window.location.origin);
+    redirectUrl.searchParams.set("next", "/auth/reset");
 
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: targetEmail,
-        options: {
-          emailRedirectTo: callbackUrl.toString(),
-        },
-      });
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      targetEmail,
+      { redirectTo: redirectUrl.toString() }
+    );
 
-      if (otpError) {
-        throw new Error(
-          otpError.message ||
-            "We couldn't send the sign-in link. Please try again."
-        );
-      }
-    },
-    [nextPath]
-  );
+    if (resetError) {
+      throw new Error(
+        resetError.message ||
+          "We couldn't send the reset email. Please try again."
+      );
+    }
+  }, []);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -65,13 +67,13 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
 
     setSubmitting(true);
     try {
-      await sendMagicLink(trimmed);
+      await sendResetEmail(trimmed);
       setSentTo(trimmed);
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "We couldn't send the sign-in link. Please try again."
+          : "We couldn't send the reset email. Please try again."
       );
     } finally {
       setSubmitting(false);
@@ -83,13 +85,13 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
     setError("");
     setResending(true);
     try {
-      await sendMagicLink(sentTo);
+      await sendResetEmail(sentTo);
       setCooldownSec(RESEND_COOLDOWN_SEC);
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "We couldn't resend the sign-in link. Please try again."
+          : "We couldn't resend the reset email. Please try again."
       );
     } finally {
       setResending(false);
@@ -98,7 +100,6 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
 
   if (sentTo) {
     const resendDisabled = cooldownSec > 0 || resending;
-
     return (
       <div className="dashboard-card p-6 text-center space-y-3">
         <CheckCircle2
@@ -108,9 +109,9 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
         />
         <h3 className="text-lg font-semibold text-white">Check your inbox</h3>
         <p className="text-sm text-zinc-400">
-          We sent a sign-in link to{" "}
+          We sent a password-reset link to{" "}
           <span className="text-white font-medium">{sentTo}</span>. Open it on
-          this device to finish signing in.
+          this device and choose a new password.
         </p>
         <p className="text-sm text-zinc-500">
           Didn&apos;t get it? Check spam, then resend after the cooldown.
@@ -126,7 +127,7 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
             ? "Sending..."
             : cooldownSec > 0
               ? `Resend link (${cooldownSec}s)`
-              : "Resend sign-in link"}
+              : "Resend reset link"}
         </button>
         {error && (
           <p className="text-sm text-red-400" role="alert">
@@ -155,7 +156,7 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
         <div className="flex items-center gap-2 mb-1">
           <Mail size={16} className="text-brand" />
           <label
-            htmlFor="email"
+            htmlFor="forgot-email"
             className="block text-sm font-semibold text-zinc-200"
           >
             Email
@@ -163,7 +164,7 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
         </div>
         <input
           type="email"
-          id="email"
+          id="forgot-email"
           name="email"
           required
           autoComplete="email"
@@ -181,7 +182,7 @@ export function MagicLinkForm({ nextPath }: { nextPath: string | null }) {
         className="w-full btn-primary h-12 disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
       >
         {submitting && <Loader2 size={16} className="animate-spin" />}
-        {submitting ? "Sending link..." : "Send sign-in link"}
+        {submitting ? "Sending link..." : "Send reset link"}
       </button>
 
       {error && (

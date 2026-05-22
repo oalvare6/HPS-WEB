@@ -1,526 +1,98 @@
-"use client";
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { PayForm, type TournamentPayOption } from "@/components/pay/PayForm";
+import { getPayableTournamentBySlug } from "@/lib/tournaments";
+import { getCurrentPlayer } from "@/lib/player-auth";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { createPayResumeToken } from "@/lib/app-signing";
 
-import { useState, FormEvent, Suspense, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { FormFieldsSkeleton } from "@/components/shared/skeleton";
-import { trackRegistrationEvent } from "@/lib/analytics";
-import {
-  Trophy,
-  Calendar,
-  MapPin,
-  Clock,
-  CreditCard,
-  ArrowRight,
-  AlertCircle,
-  CheckCircle2,
-  Users,
-} from "lucide-react";
+export const dynamic = "force-dynamic";
 
-type TournamentPayOption = {
-  id: string;
-  title: string;
-  slug: string;
-  format: string | null;
-  recurrence: string | null;
-  time_start: string | null;
-  time_end: string | null;
-  location: string | null;
-  entry_fee_cents: number | null;
-  drop_in_fee_cents: number;
+type PaySearchParams = {
+  tournament?: string;
+  registrationId?: string;
+  payToken?: string;
+  cancelled?: string;
 };
 
-type PayKind = "entry" | "drop_in";
+/**
+ * Server-side smart-redirect for `/pay?tournament=<slug>`.
+ *
+ * When the slug resolves to a payments-open tournament AND the visitor is a
+ * logged-in player with a pending, waiver-signed registration for that
+ * tournament, we mint a fresh pay-resume token and forward them to the
+ * existing paid-flow path (`/pay?registrationId=...&payToken=...`) so the
+ * email is locked and they're one click from Stripe Checkout.
+ *
+ * Otherwise we just return the resolved tournament so it can pre-populate the
+ * tournament selector in `<PayForm />`. A null return falls back to the
+ * default form (no preselect).
+ */
+async function resolveSmartRedirect(
+  slug: string | undefined,
+  alreadyOnPaidFlow: boolean
+): Promise<TournamentPayOption | null> {
+  if (!slug) return null;
 
-function formatUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+  const tournament = await getPayableTournamentBySlug(slug);
+  if (!tournament) return null;
 
-function PayForm() {
-  const searchParams = useSearchParams();
-  const cancelled = searchParams.get("cancelled") === "true";
-  const registrationId = searchParams.get("registrationId") ?? "";
-  const payToken = searchParams.get("payToken") ?? "";
-
-  const [email, setEmail] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [tournaments, setTournaments] = useState<TournamentPayOption[]>([]);
-  const [selectedTournamentId, setSelectedTournamentId] = useState("");
-  const [selectedPayKind, setSelectedPayKind] = useState<PayKind>("entry");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [payOptionsLoading, setPayOptionsLoading] = useState(true);
-  const [payOptionsError, setPayOptionsError] = useState("");
-  const [registrationLoading, setRegistrationLoading] = useState(Boolean(registrationId));
-  const [registrationLoadError, setRegistrationLoadError] = useState("");
-  const [alreadyPaid, setAlreadyPaid] = useState(false);
-  const [registrationTournament, setRegistrationTournament] = useState<{
-    id: string | null;
-    title: string | null;
-    entryFeeCents: number | null;
-    dropInFeeCents: number | null;
-  } | null>(null);
-  const paymentLinkTracked = useRef(false);
-
-  const hasRegistration = Boolean(registrationId);
-  const selectedTournament =
-    tournaments.find((t) => t.id === selectedTournamentId) ??
-    tournaments[0] ??
-    null;
-
-  const selectedAmountCents = hasRegistration
-    ? registrationTournament?.entryFeeCents ?? null
-    : selectedPayKind === "drop_in"
-      ? (selectedTournament?.drop_in_fee_cents ?? null)
-      : (selectedTournament?.entry_fee_cents ?? null);
-
-  const selectedPayTitle = hasRegistration
-    ? registrationTournament?.title ?? "Tournament Entry"
-    : selectedPayKind === "drop_in"
-      ? `${selectedTournament?.title ?? "Tournament"} — Drop-in`
-      : (selectedTournament?.title ?? "Tournament Entry");
-
-  useEffect(() => {
-    let cancelledFetch = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/pay/options");
-        const data = (await res.json()) as {
-          tournaments?: TournamentPayOption[];
-          error?: string;
-        };
-        if (cancelledFetch) return;
-        if (!res.ok) {
-          setPayOptionsError(data.error ?? "Could not load current payment options.");
-          return;
-        }
-        const options = data.tournaments ?? [];
-        setTournaments(options);
-        if (options.length > 0) {
-          setSelectedTournamentId((prev) => prev || options[0].id);
-        }
-      } catch {
-        if (!cancelledFetch) {
-          setPayOptionsError("Network error loading payment options. Please refresh.");
-        }
-      } finally {
-        if (!cancelledFetch) setPayOptionsLoading(false);
-      }
-    })();
-    return () => {
-      cancelledFetch = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!selectedTournament) return;
-    if (selectedPayKind === "entry" && !selectedTournament.entry_fee_cents) {
-      setSelectedPayKind("drop_in");
-    }
-    if (selectedPayKind === "drop_in" && !selectedTournament.drop_in_fee_cents) {
-      setSelectedPayKind("entry");
-    }
-  }, [selectedTournament, selectedPayKind]);
-
-  useEffect(() => {
-    if (!registrationId) return;
-
-    let cancelledFetch = false;
-
-    (async () => {
-      try {
-        const qs = new URLSearchParams({ token: payToken });
-        const res = await fetch(`/api/registrations/${registrationId}?${qs}`);
-        const data = (await res.json()) as {
-          email?: string;
-          firstName?: string;
-          paymentStatus?: string;
-          tournamentId?: string | null;
-          tournamentTitle?: string | null;
-          tournamentEntryFeeCents?: number | null;
-          tournamentDropInFeeCents?: number | null;
-          error?: string;
-        };
-
-        if (cancelledFetch) return;
-
-        if (!res.ok) {
-          setRegistrationLoadError(
-            data.error ?? "We couldn't load your registration. Please contact us."
-          );
-          return;
-        }
-
-        if (data.email) setEmail(data.email);
-        if (data.firstName) setFirstName(data.firstName);
-        if (data.paymentStatus === "paid") setAlreadyPaid(true);
-        setRegistrationTournament({
-          id: data.tournamentId ?? null,
-          title: data.tournamentTitle ?? null,
-          entryFeeCents: data.tournamentEntryFeeCents ?? null,
-          dropInFeeCents: data.tournamentDropInFeeCents ?? null,
-        });
-        if (data.tournamentId) {
-          setSelectedTournamentId(data.tournamentId);
-        }
-        if (!paymentLinkTracked.current && data.paymentStatus !== "paid") {
-          paymentLinkTracked.current = true;
-          trackRegistrationEvent("registration_payment_link_shown", {
-            source: "pay_page",
-            registration_id: registrationId,
-          });
-        }
-      } catch {
-        if (!cancelledFetch) {
-          setRegistrationLoadError(
-            "Network error loading your registration. Please refresh."
-          );
-        }
-      } finally {
-        if (!cancelledFetch) setRegistrationLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelledFetch = true;
-    };
-  }, [registrationId, payToken]);
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          tournamentId: hasRegistration ? undefined : selectedTournament?.id,
-          payKind: hasRegistration ? "entry" : selectedPayKind,
-          registrationId: registrationId || undefined,
-          payToken: payToken || undefined,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || !data.url) {
-        setError(data.error ?? "Something went wrong. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      window.location.href = data.url;
-    } catch {
-      setError("Network error. Please check your connection and try again.");
-      setLoading(false);
-    }
+  const initialTournament: TournamentPayOption = {
+    id: tournament.id,
+    title: tournament.title,
+    slug: tournament.slug,
+    format: tournament.format,
+    recurrence: tournament.recurrence,
+    time_start: tournament.time_start,
+    time_end: tournament.time_end,
+    location: tournament.location,
+    entry_fee_cents: tournament.entry_fee_cents,
+    drop_in_fee_cents: tournament.drop_in_fee_cents,
   };
 
-  if (hasRegistration && registrationLoading) {
-    return (
-      <div className="max-w-2xl mx-auto px-6 py-12 md:py-20">
-        <FormFieldsSkeleton fields={2} />
-      </div>
-    );
+  // Guard against redirect loops: if the URL already carries a registrationId
+  // (e.g. cancel-back from Stripe, or the second pass after this very redirect)
+  // we render the paid-flow form directly and let the client handle it.
+  if (alreadyOnPaidFlow) return initialTournament;
+
+  const player = await getCurrentPlayer();
+  if (!player) return initialTournament;
+
+  const { data: registration, error } = await supabaseAdmin
+    .from("registrations")
+    .select("id, payment_status, waiver_signed")
+    .eq("contact_id", player.contact.id)
+    .eq("tournament_id", tournament.id)
+    .eq("payment_status", "pending")
+    .eq("waiver_signed", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[pay] smart-redirect registration lookup failed:", error.message);
+    return initialTournament;
   }
 
-  if (hasRegistration && registrationLoadError) {
-    return (
-      <div className="max-w-2xl mx-auto px-6 py-20">
-        <div className="dashboard-card p-6 flex items-start gap-3 text-red-400">
-          <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="font-semibold mb-1">We couldn&apos;t load your registration</p>
-            <p className="text-sm text-zinc-400">{registrationLoadError}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (!registration) return initialTournament;
 
-  if (!hasRegistration && payOptionsLoading) {
-    return (
-      <div className="max-w-2xl mx-auto px-6 py-12 md:py-20">
-        <FormFieldsSkeleton fields={2} />
-      </div>
-    );
-  }
-
-  if (!hasRegistration && payOptionsError) {
-    return (
-      <div className="max-w-2xl mx-auto px-6 py-20">
-        <div className="dashboard-card p-6 flex items-start gap-3 text-red-400">
-          <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="font-semibold mb-1">We couldn&apos;t load payment options</p>
-            <p className="text-sm text-zinc-400">{payOptionsError}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (hasRegistration && alreadyPaid) {
-    return (
-      <div className="max-w-2xl mx-auto px-6 py-20">
-        <div className="dashboard-card p-8 text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-brand/15 mb-4">
-            <CheckCircle2 size={28} className="text-brand" />
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-2">You&apos;re all set</h2>
-          <p className="text-zinc-400 mb-6">
-            {firstName ? `${firstName}, your` : "Your"} payment is already on file. See you on the field.
-          </p>
-          <Link href="/" className="btn-primary inline-flex justify-center px-6">
-            Back to Home
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto px-6 py-12 md:py-20">
-      {hasRegistration && (
-        <div className="mb-6 flex items-start gap-3 bg-brand/10 border border-brand/30 rounded-lg px-4 py-3 text-brand text-sm">
-          <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
-          <span>
-            <span className="font-semibold">Step 3 of 3 — Payment.</span>{" "}
-            {firstName ? `${firstName}, your` : "Your"} registration and waiver are saved
-            {email ? <> for <span className="font-mono">{email}</span></> : null}. Pick a tier and complete checkout to lock in your spot.
-          </span>
-        </div>
-      )}
-
-      {cancelled && (
-        <div className="mb-6 flex items-start gap-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-4 py-3 text-yellow-400 text-sm">
-          <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-          <span>Payment was cancelled. You can try again whenever you&apos;re ready.</span>
-        </div>
-      )}
-
-      {!hasRegistration && selectedTournament && (
-        <div className="mb-6 space-y-2">
-          <label htmlFor="tournamentId" className="block text-sm font-medium text-zinc-300">
-            Tournament
-          </label>
-          <select
-            id="tournamentId"
-            name="tournamentId"
-            value={selectedTournament.id}
-            onChange={(e) => setSelectedTournamentId(e.target.value)}
-            className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors"
-          >
-            {tournaments.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.title}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Event info */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-2 h-2 bg-brand rounded-full animate-pulse" />
-          <span className="text-xs font-mono text-brand uppercase tracking-wider">
-            Payments Open
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="flex items-center gap-2 text-zinc-300">
-            <Calendar size={14} className="text-brand flex-shrink-0" />
-            <span>{selectedTournament?.recurrence ?? "Schedule posted in events."}</span>
-          </div>
-          <div className="flex items-center gap-2 text-zinc-300">
-            <Clock size={14} className="text-brand flex-shrink-0" />
-            <span>
-              {selectedTournament?.time_start && selectedTournament?.time_end
-                ? `${selectedTournament.time_start} – ${selectedTournament.time_end}`
-                : "See tournament page"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-zinc-300">
-            <MapPin size={14} className="text-brand flex-shrink-0" />
-            <span>{selectedTournament?.location ?? "Houston Premier Soccer"}</span>
-          </div>
-          <div className="flex items-center gap-2 text-zinc-300">
-            <Users size={14} className="text-brand flex-shrink-0" />
-            <span>{selectedTournament?.format ?? "Tournament"}</span>
-          </div>
-        </div>
-      </div>
-
-      {!hasRegistration && selectedTournament && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-          {selectedTournament.entry_fee_cents ? (
-            <button
-              type="button"
-              onClick={() => setSelectedPayKind("entry")}
-              className={`dashboard-card p-5 text-left transition-all ${
-                selectedPayKind === "entry"
-                  ? "ring-2 ring-brand border-brand"
-                  : "hover:border-border-token"
-              }`}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <span
-                  className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
-                    selectedPayKind === "entry"
-                      ? "bg-brand/20 text-brand"
-                      : "bg-base text-zinc-400"
-                  }`}
-                >
-                  Full Tournament
-                </span>
-                <Trophy
-                  size={20}
-                  className={selectedPayKind === "entry" ? "text-brand" : "text-zinc-600"}
-                />
-              </div>
-              <p className="text-white font-semibold mb-1">Tournament Entry</p>
-              <p className="text-zinc-400 text-sm mb-3">
-                Full tournament registration payment.
-              </p>
-              <p className="text-2xl font-bold text-white">
-                {formatUsd(selectedTournament.entry_fee_cents)}
-              </p>
-            </button>
-          ) : null}
-
-          {selectedTournament.drop_in_fee_cents ? (
-            <button
-              type="button"
-              onClick={() => setSelectedPayKind("drop_in")}
-              className={`dashboard-card p-5 text-left transition-all ${
-                selectedPayKind === "drop_in"
-                  ? "ring-2 ring-brand border-brand"
-                  : "hover:border-border-token"
-              }`}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <span
-                  className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
-                    selectedPayKind === "drop_in"
-                      ? "bg-brand/20 text-brand"
-                      : "bg-base text-zinc-400"
-                  }`}
-                >
-                  Guest / Drop-In
-                </span>
-                <Trophy
-                  size={20}
-                  className={selectedPayKind === "drop_in" ? "text-brand" : "text-zinc-600"}
-                />
-              </div>
-              <p className="text-white font-semibold mb-1">Single Round / Guest</p>
-              <p className="text-zinc-400 text-sm mb-3">
-                One-day guest play or drop-in payment.
-              </p>
-              <p className="text-2xl font-bold text-white">
-                {formatUsd(selectedTournament.drop_in_fee_cents)}
-              </p>
-            </button>
-          ) : null}
-        </div>
-      )}
-
-      {/* Payment form */}
-      <div className="dashboard-card p-6">
-        <h3 className="text-lg font-semibold text-white mb-1">
-          Complete Payment
-        </h3>
-        <p className="text-zinc-400 text-sm mb-6">
-          {hasRegistration ? (
-            <>
-              Your payment for <span className="text-zinc-200">{selectedPayTitle}</span> will be
-              linked to your registration automatically.
-            </>
-          ) : (
-            <>
-              Enter the email you used when registering. Already registered?{" "}
-              your payment will be linked to your profile automatically.{" "}
-              Not registered yet?{" "}
-              <Link href="/register" className="text-white underline underline-offset-2">
-                Register first
-              </Link>{" "}
-              to sign your waiver, then come back here.
-            </>
-          )}
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-zinc-400 mb-1"
-            >
-              Email address
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              readOnly={hasRegistration}
-              aria-readonly={hasRegistration}
-              className={`w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors ${
-                hasRegistration ? "opacity-80 cursor-not-allowed" : ""
-              }`}
-            />
-            {hasRegistration && (
-              <p className="text-xs text-zinc-500 mt-1.5">
-                Locked to the email on your registration.
-              </p>
-            )}
-          </div>
-
-          {error && (
-            <div className="flex items-start gap-2 text-red-400 text-sm">
-              <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || !email || !selectedAmountCents}
-            className="btn-primary w-full justify-center h-12 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <>Processing…</>
-            ) : (
-              <>
-                <CreditCard size={18} />
-                {selectedAmountCents ? `Pay ${formatUsd(selectedAmountCents)} with Card` : "Amount unavailable"}
-                <ArrowRight size={16} />
-              </>
-            )}
-          </button>
-
-          {!selectedAmountCents && (
-            <p className="text-xs text-yellow-400 text-center">
-              This payment option has no configured amount yet. Please contact support.
-            </p>
-          )}
-
-          <p className="text-xs text-zinc-500 text-center">
-            Powered by Stripe. Your card details are never stored on our servers.
-          </p>
-        </form>
-      </div>
-    </div>
-  );
+  const token = createPayResumeToken(registration.id);
+  const params = new URLSearchParams({
+    registrationId: registration.id,
+    payToken: token,
+  });
+  redirect(`/pay?${params.toString()}`);
 }
 
-export default function PayPage() {
+export default async function PayPage({
+  searchParams,
+}: {
+  searchParams: Promise<PaySearchParams>;
+}) {
+  const sp = await searchParams;
+  const alreadyOnPaidFlow = Boolean(sp.registrationId);
+  const initialTournament = await resolveSmartRedirect(sp.tournament, alreadyOnPaidFlow);
+
   return (
     <>
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
@@ -536,7 +108,10 @@ export default function PayPage() {
 
       <section className="bg-surface min-h-[60vh]">
         <Suspense fallback={null}>
-          <PayForm />
+          <PayForm
+            initialTournamentId={initialTournament?.id ?? null}
+            initialTournament={initialTournament}
+          />
         </Suspense>
       </section>
     </>

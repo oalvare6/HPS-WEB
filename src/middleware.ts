@@ -30,6 +30,13 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+  // Player-facing routes that REQUIRE a session. Everything else under
+  // /auth/* (callback, reset, claim, signout), /login, /pay/*, and
+  // /api/me/* is intentionally NOT gated here — those pages read the
+  // session themselves and surface route-specific error states
+  // (e.g. `/auth/reset` shows `recovery_expired` rather than a generic
+  // `/login?next=/auth/reset` bounce). Do not add `/auth/*` here without
+  // changing those pages' error UX first.
   const isProtected = pathname === "/me" || pathname.startsWith("/me/");
 
   if (isProtected && !user) {
