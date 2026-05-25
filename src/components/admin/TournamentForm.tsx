@@ -32,6 +32,15 @@ type FormState = {
   registration_open: boolean;
   payments_open: boolean;
   entry_fee: string;
+  /**
+   * Whether the public /pay page should offer the "Guest / Single-round" tier
+   * for this event. When false, the payload sends `drop_in_fee_cents: 0` and
+   * the Guest card on /pay is suppressed. Open-play one-offs (e.g. Memorial
+   * Day) typically set this to false so only the entry fee shows.
+   */
+  offer_drop_in_tier: boolean;
+  /** Dollar string. Only used when `offer_drop_in_tier` is true. */
+  drop_in_fee: string;
   max_teams: string;
   register_url: string;
   pay_url: string;
@@ -41,6 +50,8 @@ type FormState = {
   is_featured: boolean;
 };
 
+const DEFAULT_DROP_IN_FEE_CENTS = 2000;
+
 function toDateInput(value: string | null): string {
   if (!value) return "";
   // Slice YYYY-MM-DD from ISO string
@@ -48,6 +59,11 @@ function toDateInput(value: string | null): string {
 }
 
 function fromInitial(t: Tournament | null): FormState {
+  const initialDropInCents = t?.drop_in_fee_cents ?? DEFAULT_DROP_IN_FEE_CENTS;
+  const offerDropInTier = initialDropInCents > 0;
+  const dropInDollars = offerDropInTier
+    ? (initialDropInCents / 100).toFixed(2)
+    : (DEFAULT_DROP_IN_FEE_CENTS / 100).toFixed(2);
   return {
     title: t?.title ?? "",
     slug: t?.slug ?? "",
@@ -63,6 +79,8 @@ function fromInitial(t: Tournament | null): FormState {
     registration_open: t?.registration_open ?? false,
     payments_open: t?.payments_open ?? false,
     entry_fee: t?.entry_fee != null ? String(t.entry_fee) : "",
+    offer_drop_in_tier: offerDropInTier,
+    drop_in_fee: dropInDollars,
     max_teams: t?.max_teams != null ? String(t.max_teams) : "",
     register_url: t?.register_url ?? "",
     pay_url: t?.pay_url ?? "",
@@ -111,6 +129,17 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
     if (!form.start_date) e.start_date = "Start date is required.";
     if (!form.time_start.trim()) e.time_start = "Start time is required.";
     if (!form.time_end.trim()) e.time_end = "End time is required.";
+    if (form.offer_drop_in_tier) {
+      const raw = form.drop_in_fee.trim();
+      if (!raw) {
+        e.drop_in_fee = "Set an amount, or turn off the guest tier.";
+      } else {
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n <= 0) {
+          e.drop_in_fee = "Must be a positive number.";
+        }
+      }
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -187,6 +216,9 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       return;
     }
     setSaving(true);
+    const dropInFeeCents = form.offer_drop_in_tier
+      ? Math.max(0, Math.round(Number(form.drop_in_fee) * 100))
+      : 0;
     const payload = {
       title: form.title.trim(),
       slug: form.slug.trim(),
@@ -206,6 +238,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       registration_open: form.registration_open,
       payments_open: form.payments_open,
       entry_fee: form.entry_fee.trim() ? Number(form.entry_fee) : null,
+      drop_in_fee_cents: dropInFeeCents,
       max_teams: form.max_teams.trim() ? Number(form.max_teams) : null,
       register_url: form.register_url.trim() || null,
       pay_url: form.pay_url.trim() || null,
@@ -410,6 +443,34 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
               placeholder="16"
             />
           </Field>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Toggle
+            label="Offer guest / single-round tier on pay page"
+            checked={form.offer_drop_in_tier}
+            onChange={(v) => update("offer_drop_in_tier", v)}
+          />
+          {form.offer_drop_in_tier ? (
+            <Field
+              label="Drop-in / Guest Fee (USD)"
+              error={errors.drop_in_fee}
+              hint="Shown as the Guest tier on /pay alongside the Entry Fee."
+            >
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.drop_in_fee}
+                onChange={(e) => update("drop_in_fee", e.target.value)}
+                className={inputCls("drop_in_fee")}
+                placeholder="20.00"
+              />
+            </Field>
+          ) : (
+            <div className="flex items-center px-4 py-3 text-xs text-zinc-500 bg-surface-2/40 border border-dashed border-border-token rounded-lg">
+              Only the Entry Fee tier will show on /pay for this event.
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Register URL">

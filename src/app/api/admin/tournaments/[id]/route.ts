@@ -46,7 +46,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     "description", "start_date", "end_date", "time_start", "time_end",
     "recurrence", "location", "format", "entry_fee", "max_teams",
     "image_url", "image_preset", "register_url", "pay_url", "display_order",
-    "is_featured",
+    "is_featured", "drop_in_fee_cents",
   ];
   for (const f of fields) {
     if (f in body) update[f] = body[f];
@@ -73,6 +73,20 @@ export async function PATCH(request: Request, ctx: Ctx) {
     update.entry_fee = v;
     update.entry_fee_cents =
       typeof v === "number" ? Math.max(0, Math.round(v * 100)) : null;
+  }
+  if ("drop_in_fee_cents" in update) {
+    const v = parseOptionalNonNegInt(update.drop_in_fee_cents);
+    if (v === "invalid") {
+      return NextResponse.json(
+        { error: "Invalid drop-in fee." },
+        { status: 400 }
+      );
+    }
+    if (v === null) {
+      delete update.drop_in_fee_cents;
+    } else {
+      update.drop_in_fee_cents = v;
+    }
   }
   if ("max_teams" in update) {
     const v = parseOptionalNonNegInt(update.max_teams);

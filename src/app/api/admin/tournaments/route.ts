@@ -56,6 +56,14 @@ export async function POST(request: Request) {
   const entryFeeCents =
     typeof entryFee === "number" ? Math.max(0, Math.round(entryFee * 100)) : null;
 
+  const dropInFeeCents = parseOptionalNonNegInt(body.drop_in_fee_cents);
+  if (dropInFeeCents === "invalid") {
+    return NextResponse.json(
+      { error: "Invalid drop-in fee." },
+      { status: 400 }
+    );
+  }
+
   const maxTeams = parseOptionalNonNegInt(body.max_teams);
   if (maxTeams === "invalid") {
     return NextResponse.json({ error: "Invalid max teams." }, { status: 400 });
@@ -73,7 +81,7 @@ export async function POST(request: Request) {
     if (capError) return capError;
   }
 
-  const row = {
+  const row: Record<string, unknown> = {
     title: body.title,
     slug,
     status,
@@ -97,6 +105,9 @@ export async function POST(request: Request) {
     display_order: displayOrder,
     is_featured: isFeatured,
   };
+  if (dropInFeeCents !== null) {
+    row.drop_in_fee_cents = dropInFeeCents;
+  }
 
   const { data: inserted, error } = await supabaseAdmin
     .from("tournaments")
