@@ -41,10 +41,26 @@ export const getCurrentAuthUser = cache(async (): Promise<User | null> => {
     if (error || !user) return null;
     return user;
   } catch (err) {
+    // Next.js throws an internal bailout error (`DYNAMIC_SERVER_USAGE`) when
+    // `cookies()` is called during static generation. That signal MUST
+    // propagate so Next can mark the page as dynamic. Catching it here both
+    // pollutes the build log and risks miscategorising the route as static.
+    if (isNextDynamicBailout(err)) throw err;
     console.error("[player-auth] getCurrentAuthUser failed:", err);
     return null;
   }
 });
+
+function isNextDynamicBailout(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const digest = (err as { digest?: unknown }).digest;
+  if (typeof digest !== "string") return false;
+  return (
+    digest.startsWith("DYNAMIC_SERVER_USAGE") ||
+    digest.startsWith("NEXT_REDIRECT") ||
+    digest.startsWith("NEXT_NOT_FOUND")
+  );
+}
 
 /**
  * Resolve the currently logged-in player. Returns `null` when there is no

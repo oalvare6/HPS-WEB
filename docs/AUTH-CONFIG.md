@@ -59,8 +59,64 @@ Soccer") and a From name players will trust.
 
 **Path:** Project → Authentication → SMTP Settings → **Enable Custom SMTP**
 
-Supabase's built-in mailer is rate-limited and often lands in spam. For production,
-configure a transactional provider (Resend, Postmark, SendGrid, Amazon SES, etc.).
+Supabase's built-in mailer is heavily rate-limited and often lands in spam. Pick
+one of the two paths below depending on whether you control your sending domain's
+DNS.
+
+### 4a. Gmail SMTP — recommended when DNS/MX records aren't workable
+
+This is the path HPS uses in production. The trade-off: emails arrive **from**
+the Gmail address (e.g. `houspremiersoccer@gmail.com`), not from
+`noreply@houstonpremiersoccer.com`. Players still recognize the brand; setup is
+ten minutes; zero DNS work.
+
+**Prerequisite:** Two-factor authentication must be on for the Gmail account.
+Gmail blocks plain-password SMTP since May 2022 — you must use an **App
+Password** (a 16-character credential separate from the regular password).
+
+1. Sign in to the Gmail account that will send the emails (HPS:
+   `houspremiersoccer@gmail.com`).
+2. Go to
+   [Google Account → Security → 2-Step Verification](https://myaccount.google.com/signinoptions/two-step-verification)
+   and enable it if it isn't already.
+3. Open [App Passwords](https://myaccount.google.com/apppasswords). If the page
+   shows "App passwords aren't available for your account", it means 2FA is not
+   on yet — finish step 2.
+4. Generate a new app password. Name it `Supabase Auth — HPS`. Copy the
+   16-character string (Google shows it once with spaces; the spaces are visual
+   only — Supabase accepts it with or without them).
+5. In Supabase → Authentication → SMTP Settings → **Enable Custom SMTP** and
+   paste:
+
+   | Field | Value |
+   |-------|-------|
+   | Host | `smtp.gmail.com` |
+   | Port | `465` |
+   | Username | `houspremiersoccer@gmail.com` |
+   | Password | the 16-character app password from step 4 |
+   | Sender email | `houspremiersoccer@gmail.com` (must match the username) |
+   | Sender name | `Houston Premier Soccer` |
+   | Minimum interval | `60` seconds (default is fine) |
+
+   Save.
+
+**Verify:** From `/login`, send a magic link to a real inbox (your personal
+Gmail / Outlook / iCloud). Expect delivery in under 60 seconds, **From**
+`Houston Premier Soccer <houspremiersoccer@gmail.com>`. Check spam if nothing
+arrives after 2 minutes.
+
+**Quotas:** Gmail caps free accounts at ~500 outbound recipients per day. HPS
+auth volume is well under that. Google Workspace accounts get 2,000/day.
+
+**Rotating the app password:** Generate a new one in
+[App Passwords](https://myaccount.google.com/apppasswords), paste into Supabase,
+save, then revoke the old entry in Google. No downtime if you do it in that
+order.
+
+### 4b. Transactional provider (Resend / Postmark / SendGrid / SES)
+
+Use this when you control the sending domain's DNS and want the From address
+to live on `@houstonpremiersoccer.com`.
 
 | Field | Guidance |
 |-------|----------|
@@ -69,12 +125,14 @@ configure a transactional provider (Resend, Postmark, SendGrid, Amazon SES, etc.
 | Sender email | Use a domain you control (e.g. `noreply@houstonpremiersoccer.com`) |
 | Sender name | `Houston Premier Soccer` |
 
-**DNS (deliverability):** At your DNS host, add the provider's **SPF**, **DKIM**, and
-(optionally) **DMARC** records for the sending domain. Without DKIM, Gmail and Outlook
-often silently delay or junk auth emails.
+**DNS (deliverability):** At your DNS host, add the provider's **SPF**, **DKIM**,
+and (optionally) **DMARC** records for the sending domain. Without DKIM, Gmail
+and Outlook often silently delay or junk auth emails. If your registrar's DNS
+panel makes adding these records painful (Namecheap is a common offender),
+switch to 4a — there is no penalty for using Gmail SMTP at HPS scale.
 
-**Verify:** Send a magic link to a real inbox you control. Expect delivery in under
-60 seconds. Check spam if nothing arrives after 2 minutes.
+**Verify:** Send a magic link to a real inbox you control. Expect delivery in
+under 60 seconds. Check spam if nothing arrives after 2 minutes.
 
 ## 5. Application environment variables
 

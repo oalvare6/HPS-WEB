@@ -19,6 +19,7 @@ Companion surfaces, in the order to reach for them during an incident:
 | Symptom | Most likely cause | Start at |
 |---|---|---|
 | "No magic-link email arrives" | Custom SMTP off, SPF/DKIM missing, or template missing `{{ .ConfirmationURL }}` | [Email deliverability](#email-deliverability) |
+| "I can't get MX / SPF / DKIM records to stick on Namecheap (or any registrar)" | Switch off the transactional-provider path and use Gmail SMTP — no DNS needed | [docs/AUTH-CONFIG.md §4a](./AUTH-CONFIG.md#4a-gmail-smtp--recommended-when-dnsmx-records-arent-workable) |
 | "Magic link arrives but clicking it fails" | Redirect URL allow list missing the origin | [Redirect URL allow list](#redirect-url-allow-list) |
 | "Continue with Google fails with `redirect_uri_mismatch`" | Google's Authorized redirect URI doesn't point at Supabase | [Rotating Google OAuth](#rotating-google-oauth-secret) |
 | "Continue with Apple fails for everyone with `invalid_client`" | Apple JWT client secret expired (6-month max validity) | [Rotating Apple JWT](#rotating-apple-sign-in-jwt) |
