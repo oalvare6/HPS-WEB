@@ -4,9 +4,11 @@ import { cn } from "@/lib/utils";
 const ADDRESS = "14062 Ambrose St, Houston, TX 77045";
 const GOOGLE_MAPS_URL =
   "https://www.google.com/maps/dir/?api=1&destination=14062+Ambrose+St,+Houston,+TX+77045";
-// Satellite view, zoomed to field level — no API key needed
+// Simple no-API-key embed — broader compatibility than the satellite variant
+// which Google rate-limits / blocks more aggressively. Users can still pan,
+// zoom, and click "View larger map" inside the iframe to see satellite view.
 const GOOGLE_MAPS_EMBED_URL =
-  "https://maps.google.com/maps?q=14062+Ambrose+St,+Houston,+TX+77045&t=k&z=19&output=embed";
+  "https://www.google.com/maps?q=14062+Ambrose+St,+Houston,+TX+77045&z=16&output=embed";
 
 interface LocationCardProps {
   className?: string;
@@ -24,7 +26,10 @@ export function LocationCard({ className, showMap = true, compact = false }: Loc
     >
       {/* Map */}
       {showMap && (
-        <div className="relative overflow-hidden border-b-2 border-brand/30" style={{ height: "320px" }}>
+        <div
+          className="relative overflow-hidden border-b-2 border-brand/30"
+          style={{ height: compact ? "200px" : "320px" }}
+        >
           <iframe
             src={GOOGLE_MAPS_EMBED_URL}
             width="100%"
@@ -43,9 +48,9 @@ export function LocationCard({ className, showMap = true, compact = false }: Loc
               29.6547° N · 95.4189° W
             </div>
           </div>
-          {/* Satellite badge */}
+          {/* Map label */}
           <div className="absolute top-3 right-3 px-2 py-1 bg-base/80 backdrop-blur-sm rounded text-xs font-mono text-zinc-400 border border-border-token/50 pointer-events-none">
-            Satellite
+            Live map
           </div>
         </div>
       )}

@@ -12,7 +12,6 @@ import {
   Handshake,
   Megaphone,
   MapPin,
-  Navigation,
   Pin,
   Shield,
   Sparkles,
@@ -26,7 +25,6 @@ import {
   getTournamentRounds,
   getTournamentUpdates,
 } from "@/lib/tournaments";
-import { getSiteSetting } from "@/lib/site-settings";
 import type {
   Tournament,
   TournamentRound,
@@ -39,6 +37,7 @@ import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { ShareTournamentButton } from "@/components/shared/ShareTournamentButton";
+import { LocationCard } from "@/components/shared/location-card";
 
 export const dynamic = "force-dynamic";
 
@@ -211,10 +210,9 @@ export default async function TournamentDetailPage({
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
-  const [{ updates }, { rounds }, mapsUrl] = await Promise.all([
+  const [{ updates }, { rounds }] = await Promise.all([
     getTournamentUpdates(tournament.id),
     getTournamentRounds(tournament.id),
-    getSiteSetting("footer.maps_url"),
   ]);
 
   const pill = STATUS_PILL[tournament.status];
@@ -557,24 +555,7 @@ export default async function TournamentDetailPage({
                 )}
               </div>
 
-              {tournament.location && (
-                <div className="dashboard-card p-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <MapPin size={18} className="text-brand" />
-                    <h3 className="text-base font-semibold text-white">Location</h3>
-                  </div>
-                  <p className="text-sm text-zinc-300">{tournament.location}</p>
-                  <a
-                    href={mapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-secondary w-full justify-center text-sm"
-                  >
-                    <Navigation size={14} />
-                    Get Directions
-                  </a>
-                </div>
-              )}
+              {tournament.location && <LocationCard compact />}
             </div>
           </aside>
         </div>
