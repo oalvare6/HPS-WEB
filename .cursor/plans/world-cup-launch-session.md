@@ -2,9 +2,7 @@
 
 > **STATUS: COMPLETE (WC-0–WC-7).** Archive only — do not paste for new feature work.
 >
-> **Next workstream:** `.cursor/plans/open-play-session.md` (Phases 17–19)  
-> **Active rules:** `.cursor/rules/hps-phases.mdc`  
-> **Status board:** `docs/PROJECT-STATUS.md`
+> **New work:** scoped per session — `docs/PROJECT-STATUS.md`, `.cursor/rules/hps-phases.mdc`
 
 ---
 
@@ -257,7 +255,7 @@ Optional followup (log in FOLLOWUPS.md, do not ship now):
 | Scripts | `scripts/update-world-cup-tournament.mjs`, new `scripts/complete-spring-classic.mjs` |
 | Docs | append FOLLOWUPS.md one-liners only |
 
-**Do NOT touch:** admin auth (`app-signing`), unrelated drop_ins admin tool, Phase 16–19 `event_type` unless operator pivots.
+**Do NOT touch:** admin auth (`app-signing`), unrelated drop_ins admin tool.
 
 ---
 
@@ -318,7 +316,7 @@ World Cup: portrait flyer, team payment options ($960 / split / captain-paid ski
 
 ## Context to ignore in this session
 
-- Memorial Day open-play / Phase 16–19 `event_type` work
+- (Removed) open-play roadmap — never built on `main`
 - Public roster after event ends
 - Auto Group A/B assignment
 - WhatsApp integration
@@ -340,5 +338,5 @@ P0 auth bugs (operator-confirmed 2026-06-03):
 Then World Cup Jun 8: team pay ($960 / $960÷N 8-12 / captain-paid skip), register
 instructions, team name on pay, Spring Classic completed.
 
-Do NOT start Phase 16 open-play. Slug: world-cup-summer-tournament.
+Slug: world-cup-summer-tournament. WC workstream complete — see PROJECT-STATUS.md for new work.
 ```

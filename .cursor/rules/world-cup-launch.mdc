@@ -1,12 +1,12 @@
 ---
-description: "ARCHIVE — World Cup WC-0–WC-7 complete. Use hps-phases.mdc for open-play (Phases 17–19). Reference only for World Cup regressions."
+description: "ARCHIVE — World Cup WC-0–WC-7 complete. Reference only for World Cup regressions. New work: see docs/PROJECT-STATUS.md and hps-phases.mdc."
 alwaysApply: false
 ---
 
 # HPS World Cup Launch — ARCHIVE (Phases WC-0–WC-7 COMPLETE)
 
-> **Do not start new WC phases.** Active workstream: **open play Phases 17–19**
-> in `.cursor/rules/hps-phases.mdc` and `.cursor/plans/open-play-session.md`.
+> **Do not start new WC phases.** New features are scoped per session — see
+> `docs/PROJECT-STATUS.md` and `.cursor/rules/hps-phases.mdc`.
 >
 > **Acceptance:** `docs/WORLD-CUP-ACCEPTANCE.md`  
 > **Pre-flight:** `scripts/verify-world-cup-launch.mjs`  
@@ -94,7 +94,7 @@ closing `registration_open` / `payments_open` / `is_featured`.
 - **One WC phase per turn.** PLAN first (files, functions, migrations, manual test).
 - **Scope discipline.** Slug-gate World Cup logic:
   `world-cup-summer-tournament` or shared constant in `src/lib/world-cup-pricing.ts`.
-- **No Phase 16 open-play** until WC-7 acceptance passes.
+- Open-play roadmap (never built) is out of scope for WC work.
 - Log discoveries in `FOLLOWUPS.md` (append-only, one line:
   `- [WC-N] <issue> — discovered YYYY-MM-DD`).
 - Auth in new code: player flows use `getCurrentPlayer()` / `createSupabaseServerClient()`.
@@ -250,7 +250,7 @@ Registrants tab shows team name.
 
 ## What NOT to do (when fixing WC regressions only)
 
-- Do not mix open-play Phase 17–19 work into a WC hotfix PR.
+- Do not mix unrelated feature work into a WC hotfix PR.
 - No admin auth refactor.
 - No auto Group A/B or WhatsApp integration.
 - No new npm packages.

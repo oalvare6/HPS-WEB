@@ -68,5 +68,4 @@ Format:
 - [WC-5] World Cup checkout (`team_full`/`team_share`), Stripe metadata (`pay_kind`, `team_name`, `roster_size`), `captain-paid-ack` route, `stripe-payments` team_name on paid — discovered 2026-06-03
 - [WC-6] Admin Registrants tab shows `team_name` column per tournament + CSV export — discovered 2026-06-03
 - [WC-7] Operator acceptance checklist `docs/WORLD-CUP-ACCEPTANCE.md`; pre-flight `scripts/verify-world-cup-launch.mjs` — discovered 2026-06-03
-- [meta] Project status + open-play handoff: `docs/PROJECT-STATUS.md`, `.cursor/plans/open-play-session.md`; `hps-phases.mdc` active Phases 17–19; `world-cup-launch.mdc` archived (`alwaysApply: false`) — discovered 2026-06-03
-- [phase 16] Operator reports Phase 16 complete; if `event_type` missing on `main`, re-run Phase 16 from `hps-phases.mdc` before Phase 17 — discovered 2026-06-03
+- [meta] Project status + open-play handoff: `docs/PROJECT-STATUS.md`, `.cursor/plans/open-play-session.md`; `hps-phases.mdc` active Phases 17–19; `world-cup-launch.mdc` archived (`alwaysApply: false`) — discovered 2026-06-03 — SUPERSEDED: open-play Phases 16–19 never built; removed from active planning 2026-06-03
