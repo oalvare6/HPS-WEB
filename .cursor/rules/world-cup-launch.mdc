@@ -1,0 +1,332 @@
+---
+description: World Cup 2026 launch workstream (auth fix, team payment, register UX). Takes precedence over Phases 16–19 in hps-phases.mdc until all WC phases below are verified. Read this every session before writing code.
+alwaysApply: true
+---
+
+# HPS World Cup Launch — Project Rules (Phases WC-0–WC-7)
+
+You are a senior full-stack engineer on **houstonpremiersoccer.com**. The site
+already ships admin UX, tournament registration, DocuSeal waivers, Stripe pay,
+and a player auth surface (magic link, password, Google, Apple). **That auth
+surface is broken in production** — fix it in Phase WC-1 before World Cup pay
+flows depend on returning users.
+
+This workstream launches the **World Cup 7v7 Soccer Tournament** (starts
+**2026-06-08**). Work in **one phase per turn**. Stop after each phase for
+manual operator testing.
+
+**Precedence:** While any WC phase below is incomplete, **do NOT start Phase 16
+(open-play `event_type`)** from `hps-phases.mdc`. Open-play is a separate
+follow-up after World Cup launch.
+
+Handoff plan (paste into new sessions): `.cursor/plans/world-cup-launch-session.md`
+
+---
+
+## Confirmed production bugs (operator-reported 2026-06-03)
+
+Treat these as **WC-1 acceptance criteria**, not hypothetical:
+
+1. **Magic link** — User clicks email link; session does **not** stick. Header
+   still shows **"Sign in"** instead of account menu with their name. `/me`
+   does not show profile/stats as a signed-in user.
+2. **Google OAuth** — **Does not work at all** (button click fails or redirect
+   loop / error; never lands signed in).
+3. **Apple OAuth** — **Does not work at all** (same as Google).
+
+**Leading code hypothesis for magic link (verify, do not assume):**
+`src/app/auth/callback/route.ts` calls `exchangeCodeForSession` via
+`createSupabaseServerClient()` then returns `NextResponse.redirect()` **without
+attaching session cookies to that redirect response**. `@supabase/ssr` route
+handlers must bind cookie writes to the outgoing `NextResponse`. Compare with
+the middleware recipe in `src/lib/supabase-server.ts::createSupabaseMiddlewareClient`.
+
+**OAuth leading hypotheses:** Supabase Auth redirect URL allow-list missing
+production origin + `/auth/callback`; Google/Apple provider misconfiguration
+in Supabase dashboard; see `docs/AUTH-CONFIG.md` and `/admin/diagnostics`.
+
+**Key auth files (WC-1 only — do not refactor admin auth):**
+- `src/app/auth/callback/route.ts`
+- `src/lib/supabase-server.ts`
+- `src/lib/supabase-browser.ts`
+- `src/middleware.ts`
+- `src/lib/player-auth.ts`
+- `src/components/layout/header.tsx` (server `getCurrentPlayer` → `isAuthed`)
+- `src/app/login/MagicLinkForm.tsx`
+- `src/app/login/OAuthButtons.tsx`
+- `docs/AUTH-CONFIG.md`, `docs/AUTH-RUNBOOK.md`, `scripts/smoke-auth.ts`
+
+**WC-1 manual test (all must pass):**
+1. Magic link from fresh email → lands on `/me` (or `next`) → header shows
+   **AccountMenu with first name** → reload page → still signed in.
+2. Google sign-in → same result.
+3. Apple sign-in → same result (or document provider config blocker with exact
+   Supabase error if dashboard not wired).
+4. Run `scripts/smoke-auth.ts` if env allows.
+
+---
+
+## Stack (verified — do not re-discover)
+
+- Next.js 15 App Router + React 19 + TypeScript strict.
+- Supabase Postgres + Storage + Auth. `@supabase/ssr` active.
+- Player auth: Supabase only. Admin auth: HMAC cookie in `app-signing.ts` — **DO NOT TOUCH**.
+- Stripe `^20`, DocuSeal adult/youth templates, Tailwind, in-repo components.
+- No new npm packages without explicit operator approval.
+
+---
+
+## World Cup tournament (live DB — do not recreate)
+
+| Field | Value |
+|---|---|
+| **id** | `a9deb6a8-c7bc-4193-b710-6e5202a3b56c` |
+| **slug** | `world-cup-summer-tournament` |
+| **title** | World Cup 7v7 Soccer Tournament |
+| **start / end** | 2026-06-08 / 2026-07-17 |
+| **max_teams** | 16 (8 Group A Mon/Wed + 8 Group B Tue/Thu — admin assigns later) |
+| **drop_in_fee_cents** | 0 (no $20 guest tier on /pay) |
+| **entry_fee_cents** | null (team pricing is custom — see WC-4) |
+| **image_url** | `/tournaments/world-cup-2026-flyer.png` |
+| **registration_open / payments_open** | true / true |
+
+Sync script: `node --env-file=.env.local scripts/update-world-cup-tournament.mjs`
+
+Portrait flyer display (may be uncommitted): `TournamentBannerImage.tsx`,
+`tournament-image.ts` — custom `image_url` uses `object-contain` 2:3.
+
+---
+
+## Business rules (operator-confirmed)
+
+### Everyone registers + waivers
+Every player **including team captain** must complete
+`/register?tournament=world-cup-summer-tournament` and sign DocuSeal waiver.
+No exceptions for people who will play.
+
+### Team payment (on `/pay` for World Cup slug only)
+
+| Option | Who | Amount |
+|---|---|---|
+| **Pay full team** | Captain (main path) | **$960 flat** always |
+| **Pay my share** | Each player when splitting | **$960 ÷ roster_size**; roster_size **8–12** |
+| **My captain already paid** | Player after waiver | **$0** — skip Stripe; admin marks paid when building roster |
+
+- **Team name** field on pay (full team + share paths) → store on
+  `registrations.team_name` + Stripe/payment metadata → visible in admin.
+- Group A/B assignment, WhatsApp groups: **manual admin** — not on public site.
+- Split payment: **honor system** (each player picks same roster size; admin
+  reconciles).
+
+### Spring Classic
+Slug `spring-classic-2026` → mark **`status = completed`** (WC-2). Consider
+closing `registration_open` / `payments_open` / `is_featured`.
+
+---
+
+## Working agreement
+
+- **One WC phase per turn.** PLAN first (files, functions, migrations, manual test).
+- **Scope discipline.** Slug-gate World Cup logic:
+  `world-cup-summer-tournament` or shared constant in `src/lib/world-cup-pricing.ts`.
+- **No Phase 16 open-play** until WC-7 acceptance passes.
+- Log discoveries in `FOLLOWUPS.md` (append-only, one line:
+  `- [WC-N] <issue> — discovered YYYY-MM-DD`).
+- Auth in new code: player flows use `getCurrentPlayer()` / `createSupabaseServerClient()`.
+  Never `app-signing` for players.
+- End-of-phase report template at bottom of this file.
+
+---
+
+## Phases — execute in order
+
+### Phase WC-0 — Deploy baseline (image + DB copy)
+
+**Goal:** Production shows full portrait flyer; DB row matches flyer.
+
+**Files:** commit if needed:
+- `public/tournaments/world-cup-2026-flyer.png`
+- `src/components/shared/TournamentBannerImage.tsx`
+- `src/lib/tournament-image.ts`
+- `src/app/events/[slug]/page.tsx`, `src/app/page.tsx`
+- `TournamentCard.tsx`, `FeaturedTournamentCard.tsx`
+- `scripts/update-world-cup-tournament.mjs`
+
+**Manual test:** Homepage + `/events/world-cup-summer-tournament` show full
+flyer (not cropped). Description mentions $960, 12 roster, groups, dates.
+
+---
+
+### Phase WC-1 — Fix player auth (P0 blocker)
+
+**Goal:** Magic link, Google, and Apple sign-in persist session; header shows
+account name; `/me` works after reload.
+
+**Likely fix area:** `auth/callback` cookie attachment on redirect; Supabase
+dashboard redirect URLs for production domain; OAuth provider config.
+
+**Files NOT touched:** admin auth, `AdminGate`, `app-signing` admin paths.
+
+**Manual test:** See "Confirmed production bugs" section above + smoke script.
+
+---
+
+### Phase WC-2 — Spring Classic completed
+
+**Goal:** Spring Classic no longer presented as active registration target.
+
+**Action:** PATCH `spring-classic-2026` → `status: completed`; optionally close
+registration/payments/featured. Script: `scripts/complete-spring-classic.mjs`
+(author in this phase).
+
+**Manual test:** `/events` shows Spring Classic as Completed; World Cup remains
+featured/upcoming.
+
+---
+
+### Phase WC-3 — World Cup register instructions
+
+**Goal:** Register page clearly explains World Cup rules when that tournament
+is selected.
+
+**Files:**
+- `src/app/register/page.tsx`
+- `src/components/register/RegistrationForm.tsx`
+
+**Copy must state:**
+- Every player registers individually (captain too).
+- Waiver required before playing.
+- Team fee: captain may pay $960 OR players split ($960 ÷ team size, min 8).
+- HPS assigns groups and contacts captains after payment.
+- No team name on register form (team name collected on pay).
+
+**Manual test:** `/register?tournament=world-cup-summer-tournament` shows
+instruction block; waiver flow unchanged for youth/adult.
+
+---
+
+### Phase WC-4 — World Cup pay UI
+
+**Goal:** `/pay?tournament=world-cup-summer-tournament` shows team payment
+options instead of generic entry / $20 drop-in.
+
+**Files:**
+- `src/lib/world-cup-pricing.ts` (new — constants + helpers)
+- `src/components/pay/PayForm.tsx`
+- `src/app/pay/page.tsx`
+
+**UI when World Cup selected:**
+1. Pay full team — **$960.00** + Team name input.
+2. Pay my share — dropdown **8–12**, live preview `$960/N`.
+3. When arriving from registration (`registrationId` + `payToken`): **My captain
+   already paid** — no Stripe.
+
+Hide generic "Full Tournament Entry" / "Guest Drop-in" cards for this slug.
+
+**Manual test:** Logged-out user on World Cup pay sees three options; Spring
+Classic pay unchanged.
+
+---
+
+### Phase WC-5 — Checkout API + team name storage
+
+**Goal:** Stripe checkout supports World Cup pay kinds; team name persisted.
+
+**Files:**
+- `src/app/api/stripe/checkout/route.ts`
+- New optional: `src/app/api/register/captain-paid-ack/route.ts` (or extend
+  existing register API)
+
+**Extend checkout body (guarded, no `any`):**
+```ts
+payKind?: "entry" | "drop_in" | "team_full" | "team_share" | "captain_paid_ack";
+rosterSize?: number;  // 8–12 when team_share
+teamName?: string;
+```
+
+- `team_full` → 96000 cents
+- `team_share` → `Math.round(96000 / rosterSize)`
+- `captain_paid_ack` → no Stripe; update registration `payment_status` +
+  `team_name` + note for admin review
+
+Stripe metadata: `pay_kind`, `team_name`, `roster_size`, `tournament_id`,
+`registration_id`.
+
+**Manual test:** Stripe test mode — $960 checkout; $96 for 10-player share;
+captain-paid ack stores team name without charge.
+
+---
+
+### Phase WC-6 — Admin team name visibility
+
+**Goal:** Operator sees team names on registrants to manually build teams.
+
+**Files:**
+- `src/components/admin/RegistrationsList.tsx`
+- `src/app/api/admin/registrations/route.ts` (ensure `team_name` in GET)
+
+**Manual test:** After test payment with team name "Test FC", admin tournament
+Registrants tab shows team name.
+
+---
+
+### Phase WC-7 — Acceptance test (World Cup launch bar)
+
+1. Portrait flyer visible on homepage + event detail.
+2. Spring Classic completed; World Cup featured, starts Jun 8.
+3. **Auth:** magic link + Google (+ Apple if configured) → header account menu → `/me` profile.
+4. Register World Cup → waiver → pay options (not $20 guest).
+5. Pay full $960 + team name → Stripe success → admin sees registrant + team name.
+6. Pay share 10 → $96 → success.
+7. Captain-paid path after waiver → no double charge.
+8. Regression: admin auth untouched; unrelated tournaments unaffected.
+
+---
+
+## What NOT to do in WC phases
+
+- No Phase 16 `event_type` / open-play migration.
+- No admin auth refactor.
+- No auto Group A/B or WhatsApp integration.
+- No new npm packages.
+- No destructive DB migrations (use existing `registrations.team_name`).
+- Do not set `entry_fee_cents = 96000` on tournament row without WC-4 pay UI
+  (would charge per-player registration $960 on generic path).
+
+---
+
+## End-of-phase report template
+
+```
+### Phase WC-N report
+Changed:
+- <one bullet per file or script>
+Manual test:
+1. <step>
+Risk / known regression:
+- <or "none">
+Followups logged:
+- <or "none">
+Next phase: Phase WC-N+1 — <title>. Ready when you are.
+```
+
+Then ask: "Phase WC-N is ready to test. Want a walkthrough, or start WC-N+1?"
+
+---
+
+## Quick reference: player journey
+
+```mermaid
+flowchart TD
+  login[Fix login WC-1] --> register["/register?tournament=world-cup"]
+  register --> waiver[DocuSeal waiver]
+  waiver --> pay["/pay with registrationId"]
+  pay --> full[Pay full team 960]
+  pay --> share["Pay my share 960/N"]
+  pay --> skip[Captain already paid]
+  full --> stripe[Stripe Checkout]
+  share --> stripe
+  skip --> adminReview[Admin marks roster]
+  stripe --> adminReview
+  adminReview --> whatsapp[Manual team + WhatsApp]
+```

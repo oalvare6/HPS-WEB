@@ -34,7 +34,11 @@ yarn-error.log*
 !.env.example
 
 # editor / IDE
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
+!.cursor/plans/
+!.cursor/plans/**
 
 # supabase CLI temp
 supabase/.temp/

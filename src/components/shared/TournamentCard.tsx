@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import {
   ArrowRight,
   Calendar,
@@ -10,8 +9,9 @@ import {
   Users,
 } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
-import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { safeInternalLink } from "@/lib/safe-internal-link";
+import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
+import { getTournamentBannerUrl } from "@/lib/tournament-image";
 
 const STATUS_PILL: Record<TournamentStatus, { text: string; dot: string; cls: string }> = {
   upcoming: { text: "Upcoming", dot: "bg-brand", cls: "text-brand bg-brand/10 border-brand/20" },
@@ -42,7 +42,7 @@ function formatDateRow(t: Tournament): string {
 
 export function TournamentCard({ tournament }: { tournament: Tournament }) {
   const pill = STATUS_PILL[tournament.status];
-  const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
+  const bannerUrl = getTournamentBannerUrl(tournament);
   const registerHref = safeInternalLink(tournament.register_url, "/register");
   const payHrefBase = safeInternalLink(tournament.pay_url, "/pay");
   // Default `/pay` carries the tournament slug so the pay screen knows which
@@ -68,17 +68,7 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
       </div>
 
       {bannerUrl && (
-        <div className="relative w-full aspect-[16/7] bg-surface-2 overflow-hidden">
-          <Image
-            src={bannerUrl}
-            alt={tournament.title}
-            fill
-            className="object-cover"
-            sizes="(max-width: 768px) 100vw, 896px"
-            quality={85}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-base/80 via-transparent to-transparent" />
-        </div>
+        <TournamentBannerImage tournament={tournament} variant="card" />
       )}
 
       <div className="p-6 md:p-8">

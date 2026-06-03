@@ -1,9 +1,9 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Calendar, Clock, MapPin, Trophy, Users } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
-import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { safeInternalLink } from "@/lib/safe-internal-link";
+import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
+import { getTournamentBannerUrl } from "@/lib/tournament-image";
 
 function formatDateRow(t: Tournament): string {
   if (t.recurrence) return t.recurrence;
@@ -55,7 +55,7 @@ export function FeaturedTournamentCard({
   imagePriority?: boolean;
   highlighted?: boolean;
 }) {
-  const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
+  const bannerUrl = getTournamentBannerUrl(tournament);
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
@@ -81,18 +81,14 @@ export function FeaturedTournamentCard({
       {bannerUrl ? (
         <Link
           href={`/events/${tournament.slug}`}
-          className="relative block w-full aspect-[16/7] bg-surface-2 group"
+          className="block bg-surface-2 group"
         >
-          <Image
-            src={bannerUrl}
-            alt={tournament.title}
-            fill
-            className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-            sizes="(min-width: 1024px) 520px, 100vw"
-            quality={85}
+          <TournamentBannerImage
+            tournament={tournament}
+            variant="card"
             priority={imagePriority}
+            className="transition-transform duration-300 group-hover:scale-[1.01]"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-base/90 via-base/25 to-transparent pointer-events-none" />
         </Link>
       ) : null}
 

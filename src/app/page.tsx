@@ -7,7 +7,8 @@ import { LocationCard } from "@/components/shared/location-card";
 import { StatusIndicator } from "@/components/shared/status-indicator";
 import { QuickActionsBar } from "@/components/layout/quick-actions-bar";
 import { FeaturedTournamentCard } from "@/components/shared/FeaturedTournamentCard";
-import { getPresetUrl } from "@/lib/tournament-image-presets";
+import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
+import { getTournamentBannerUrl } from "@/lib/tournament-image";
 import { safeInternalLink } from "@/lib/safe-internal-link";
 import {
   getFeaturedTournaments,
@@ -56,7 +57,7 @@ export default async function Home() {
       : `/events/${heroTournament.slug}`
     : "/events";
   const heroTournamentImage =
-    heroTournament && (heroTournament.image_url || getPresetUrl(heroTournament.image_preset));
+    heroTournament && getTournamentBannerUrl(heroTournament);
 
   return (
     <>
@@ -123,17 +124,11 @@ export default async function Home() {
                 <>
                   <Link href="#featured-tournaments" className="group block">
                     {heroTournamentImage && (
-                      <div className="relative aspect-[16/8] bg-surface-2">
-                        <Image
-                          src={heroTournamentImage}
-                          alt={heroTournament.title}
-                          fill
-                          className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                          sizes="(min-width: 1024px) 380px, 100vw"
-                          quality={85}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-base/85 via-base/20 to-transparent" />
-                      </div>
+                      <TournamentBannerImage
+                        tournament={heroTournament}
+                        variant="card"
+                        priority
+                      />
                     )}
                     <div className="p-5 space-y-4">
                       <p className="text-xs font-mono uppercase tracking-[0.24em] text-brand">

@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -29,6 +28,7 @@ import type {
 } from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { safeInternalLink } from "@/lib/safe-internal-link";
+import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 
 export const dynamic = "force-dynamic";
 
@@ -208,21 +208,11 @@ export default async function TournamentDetailPage({
         </div>
       </section>
 
-      {/* Banner image */}
+      {/* Banner image — portrait flyers render full poster via TournamentBannerImage */}
       {bannerUrl && (
-        <div className="bg-base">
-          <div className="max-w-6xl mx-auto">
-            <div className="relative w-full aspect-[16/7] md:aspect-[16/6] bg-surface-2">
-              <Image
-                src={bannerUrl}
-                alt={tournament.title}
-                fill
-                className="object-cover"
-                sizes="(max-width: 1024px) 100vw, 1152px"
-                priority
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-base/60 via-transparent to-transparent" />
-            </div>
+        <div className="bg-base py-6 md:py-8">
+          <div className="max-w-6xl mx-auto px-6">
+            <TournamentBannerImage tournament={tournament} variant="hero" priority />
           </div>
         </div>
       )}
