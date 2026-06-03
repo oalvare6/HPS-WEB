@@ -30,6 +30,7 @@ import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
+import { ShareTournamentButton } from "@/components/shared/ShareTournamentButton";
 
 export const dynamic = "force-dynamic";
 
@@ -377,6 +378,12 @@ export default async function TournamentDetailPage({
                       {cta.label}
                       <ArrowRight size={14} />
                     </Link>
+                    <ShareTournamentButton
+                      title={tournament.title}
+                      description={tournament.description}
+                      path={`/events/${tournament.slug}`}
+                      variant="secondary"
+                    />
                     <p className="text-center text-xs text-zinc-500 pt-1">
                       <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
                         Questions? Join WhatsApp
@@ -384,10 +391,18 @@ export default async function TournamentDetailPage({
                     </p>
                   </>
                 ) : (
-                  <p className="text-sm text-zinc-400 italic">
-                    Registration isn&apos;t open right now. Watch this page for
-                    updates.
-                  </p>
+                  <>
+                    <p className="text-sm text-zinc-400 italic">
+                      Registration isn&apos;t open right now. Watch this page
+                      for updates.
+                    </p>
+                    <ShareTournamentButton
+                      title={tournament.title}
+                      description={tournament.description}
+                      path={`/events/${tournament.slug}`}
+                      variant="secondary"
+                    />
+                  </>
                 )}
                 {tournament.entry_fee != null && (
                   <p className="text-xs text-zinc-500 text-center pt-1 border-t border-border-token/50">
