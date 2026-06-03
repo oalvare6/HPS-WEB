@@ -41,11 +41,11 @@ export async function POST(request: Request) {
       token = signAdminSessionCookieValue(adminUser, 60 * 60 * 8);
     } catch (e) {
       const missingProdSecret =
-        e instanceof Error && e.message.includes("ADMIN_SESSION_SECRET");
+        e instanceof Error && e.message.includes("APP_SIGNING_SECRET");
       return NextResponse.json(
         {
           error: missingProdSecret
-            ? "Missing ADMIN_SESSION_SECRET on the server. In Vercel: your project → Settings → Environment Variables → add ADMIN_SESSION_SECRET with a long random value (terminal: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"). Save, then Redeploy. This variable is only for signing your session cookie — it is not your admin password."
+            ? "Missing APP_SIGNING_SECRET on the server. In Vercel: your project → Settings → Environment Variables → add APP_SIGNING_SECRET with a long random value (terminal: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"). Save, then Redeploy. This variable is only for signing your session cookie — it is not your admin password."
             : "Could not create admin session. Check server logs.",
         },
         { status: 500 }

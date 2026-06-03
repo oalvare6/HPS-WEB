@@ -43,8 +43,8 @@ const card = fs.readFileSync(
   path.join(root, "src/components/shared/TournamentCard.tsx"),
   "utf8"
 );
-if (card.includes("tournamentPayHref")) ok("TournamentCard uses tournamentPayHref");
-else bad("TournamentCard missing tournamentPayHref");
+if (card.includes("tournamentPrimaryCta")) ok("TournamentCard uses tournamentPrimaryCta");
+else bad("TournamentCard missing tournamentPrimaryCta");
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -1,10 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Calendar, Clock, MapPin, Trophy, Users } from "lucide-react";
+import { ArrowRight, Calendar, Clock, CreditCard, MapPin, Trophy, Users } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
-import {
-  tournamentPayHref,
-  tournamentRegisterHref,
-} from "@/lib/tournament-public-links";
+import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 
@@ -63,8 +60,7 @@ export function FeaturedTournamentCard({
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
       : tournament.time_start || tournament.time_end;
-  const registerHref = tournamentRegisterHref(tournament);
-  const payHref = tournamentPayHref(tournament);
+  const cta = tournamentPrimaryCta(tournament);
   const pill = STATUS_PILL[tournament.status];
 
   return (
@@ -150,15 +146,10 @@ export function FeaturedTournamentCard({
         </div>
 
         <div className="flex flex-col gap-2">
-          {tournament.registration_open && (
-            <Link href={registerHref} className="btn-primary w-full justify-center text-sm">
-              Register Now
-              <ArrowRight size={14} />
-            </Link>
-          )}
-          {tournament.payments_open && (
-            <Link href={payHref} className="btn-secondary w-full justify-center text-sm">
-              Pay for Tournament
+          {cta.kind !== "none" && (
+            <Link href={cta.href} className="btn-primary w-full justify-center text-sm">
+              {cta.kind === "pay" ? <CreditCard size={14} /> : <Trophy size={14} />}
+              {cta.label}
               <ArrowRight size={14} />
             </Link>
           )}

@@ -1,15 +1,31 @@
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 
 /**
- * Server-only signing secret. In production, set `ADMIN_SESSION_SECRET` to a
+ * Server-only signing secret. In production, set `APP_SIGNING_SECRET` to a
  * long random string (32+ bytes). Dev falls back to a deterministic value from
  * admin credentials so local setups work without an extra env var.
+ *
+ * `ADMIN_SESSION_SECRET` is accepted as a legacy alias so existing deployments
+ * don't break on the rename; if only the legacy name is set we log a one-time
+ * warning so the operator can migrate.
  */
+let warnedLegacySecret = false;
+
 export function getAppSigningSecret(): string {
-  const explicit = process.env.ADMIN_SESSION_SECRET?.trim();
+  const explicit = process.env.APP_SIGNING_SECRET?.trim();
   if (explicit) return explicit;
+  const legacy = process.env.ADMIN_SESSION_SECRET?.trim();
+  if (legacy) {
+    if (!warnedLegacySecret) {
+      warnedLegacySecret = true;
+      console.warn(
+        "[app-signing] ADMIN_SESSION_SECRET is deprecated; rename to APP_SIGNING_SECRET."
+      );
+    }
+    return legacy;
+  }
   if (process.env.NODE_ENV === "production") {
-    throw new Error("ADMIN_SESSION_SECRET must be set in production.");
+    throw new Error("APP_SIGNING_SECRET must be set in production.");
   }
   const user = process.env.ADMIN_USER ?? "";
   const pass = process.env.ADMIN_PASSWORD ?? "";

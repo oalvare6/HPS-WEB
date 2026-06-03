@@ -1,8 +1,10 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PayPageClient } from "@/components/pay/PayPageClient";
-import type { TournamentPayOption } from "@/components/pay/PayForm";
-import { verifyPayResumeToken } from "@/lib/app-signing";
+import { PayForm, type TournamentPayOption } from "@/components/pay/PayForm";
+import { PayGateResultCard } from "@/components/pay/PayGateResultCard";
+import { createPayResumeToken, verifyPayResumeToken } from "@/lib/app-signing";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { getPayableTournamentBySlug } from "@/lib/tournaments";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
@@ -11,7 +13,15 @@ import {
   isWorldCupTournamentSlug,
   WORLD_CUP_TOURNAMENT_SLUG,
 } from "@/lib/world-cup-pricing";
-import type { PayEligibilityWaiverType } from "@/lib/pay-eligibility-types";
+import {
+  enrollContactInTournament,
+  runPayEligibilityCheck,
+} from "@/lib/pay-eligibility";
+import { buildPayResumePath } from "@/lib/pay-resume-url";
+import type {
+  PayEligibilitySuccessBody,
+  PayEligibilityWaiverType,
+} from "@/lib/pay-eligibility-types";
 
 export const dynamic = "force-dynamic";
 
@@ -75,12 +85,84 @@ export default async function PayPage({
     isWorldCupTournamentSlug(tournamentSlug) ||
     isWorldCupTournamentSlug(initialTournament?.slug ?? null);
 
+  const heroTitle = isWorldCupPay
+    ? "World Cup Team Payment"
+    : initialTournament
+      ? skipGate
+        ? `Pay for ${initialTournament.title}`
+        : `Join ${initialTournament.title}`
+      : "Pay for Tournament";
+
+  // Server-side eligibility for logged-in players: skip the client gate
+  // entirely. Either redirect to /pay with a token, or render a static result
+  // card. Falls through to the client gate only if eligibility errors.
+  let serverResolved: {
+    body: PayEligibilitySuccessBody;
+    waiverType: PayEligibilityWaiverType;
+  } | null = null;
+
+  if (!skipGate && player && requestedTournament && !tournamentMissing) {
+    const waiverType = resolveDefaultWaiverType(player.contact.waiver_type);
+    const eligibility = await runPayEligibilityCheck({
+      email: player.email,
+      tournamentId: requestedTournament.id,
+      waiverType,
+    });
+
+    if (eligibility.ok) {
+      const body = eligibility.body;
+
+      if (body.status === "ready_to_pay") {
+        redirect(
+          buildPayResumePath({
+            registrationId: body.registrationId,
+            payToken: body.payToken,
+            tournamentSlug,
+          })
+        );
+      }
+
+      if (body.status === "needs_registration") {
+        const enroll = await enrollContactInTournament({
+          contact: player.contact,
+          tournamentId: requestedTournament.id,
+          waiverType,
+        });
+        if (enroll.ok) {
+          let token: string | null = null;
+          try {
+            token = createPayResumeToken(enroll.registrationId);
+          } catch (err) {
+            console.error("[pay] pay token signing failed after enroll:", err);
+          }
+          if (token) {
+            redirect(
+              buildPayResumePath({
+                registrationId: enroll.registrationId,
+                payToken: token,
+                tournamentSlug,
+              })
+            );
+          }
+        }
+        // missing_emergency / insert_failed / signing failed: render the
+        // inline card below (`needs_registration` copy nudges them to the
+        // /register form which collects emergency contact details).
+      }
+
+      serverResolved = { body, waiverType };
+    } else {
+      console.error("[pay] server eligibility check failed:", eligibility.error);
+      // Fall through to client gate; rare path, mostly defensive.
+    }
+  }
+
   return (
     <>
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
-            {isWorldCupPay ? "World Cup Team Payment" : "Pay for Tournament"}
+            {heroTitle}
           </h1>
           <p className="text-zinc-400 max-w-2xl">
             {isWorldCupPay ? (
@@ -121,15 +203,31 @@ export default async function PayPage({
               View events
             </Link>
           </div>
+        ) : skipGate ? (
+          <Suspense fallback={null}>
+            <PayForm
+              initialTournamentId={initialTournament?.id ?? null}
+              initialTournament={initialTournament}
+            />
+          </Suspense>
+        ) : serverResolved && initialTournament ? (
+          <PayGateResultCard
+            result={serverResolved.body}
+            tournament={{
+              id: initialTournament.id,
+              title: initialTournament.title,
+              slug: initialTournament.slug,
+            }}
+            whatsappUrl={whatsappUrl}
+            waiverType={serverResolved.waiverType}
+            isLoggedIn={Boolean(player)}
+          />
         ) : (
           <Suspense fallback={null}>
             <PayPageClient
-              skipGate={skipGate}
               tournamentSlug={tournamentSlug}
               initialTournament={initialTournament}
-              initialTournamentId={initialTournament?.id ?? null}
               whatsappUrl={whatsappUrl}
-              playerEmail={player?.email ?? null}
               defaultWaiverType={resolveDefaultWaiverType(player?.contact.waiver_type)}
               tournamentMissing={tournamentMissing}
             />

@@ -129,6 +129,73 @@ export function resolvePayEligibility(
   };
 }
 
+export type EnrollContactInTournamentInput = {
+  contact: Contact;
+  tournamentId: string;
+  waiverType: PayEligibilityWaiverType;
+};
+
+export type EnrollContactInTournamentResult =
+  | { ok: true; registrationId: string }
+  | { ok: false; reason: "missing_emergency" | "missing_waiver" | "insert_failed" };
+
+/**
+ * Create a pending registration row for a logged-in player whose contact
+ * already has a valid waiver + emergency contact on file. Marks the new
+ * registration's waiver as signed (mirrored from the contact). Returns
+ * `missing_emergency` when the contact is missing the emergency fields the
+ * registrations table requires NOT NULL — caller should fall back to the
+ * normal `/register` flow which collects them.
+ */
+export async function enrollContactInTournament(
+  input: EnrollContactInTournamentInput
+): Promise<EnrollContactInTournamentResult> {
+  const { contact, tournamentId, waiverType } = input;
+
+  if (!isContactWaiverValid(contact, waiverType)) {
+    return { ok: false, reason: "missing_waiver" };
+  }
+
+  const emergencyName = (contact.emergency_name ?? "").trim();
+  const emergencyPhone = (contact.emergency_phone ?? "").trim();
+  if (!emergencyName || !emergencyPhone) {
+    return { ok: false, reason: "missing_emergency" };
+  }
+
+  const signedAt = contact.waiver_signed_at ?? new Date().toISOString();
+
+  const { data: inserted, error } = await supabaseAdmin
+    .from("registrations")
+    .insert({
+      tournament_id: tournamentId,
+      contact_id: contact.id,
+      registration_type: waiverType,
+      first_name: contact.first_name,
+      last_name: contact.last_name,
+      email: contact.email,
+      phone: contact.phone ?? "",
+      dob: contact.dob ?? "",
+      emergency_name: emergencyName,
+      emergency_phone: emergencyPhone,
+      waiver_type: waiverType,
+      waiver_signed: true,
+      waiver_signed_at: signedAt,
+      waiver_document_url: contact.waiver_document_url,
+      docuseal_status: "signed",
+      docuseal_submission_id: contact.waiver_submission_id,
+      payment_status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (error || !inserted) {
+    console.error("[pay-eligibility] auto-enroll insert failed:", error?.message);
+    return { ok: false, reason: "insert_failed" };
+  }
+
+  return { ok: true, registrationId: inserted.id };
+}
+
 export async function syncRegistrationWaiverFromContact(
   registrationId: string,
   contact: Contact,

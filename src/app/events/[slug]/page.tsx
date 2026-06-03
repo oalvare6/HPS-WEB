@@ -27,10 +27,7 @@ import type {
   TournamentUpdate,
 } from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
-import {
-  tournamentPayHref,
-  tournamentRegisterHref,
-} from "@/lib/tournament-public-links";
+import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 
@@ -132,8 +129,7 @@ export default async function TournamentDetailPage({
 
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
-  const registerHref = tournamentRegisterHref(tournament);
-  const payHref = tournamentPayHref(tournament);
+  const cta = tournamentPrimaryCta(tournament);
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
@@ -371,29 +367,14 @@ export default async function TournamentDetailPage({
                     This tournament has ended. Schedules and updates stay here
                     so you can reference what we ran.
                   </p>
-                ) : tournament.registration_open ? (
-                  <Link
-                    href={registerHref}
-                    className="btn-primary w-full justify-center text-sm"
-                  >
-                    <Trophy size={14} />
-                    Register Now
-                    <ArrowRight size={14} />
-                  </Link>
-                ) : (
-                  <p className="text-sm text-zinc-400 italic">
-                    Registration isn&apos;t open right now. Watch this page for
-                    updates.
-                  </p>
-                )}
-                {tournament.payments_open && tournament.status !== "completed" && (
+                ) : cta.kind !== "none" ? (
                   <>
                     <Link
-                      href={payHref}
-                      className="btn-secondary w-full justify-center text-sm"
+                      href={cta.href}
+                      className="btn-primary w-full justify-center text-sm"
                     >
-                      <CreditCard size={14} />
-                      Pay Entry Fee
+                      {cta.kind === "pay" ? <CreditCard size={14} /> : <Trophy size={14} />}
+                      {cta.label}
                       <ArrowRight size={14} />
                     </Link>
                     <p className="text-center text-xs text-zinc-500 pt-1">
@@ -402,6 +383,11 @@ export default async function TournamentDetailPage({
                       </WhatsAppCommunityLinkFromSite>
                     </p>
                   </>
+                ) : (
+                  <p className="text-sm text-zinc-400 italic">
+                    Registration isn&apos;t open right now. Watch this page for
+                    updates.
+                  </p>
                 )}
                 {tournament.entry_fee != null && (
                   <p className="text-xs text-zinc-500 text-center pt-1 border-t border-border-token/50">

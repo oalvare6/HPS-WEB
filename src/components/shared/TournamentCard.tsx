@@ -9,10 +9,7 @@ import {
   Users,
 } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
-import {
-  tournamentPayHref,
-  tournamentRegisterHref,
-} from "@/lib/tournament-public-links";
+import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 
@@ -46,8 +43,7 @@ function formatDateRow(t: Tournament): string {
 export function TournamentCard({ tournament }: { tournament: Tournament }) {
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = getTournamentBannerUrl(tournament);
-  const registerHref = tournamentRegisterHref(tournament);
-  const payHref = tournamentPayHref(tournament);
+  const cta = tournamentPrimaryCta(tournament);
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
@@ -118,17 +114,10 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
           </div>
 
           <div className="flex flex-col gap-3 md:min-w-[200px]">
-            {tournament.registration_open && (
-              <Link href={registerHref} className="btn-primary justify-center text-sm">
-                <Trophy size={16} />
-                Register Now
-                <ArrowRight size={14} />
-              </Link>
-            )}
-            {tournament.payments_open && (
-              <Link href={payHref} className="btn-secondary justify-center text-sm">
-                <CreditCard size={16} />
-                Pay Entry Fee
+            {cta.kind !== "none" && (
+              <Link href={cta.href} className="btn-primary justify-center text-sm">
+                {cta.kind === "pay" ? <CreditCard size={16} /> : <Trophy size={16} />}
+                {cta.label}
                 <ArrowRight size={14} />
               </Link>
             )}

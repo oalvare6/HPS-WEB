@@ -1,57 +1,47 @@
 "use client";
 
 import { useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PayForm, type TournamentPayOption } from "@/components/pay/PayForm";
 import { PayEmailGate } from "@/components/pay/PayEmailGate";
+import type { TournamentPayOption } from "@/components/pay/PayForm";
 import type { PayEligibilityWaiverType } from "@/lib/pay-eligibility-types";
 import { buildPayResumePath } from "@/lib/pay-resume-url";
 
 type PayPageClientProps = {
-  skipGate: boolean;
   tournamentSlug: string | null;
   initialTournament: TournamentPayOption | null;
-  initialTournamentId: string | null;
   whatsappUrl: string;
-  playerEmail: string | null;
   defaultWaiverType: PayEligibilityWaiverType;
   tournamentMissing: boolean;
 };
 
+/**
+ * Logged-out pay flow only. Logged-in users are resolved server-side in
+ * `pay/page.tsx` and either land directly on `<PayForm/>` (via redirect) or
+ * see a server-rendered result card — they never mount this client tree.
+ *
+ * `onReadyToPay` does a hard navigation (`window.location.assign`) rather
+ * than `router.replace` so the next render is a guaranteed-fresh server pass
+ * with the token in the URL — no soft-nav remount edge cases.
+ */
 export function PayPageClient({
-  skipGate,
   tournamentSlug,
   initialTournament,
-  initialTournamentId,
   whatsappUrl,
-  playerEmail,
   defaultWaiverType,
   tournamentMissing,
 }: PayPageClientProps) {
-  const router = useRouter();
-
   const handleReadyToPay = useCallback(
     (registrationId: string, payToken: string) => {
-      router.replace(
-        buildPayResumePath({
-          registrationId,
-          payToken,
-          tournamentSlug,
-        })
-      );
+      const target = buildPayResumePath({
+        registrationId,
+        payToken,
+        tournamentSlug,
+      });
+      window.location.assign(target);
     },
-    [router, tournamentSlug]
+    [tournamentSlug]
   );
-
-  if (skipGate) {
-    return (
-      <PayForm
-        initialTournamentId={initialTournamentId}
-        initialTournament={initialTournament}
-      />
-    );
-  }
 
   if (tournamentMissing || !initialTournament) {
     return (
@@ -74,9 +64,13 @@ export function PayPageClient({
         id: initialTournament.id,
         title: initialTournament.title,
         slug: initialTournament.slug,
+        recurrence: initialTournament.recurrence,
+        time_start: initialTournament.time_start,
+        time_end: initialTournament.time_end,
+        location: initialTournament.location,
+        format: initialTournament.format,
       }}
       whatsappUrl={whatsappUrl}
-      playerEmail={playerEmail}
       defaultWaiverType={defaultWaiverType}
       onReadyToPay={handleReadyToPay}
     />

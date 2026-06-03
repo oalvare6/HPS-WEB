@@ -187,7 +187,7 @@ Eligibility order (see `resolvePayEligibility`):
 
 - Player: Supabase SSR, `getCurrentPlayer()` / `getUser()` — never `getSession()` on server.
 - Admin: HMAC cookie — out of scope unless operator asks.
-- Required env: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APP_SIGNING_SECRET` (pay tokens), Stripe, DocuSeal.
+- Required env: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `APP_SIGNING_SECRET` (pay tokens; `ADMIN_SESSION_SECRET` accepted as legacy alias), Stripe, DocuSeal.
 
 See `docs/AUTH.md`, `docs/AUTH-RUNBOOK.md`.
 
