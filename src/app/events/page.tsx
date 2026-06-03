@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { Section, SectionHeader } from "@/components/shared/section";
-import { ArrowRight, CreditCard } from "lucide-react";
 import { TournamentCard } from "@/components/shared/TournamentCard";
+import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { getFeaturedTournaments, getPublicTournaments } from "@/lib/tournaments";
 import type { Tournament, TournamentStatus } from "@/lib/types";
 
@@ -53,7 +52,7 @@ export default async function EventsPage() {
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             Tournaments &amp; Events
           </h1>
-          <p className="text-xl text-zinc-300 max-w-2xl">{heroSubtitle}</p>
+          <p className="text-xl text-zinc-300 max-w-2xl line-clamp-3">{heroSubtitle}</p>
         </div>
       </section>
 
@@ -102,20 +101,16 @@ export default async function EventsPage() {
       <Section dark className="bg-base">
         <div className="text-center max-w-2xl mx-auto">
           <SectionHeader
-            title="Want to play?"
-            subtitle="Register for a tournament or pay your entry fee. New events go up here as we schedule them."
+            title="Don't see your event?"
+            subtitle="New tournaments go up here as we schedule them. Join the community chat for first looks and quick questions."
             align="center"
             dark
           />
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register" className="btn-primary">
-              Register Now
-              <ArrowRight size={16} />
-            </Link>
-            <Link href="/pay" className="btn-secondary">
-              <CreditCard size={18} />
-              Pay Entry Fee
-            </Link>
+          <div className="flex justify-center">
+            <WhatsAppCommunityLinkFromSite
+              variant="button"
+              className="sm:w-auto sm:min-w-[280px]"
+            />
           </div>
         </div>
       </Section>

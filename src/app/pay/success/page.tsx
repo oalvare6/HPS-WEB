@@ -115,18 +115,6 @@ export default async function PaySuccessPage({
               )}
             </div>
 
-            {!isCaptainAck && (
-              <div className="bg-surface-2/60 rounded-lg p-4 text-sm text-zinc-300 space-y-1">
-                <div className="flex items-center gap-2 justify-center">
-                  <Calendar size={14} className="text-brand" />
-                  <span>Spring Classic 2026 — Every Friday starting Mar 27</span>
-                </div>
-                <p className="text-zinc-500 text-xs mt-1">
-                  14062 Ambrose St &middot; 7:00 PM &ndash; 12:00 AM
-                </p>
-              </div>
-            )}
-
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link href="/events" className="btn-secondary justify-center">
                 <Calendar size={16} />

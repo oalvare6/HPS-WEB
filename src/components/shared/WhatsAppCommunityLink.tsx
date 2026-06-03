@@ -43,7 +43,8 @@ export function WhatsAppCommunityLink({
         aria-label="Join our WhatsApp community"
         className={mergeClassNames(
           "fixed z-40 flex items-center gap-2 rounded-full bg-[#25D366] text-white shadow-lg shadow-black/30",
-          "bottom-[4.75rem] right-4 px-3 py-2.5",
+          // Mobile: clear the QuickActionsBar (~5.5rem) + iPhone home-indicator safe area.
+          "bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] right-4 px-3 py-2.5",
           "md:bottom-5 md:right-5 md:gap-2.5 md:pr-4 md:pl-3 md:py-2.5",
           "hover:bg-[#20bd5a] hover:shadow-xl hover:shadow-black/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200",
           className
