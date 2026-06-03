@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { MapPin, Navigation, ExternalLink } from "lucide-react";
+// QRO branding intentionally lives on the homepage only; the per-page footer
+// stays clean (see src/app/page.tsx for the QroBadge mount).
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { getSiteSetting } from "@/lib/site-settings";
 
@@ -135,18 +137,6 @@ export async function Footer() {
           </div>
         </div>
 
-        {/* Site credit */}
-        <div className="border-t border-border-token/50 mt-6 pt-4 flex justify-center">
-          <a
-            href="https://qronnect.pro"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-zinc-600 hover:text-zinc-400 transition-colors text-xs"
-          >
-            <Image src="/assets/qro-logo.png" alt="QRO" width={20} height={20} className="h-5 w-auto opacity-70" />
-            <span>Site by QRO</span>
-          </a>
-        </div>
       </div>
     </footer>
   );

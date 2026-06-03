@@ -6,6 +6,7 @@ import { EventCard } from "@/components/shared/event-card";
 import { LocationCard } from "@/components/shared/location-card";
 import { StatusIndicator } from "@/components/shared/status-indicator";
 import { QuickActionsBar } from "@/components/layout/quick-actions-bar";
+import { QroBadge } from "@/components/layout/qro-badge";
 import { FeaturedTournamentCard } from "@/components/shared/FeaturedTournamentCard";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
@@ -432,6 +433,9 @@ export default async function Home() {
 
       {/* Bottom padding for mobile fixed bar */}
       <div className="h-20 md:hidden bg-base" />
+
+      {/* Site credit: homepage only */}
+      <QroBadge />
     </>
   );
 }

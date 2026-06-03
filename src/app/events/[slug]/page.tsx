@@ -3,14 +3,21 @@ import { notFound } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
+  Award,
   CalendarDays,
   Calendar,
   Clock,
   CreditCard,
+  Flag,
+  Handshake,
   Megaphone,
   MapPin,
   Navigation,
   Pin,
+  Shield,
+  Sparkles,
+  Sprout,
+  Timer,
   Trophy,
   Users,
 } from "lucide-react";
@@ -33,6 +40,48 @@ import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommu
 import { ShareTournamentButton } from "@/components/shared/ShareTournamentButton";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Generic playbook shown on every tournament page. Pulled out so a single edit
+ * propagates to every event, and so the description field stays free for the
+ * one-off vibe of each tournament.
+ */
+const TOURNAMENT_FEATURES: {
+  icon: typeof Sprout;
+  title: string;
+  body: string;
+}[] = [
+  {
+    icon: Sprout,
+    title: "Real grass field",
+    body: "Natural turf under the lights. Game-day feel, no rug burn.",
+  },
+  {
+    icon: Timer,
+    title: "30-minute halves",
+    body: "Full 60 minutes of football. Not pickup — real games, real clock.",
+  },
+  {
+    icon: Flag,
+    title: "Refs on every match",
+    body: "Centre referee on the field for every game. Every goal counts.",
+  },
+  {
+    icon: Shield,
+    title: "Cleats required",
+    body: "Bring your boots. Shin guards optional but recommended.",
+  },
+  {
+    icon: Handshake,
+    title: "Friendly play — no slide tackling",
+    body: "Competitive, but keep it on the ball. We're here to play.",
+  },
+  {
+    icon: Trophy,
+    title: "Live scores tracked",
+    body: "Goals, assists, and saves logged through every match.",
+  },
+];
 
 const STATUS_PILL: Record<TournamentStatus, { text: string; cls: string; dot: string }> = {
   upcoming: {
@@ -229,6 +278,54 @@ export default async function TournamentDetailPage({
                   More details coming soon. Check back for the full rundown.
                 </p>
               )}
+            </div>
+
+            {/* What to expect — generic tournament playbook, same every event */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles size={18} className="text-brand" />
+                <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+                  What you&apos;re walking into
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {TOURNAMENT_FEATURES.map((feature) => {
+                  const Icon = feature.icon;
+                  return (
+                    <div
+                      key={feature.title}
+                      className="dashboard-card p-4 flex gap-3 items-start"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center flex-shrink-0">
+                        <Icon size={18} className="text-brand" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">
+                          {feature.title}
+                        </p>
+                        <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">
+                          {feature.body}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 dashboard-card border-brand/30 bg-brand/5 p-4 flex gap-3 items-start">
+                <div className="w-10 h-10 rounded-lg bg-brand/15 border border-brand/40 flex items-center justify-center flex-shrink-0">
+                  <Award size={18} className="text-brand" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    MVP awards at the final whistle
+                  </p>
+                  <p className="text-xs text-zinc-300 leading-relaxed mt-0.5">
+                    <span className="text-white">Golden Boot</span> for most goals.{" "}
+                    <span className="text-white">Golden Glove</span> for most saves.
+                    Stats tracked live across every match.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Updates feed */}
