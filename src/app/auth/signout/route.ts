@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase-server";
 
 /**
  * Player sign-out. Clears the Supabase Auth session cookies and redirects
@@ -8,7 +8,10 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
  * POST-only so it can't be triggered by a random link.
  */
 export async function POST(request: NextRequest) {
-  const supabase = await createSupabaseServerClient();
+  const response = NextResponse.redirect(new URL("/", request.url), {
+    status: 303,
+  });
+  const { supabase } = createSupabaseRouteHandlerClient(request, response);
   await supabase.auth.signOut();
-  return NextResponse.redirect(new URL("/", request.url), { status: 303 });
+  return response;
 }

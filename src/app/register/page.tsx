@@ -6,6 +6,7 @@ import {
 import { getRegistrationOpenTournaments } from "@/lib/tournaments";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { isContactWaiverValid } from "@/lib/contacts";
+import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,8 @@ export default async function RegisterPage({
     format: t.format,
   }));
 
+  const isWorldCupLanding = preselected === WORLD_CUP_TOURNAMENT_SLUG;
+
   const prefill: RegistrationPrefill | null = player
     ? {
         email: player.email,
@@ -48,10 +51,14 @@ export default async function RegisterPage({
       <section className="bg-base text-white py-16 md:py-24 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-            Register for 7v7 Tournament
+            {isWorldCupLanding
+              ? "World Cup 7v7 Registration"
+              : "Register for 7v7 Tournament"}
           </h1>
           <p className="text-xl text-zinc-400 max-w-2xl">
-            Sign up for upcoming 7v7 leagues and tournaments at Houston Premier Soccer.
+            {isWorldCupLanding
+              ? "Each player completes their own registration and waiver. Team payment and team name come next on the pay page."
+              : "Sign up for upcoming 7v7 leagues and tournaments at Houston Premier Soccer."}
           </p>
         </div>
       </section>
@@ -61,9 +68,13 @@ export default async function RegisterPage({
           <SectionHeader
             title="Player Registration"
             subtitle={
-              prefill
-                ? "We've pre-filled your details. Edit them if anything has changed."
-                : "Fill out the form below to register. You'll sign the waiver on the next page."
+              isWorldCupLanding
+                ? prefill
+                  ? "World Cup: one registration per player. We've pre-filled your details below."
+                  : "World Cup: one registration per player. You'll sign the waiver next, then pay on the team payment page."
+                : prefill
+                  ? "We've pre-filled your details. Edit them if anything has changed."
+                  : "Fill out the form below to register. You'll sign the waiver on the next page."
             }
             dark
           />

@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   Pencil,
   CheckCircle2,
+  Info,
 } from "lucide-react";
+import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
 
 type RegistrationOption = {
   id: string;
@@ -149,8 +151,10 @@ export function RegistrationForm({
 
   const hasOptions = tournaments.length > 0;
   const isLoggedIn = Boolean(prefill);
-  const selectedTournamentTitle =
-    tournaments.find((t) => t.id === tournamentId)?.title ?? null;
+  const selectedTournament = tournaments.find((t) => t.id === tournamentId);
+  const selectedTournamentTitle = selectedTournament?.title ?? null;
+  const isWorldCupSelected =
+    selectedTournament?.slug === WORLD_CUP_TOURNAMENT_SLUG;
   const waiverOnFileForType = prefill
     ? registrationType === "adult"
       ? prefill.hasAdultWaiverOnFile
@@ -296,6 +300,8 @@ export function RegistrationForm({
         )}
       </div>
 
+      {isWorldCupSelected && <WorldCupRegisterInstructions />}
+
       {/* Registration Type */}
       <div className="space-y-2">
         <label
@@ -397,11 +403,61 @@ export function RegistrationForm({
       )}
 
       <p className="text-sm text-zinc-500 text-center">
-        {isLoggedIn && registrationType && waiverOnFileForType
-          ? "Your waiver is already on file — we'll take you straight to payment."
-          : "After submitting, you'll be directed to sign the waiver. Registration is not complete until the waiver is signed."}
+        {isWorldCupSelected
+          ? isLoggedIn && registrationType && waiverOnFileForType
+            ? "Your waiver is on file — next you'll choose team payment on the pay page (full team, your share, or captain already paid)."
+            : "After submitting, you'll sign the waiver, then choose team payment on the pay page. Team name is collected there, not on this form."
+          : isLoggedIn && registrationType && waiverOnFileForType
+            ? "Your waiver is already on file — we'll take you straight to payment."
+            : "After submitting, you'll be directed to sign the waiver. Registration is not complete until the waiver is signed."}
       </p>
     </form>
+  );
+}
+
+function WorldCupRegisterInstructions() {
+  return (
+    <div
+      className="dashboard-card p-5 space-y-3 border-brand/25 bg-brand/5"
+      role="note"
+      aria-label="World Cup registration instructions"
+    >
+      <div className="flex items-start gap-3">
+        <Info size={18} className="text-brand mt-0.5 flex-shrink-0" />
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-white">
+            World Cup 7v7 — how registration works
+          </h2>
+          <ul className="text-sm text-zinc-300 space-y-2 list-disc pl-4 marker:text-zinc-500">
+            <li>
+              <strong className="text-zinc-200">Every player registers here</strong>,
+              including the team captain. One form per person on the roster.
+            </li>
+            <li>
+              A signed waiver is required before you play. Choose adult or youth
+              below; you will complete DocuSeal after submitting unless your
+              waiver is already on file.
+            </li>
+            <li>
+              <strong className="text-zinc-200">Team fee is paid later</strong> on
+              the payment page: the captain may pay the full{" "}
+              <strong className="text-zinc-200">$960</strong> team fee, or each
+              player may pay their share (
+              <strong className="text-zinc-200">$960 divided by roster size</strong>,
+              roster size 8–12). Your team should agree on the same roster size.
+            </li>
+            <li>
+              Houston Premier Soccer assigns Group A/B schedules and contacts
+              captains after payment. That happens outside this form.
+            </li>
+            <li>
+              Do not enter a team name here — you will provide it on the payment
+              page when paying the team fee or your share.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }
 

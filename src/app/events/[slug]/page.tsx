@@ -167,7 +167,7 @@ export default async function TournamentDetailPage({
                 Registration Open
               </span>
             )}
-            {tournament.payments_open && (
+            {tournament.payments_open && tournament.status !== "completed" && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-surface-2 text-brand border border-brand/30">
                 Payments Open
               </span>
@@ -365,9 +365,16 @@ export default async function TournamentDetailPage({
               <div className="dashboard-card p-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <Trophy size={18} className="text-brand" />
-                  <h3 className="text-base font-semibold text-white">Take part</h3>
+                  <h3 className="text-base font-semibold text-white">
+                    {tournament.status === "completed" ? "Past event" : "Take part"}
+                  </h3>
                 </div>
-                {tournament.registration_open ? (
+                {tournament.status === "completed" ? (
+                  <p className="text-sm text-zinc-400">
+                    This tournament has ended. Schedules and updates stay here
+                    so you can reference what we ran.
+                  </p>
+                ) : tournament.registration_open ? (
                   <Link
                     href={registerHref}
                     className="btn-primary w-full justify-center text-sm"
@@ -382,7 +389,7 @@ export default async function TournamentDetailPage({
                     updates.
                   </p>
                 )}
-                {tournament.payments_open && (
+                {tournament.payments_open && tournament.status !== "completed" && (
                   <Link
                     href={payHref}
                     className="btn-secondary w-full justify-center text-sm"

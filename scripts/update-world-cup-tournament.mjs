@@ -16,9 +16,10 @@ const supabase = createClient(url, key);
 const SLUG = "world-cup-summer-tournament";
 const FLYER_PATH = "/tournaments/world-cup-2026-flyer.png";
 
-const DESCRIPTION = `High School Boys 7v7 — Compete. Unite. Win.
+const DESCRIPTION = `Compete. Unite. Win.
 
 $960 per team · Max 12 players per roster
+Ages: High school boys - adults
 
 Group A — 8 teams, Monday / Wednesday
 Group B — 8 teams, Tuesday / Thursday
@@ -26,12 +27,14 @@ Game times: 6:00 PM, 7:00 PM, 8:00 PM, 9:00 PM
 
 Group stage: June 8 – July 2
 Playoffs: July 6 – July 14
-Final match: Thursday, July 17`;
+Final match: Thursday, July 17
+
+Assemble your team. Bring your best. Chase the championship.`;
 
 const patch = {
   title: "World Cup 7v7 Soccer Tournament",
   description: DESCRIPTION,
-  format: "Youth 7v7",
+  format: "High School Boys - Adults",
   status: "upcoming",
   start_date: "2026-06-08T00:00:00.000Z",
   end_date: "2026-07-17T00:00:00.000Z",

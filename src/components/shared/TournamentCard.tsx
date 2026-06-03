@@ -61,7 +61,13 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
   return (
     <div className="dashboard-card overflow-hidden">
       <div className={`border-b px-6 py-3 flex items-center gap-2 ${pill.cls}`}>
-        <div className={`w-2 h-2 ${pill.dot} rounded-full animate-pulse`} />
+        <div
+          className={`w-2 h-2 ${pill.dot} rounded-full ${
+            tournament.status === "upcoming" || tournament.status === "ongoing"
+              ? "animate-pulse"
+              : ""
+          }`}
+        />
         <span className="text-xs font-mono uppercase tracking-wider font-semibold">
           {statusLabel(tournament)}
         </span>

@@ -15,7 +15,17 @@ import {
   AlertCircle,
   CheckCircle2,
   Users,
+  UserCheck,
 } from "lucide-react";
+import {
+  formatUsdFromCents,
+  isWorldCupTournamentSlug,
+  WORLD_CUP_ROSTER_SIZE_OPTIONS,
+  WORLD_CUP_TEAM_FEE_CENTS,
+  worldCupShareAmountCents,
+  type GenericPayKind,
+  type WorldCupPayKind,
+} from "@/lib/world-cup-pricing";
 
 export type TournamentPayOption = {
   id: string;
@@ -30,10 +40,8 @@ export type TournamentPayOption = {
   drop_in_fee_cents: number;
 };
 
-type PayKind = "entry" | "drop_in";
-
 function formatUsd(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
+  return formatUsdFromCents(cents);
 }
 
 type PayFormProps = {
@@ -68,7 +76,10 @@ export function PayForm({
   const [selectedTournamentId, setSelectedTournamentId] = useState(
     initialTournamentId ?? ""
   );
-  const [selectedPayKind, setSelectedPayKind] = useState<PayKind>("entry");
+  const [selectedPayKind, setSelectedPayKind] = useState<GenericPayKind>("entry");
+  const [worldCupPayKind, setWorldCupPayKind] = useState<WorldCupPayKind>("team_full");
+  const [rosterSize, setRosterSize] = useState<number>(10);
+  const [teamName, setTeamName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [payOptionsLoading, setPayOptionsLoading] = useState(true);
@@ -78,6 +89,7 @@ export function PayForm({
   const [alreadyPaid, setAlreadyPaid] = useState(false);
   const [registrationTournament, setRegistrationTournament] = useState<{
     id: string | null;
+    slug: string | null;
     title: string | null;
     entryFeeCents: number | null;
     dropInFeeCents: number | null;
@@ -91,17 +103,50 @@ export function PayForm({
     tournaments[0] ??
     null;
 
-  const selectedAmountCents = hasRegistration
-    ? registrationTournament?.entryFeeCents ?? null
-    : selectedPayKind === "drop_in"
-      ? (selectedTournament?.drop_in_fee_cents ?? null)
-      : (selectedTournament?.entry_fee_cents ?? null);
+  const registrationTournamentSlug = registrationTournament?.slug ?? null;
+  const isWorldCup =
+    isWorldCupTournamentSlug(selectedTournament?.slug) ||
+    isWorldCupTournamentSlug(registrationTournamentSlug);
 
-  const selectedPayTitle = hasRegistration
-    ? registrationTournament?.title ?? "Tournament Entry"
-    : selectedPayKind === "drop_in"
-      ? `${selectedTournament?.title ?? "Tournament"} — Drop-in`
-      : (selectedTournament?.title ?? "Tournament Entry");
+  const worldCupShareCents = worldCupShareAmountCents(rosterSize);
+
+  const selectedAmountCents = (() => {
+    if (isWorldCup) {
+      if (worldCupPayKind === "captain_paid_ack") return 0;
+      if (worldCupPayKind === "team_full") return WORLD_CUP_TEAM_FEE_CENTS;
+      return worldCupShareCents > 0 ? worldCupShareCents : null;
+    }
+    if (hasRegistration) {
+      return registrationTournament?.entryFeeCents ?? null;
+    }
+    if (selectedPayKind === "drop_in") {
+      return selectedTournament?.drop_in_fee_cents ?? null;
+    }
+    return selectedTournament?.entry_fee_cents ?? null;
+  })();
+
+  const selectedPayTitle = (() => {
+    if (isWorldCup) {
+      const base = selectedTournament?.title ?? registrationTournament?.title ?? "World Cup";
+      if (worldCupPayKind === "team_full") return `${base} — Full team`;
+      if (worldCupPayKind === "team_share") {
+        return `${base} — Share (${rosterSize} players)`;
+      }
+      return `${base} — Captain already paid`;
+    }
+    if (hasRegistration) {
+      return registrationTournament?.title ?? "Tournament Entry";
+    }
+    if (selectedPayKind === "drop_in") {
+      return `${selectedTournament?.title ?? "Tournament"} — Drop-in`;
+    }
+    return selectedTournament?.title ?? "Tournament Entry";
+  })();
+
+  const requiresTeamName =
+    isWorldCup &&
+    (worldCupPayKind === "team_full" || worldCupPayKind === "team_share");
+  const teamNameValid = !requiresTeamName || teamName.trim().length > 0;
 
   useEffect(() => {
     let cancelledFetch = false;
@@ -136,7 +181,7 @@ export function PayForm({
   }, []);
 
   useEffect(() => {
-    if (!selectedTournament) return;
+    if (!selectedTournament || isWorldCupTournamentSlug(selectedTournament.slug)) return;
     if (selectedPayKind === "entry" && !selectedTournament.entry_fee_cents) {
       setSelectedPayKind("drop_in");
     }
@@ -160,6 +205,7 @@ export function PayForm({
           paymentStatus?: string;
           tournamentId?: string | null;
           tournamentTitle?: string | null;
+          tournamentSlug?: string | null;
           tournamentEntryFeeCents?: number | null;
           tournamentDropInFeeCents?: number | null;
           error?: string;
@@ -179,6 +225,7 @@ export function PayForm({
         if (data.paymentStatus === "paid") setAlreadyPaid(true);
         setRegistrationTournament({
           id: data.tournamentId ?? null,
+          slug: data.tournamentSlug ?? null,
           title: data.tournamentTitle ?? null,
           entryFeeCents: data.tournamentEntryFeeCents ?? null,
           dropInFeeCents: data.tournamentDropInFeeCents ?? null,
@@ -212,22 +259,66 @@ export function PayForm({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (isWorldCup && !teamNameValid) {
+      setError("Enter your team name before continuing.");
+      return;
+    }
+
+    if (isWorldCup && worldCupPayKind === "captain_paid_ack") {
+      if (!hasRegistration) {
+        setError(
+          "Complete registration and your waiver first, then return to this page from your confirmation link."
+        );
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
+      if (isWorldCup && worldCupPayKind === "captain_paid_ack") {
+        const res = await fetch("/api/register/captain-paid-ack", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: email.trim(),
+            registrationId,
+            payToken: payToken || undefined,
+            teamName: teamName.trim() || undefined,
+          }),
+        });
+        const data = (await res.json()) as { redirectUrl?: string; error?: string };
+        if (!res.ok || !data.redirectUrl) {
+          setError(data.error ?? "Something went wrong. Please try again.");
+          setLoading(false);
+          return;
+        }
+        window.location.href = data.redirectUrl;
+        return;
+      }
+
+      const payKind = isWorldCup
+        ? worldCupPayKind
+        : hasRegistration
+          ? "entry"
+          : selectedPayKind;
+
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
           tournamentId: hasRegistration ? undefined : selectedTournament?.id,
-          payKind: hasRegistration ? "entry" : selectedPayKind,
+          payKind,
           registrationId: registrationId || undefined,
           payToken: payToken || undefined,
+          rosterSize: isWorldCup && worldCupPayKind === "team_share" ? rosterSize : undefined,
+          teamName: isWorldCup && requiresTeamName ? teamName.trim() : undefined,
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { url?: string; error?: string };
 
       if (!res.ok || !data.url) {
         setError(data.error ?? "Something went wrong. Please try again.");
@@ -313,7 +404,10 @@ export function PayForm({
           <span>
             <span className="font-semibold">Step 3 of 3 — Payment.</span>{" "}
             {firstName ? `${firstName}, your` : "Your"} registration and waiver are saved
-            {email ? <> for <span className="font-mono">{email}</span></> : null}. Pick a tier and complete checkout to lock in your spot.
+            {email ? <> for <span className="font-mono">{email}</span></> : null}.{" "}
+            {isWorldCup
+              ? "Choose how your team is paying, then complete checkout or confirm your captain already paid."
+              : "Pick a tier and complete checkout to lock in your spot."}
           </span>
         </div>
       )}
@@ -378,7 +472,18 @@ export function PayForm({
         </div>
       </div>
 
-      {!hasRegistration && selectedTournament && (
+      {selectedTournament && isWorldCup && (
+        <WorldCupPayOptions
+          worldCupPayKind={worldCupPayKind}
+          onSelectKind={setWorldCupPayKind}
+          rosterSize={rosterSize}
+          onRosterSizeChange={setRosterSize}
+          shareCents={worldCupShareCents}
+          hasRegistration={hasRegistration}
+        />
+      )}
+
+      {selectedTournament && !isWorldCup && !hasRegistration && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
           {selectedTournament.entry_fee_cents ? (
             <button
@@ -458,7 +563,23 @@ export function PayForm({
           Complete Payment
         </h3>
         <p className="text-zinc-400 text-sm mb-6">
-          {hasRegistration ? (
+          {isWorldCup ? (
+            <>
+              {worldCupPayKind === "captain_paid_ack" ? (
+                <>
+                  Confirm that your captain already paid the $960 team fee. Houston Premier
+                  Soccer will review and mark your registration paid — no charge today.
+                </>
+              ) : (
+                <>
+                  Your payment for{" "}
+                  <span className="text-zinc-200">{selectedPayTitle}</span> will be linked to your
+                  registration. Agree on roster size with your teammates if you are splitting the
+                  fee.
+                </>
+              )}
+            </>
+          ) : hasRegistration ? (
             <>
               Your payment for <span className="text-zinc-200">{selectedPayTitle}</span> will be
               linked to your registration automatically.
@@ -505,6 +626,30 @@ export function PayForm({
             )}
           </div>
 
+          {requiresTeamName && (
+            <div>
+              <label
+                htmlFor="teamName"
+                className="block text-sm font-medium text-zinc-400 mb-1"
+              >
+                Team name <span className="text-red-400">*</span>
+              </label>
+              <input
+                id="teamName"
+                type="text"
+                required
+                autoComplete="organization"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                placeholder="e.g. Houston FC"
+                className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors"
+              />
+              <p className="text-xs text-zinc-500 mt-1.5">
+                Used to build your roster and group assignment after payment.
+              </p>
+            </div>
+          )}
+
           {error && (
             <div className="flex items-start gap-2 text-red-400 text-sm">
               <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
@@ -514,21 +659,36 @@ export function PayForm({
 
           <button
             type="submit"
-            disabled={loading || !email || !selectedAmountCents}
+            disabled={
+              loading ||
+              !email ||
+              !teamNameValid ||
+              (isWorldCup
+                ? worldCupPayKind !== "captain_paid_ack" && !selectedAmountCents
+                : !selectedAmountCents)
+            }
             className="btn-primary w-full justify-center h-12 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>Processing…</>
+            ) : isWorldCup && worldCupPayKind === "captain_paid_ack" ? (
+              <>
+                <UserCheck size={18} />
+                Confirm captain already paid
+                <ArrowRight size={16} />
+              </>
             ) : (
               <>
                 <CreditCard size={18} />
-                {selectedAmountCents ? `Pay ${formatUsd(selectedAmountCents)} with Card` : "Amount unavailable"}
+                {selectedAmountCents
+                  ? `Pay ${formatUsd(selectedAmountCents)} with Card`
+                  : "Amount unavailable"}
                 <ArrowRight size={16} />
               </>
             )}
           </button>
 
-          {!selectedAmountCents && (
+          {!isWorldCup && !selectedAmountCents && (
             <p className="text-xs text-yellow-400 text-center">
               This payment option has no configured amount yet. Please contact support.
             </p>
@@ -538,6 +698,151 @@ export function PayForm({
             Powered by Stripe. Your card details are never stored on our servers.
           </p>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function WorldCupPayOptions({
+  worldCupPayKind,
+  onSelectKind,
+  rosterSize,
+  onRosterSizeChange,
+  shareCents,
+  hasRegistration,
+}: {
+  worldCupPayKind: WorldCupPayKind;
+  onSelectKind: (kind: WorldCupPayKind) => void;
+  rosterSize: number;
+  onRosterSizeChange: (size: number) => void;
+  shareCents: number;
+  hasRegistration: boolean;
+}) {
+  const cardClass = (active: boolean) =>
+    `dashboard-card p-5 text-left transition-all w-full ${
+      active ? "ring-2 ring-brand border-brand" : "hover:border-border-token"
+    }`;
+
+  return (
+    <div className="space-y-4 mb-8">
+      <p className="text-sm text-zinc-400">
+        Team fee is <strong className="text-zinc-200">$960</strong> total. Choose one option below.
+      </p>
+
+      <div className="grid grid-cols-1 gap-4">
+        <button
+          type="button"
+          onClick={() => onSelectKind("team_full")}
+          className={cardClass(worldCupPayKind === "team_full")}
+        >
+          <div className="flex items-start justify-between mb-3">
+            <span
+              className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                worldCupPayKind === "team_full"
+                  ? "bg-brand/20 text-brand"
+                  : "bg-base text-zinc-400"
+              }`}
+            >
+              Captain / full team
+            </span>
+            <Trophy
+              size={20}
+              className={worldCupPayKind === "team_full" ? "text-brand" : "text-zinc-600"}
+            />
+          </div>
+          <p className="text-white font-semibold mb-1">Pay full team</p>
+          <p className="text-zinc-400 text-sm mb-3">
+            One payment covers the entire roster ($960 flat).
+          </p>
+          <p className="text-2xl font-bold text-white">
+            {formatUsdFromCents(WORLD_CUP_TEAM_FEE_CENTS)}
+          </p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectKind("team_share")}
+          className={cardClass(worldCupPayKind === "team_share")}
+        >
+          <div className="flex items-start justify-between mb-3">
+            <span
+              className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                worldCupPayKind === "team_share"
+                  ? "bg-brand/20 text-brand"
+                  : "bg-base text-zinc-400"
+              }`}
+            >
+              Split with roster
+            </span>
+            <Users
+              size={20}
+              className={worldCupPayKind === "team_share" ? "text-brand" : "text-zinc-600"}
+            />
+          </div>
+          <p className="text-white font-semibold mb-1">Pay my share</p>
+          <p className="text-zinc-400 text-sm mb-3">
+            $960 divided by your team size (8–12 players). Pick the same size your teammates use.
+          </p>
+          <div
+            className="flex flex-wrap items-end gap-3"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <div>
+              <label htmlFor="rosterSize" className="block text-xs text-zinc-500 mb-1">
+                Roster size
+              </label>
+              <select
+                id="rosterSize"
+                value={rosterSize}
+                onChange={(e) => onRosterSizeChange(Number(e.target.value))}
+                className="px-3 py-2 bg-surface-2 border border-border-token text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+              >
+                {WORLD_CUP_ROSTER_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n} players
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-2xl font-bold text-white pb-0.5">
+              {shareCents > 0 ? formatUsdFromCents(shareCents) : "—"}
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectKind("captain_paid_ack")}
+          disabled={!hasRegistration}
+          className={`${cardClass(worldCupPayKind === "captain_paid_ack")} ${
+            !hasRegistration ? "opacity-60 cursor-not-allowed" : ""
+          }`}
+        >
+          <div className="flex items-start justify-between mb-3">
+            <span
+              className={`inline-block px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wide ${
+                worldCupPayKind === "captain_paid_ack"
+                  ? "bg-brand/20 text-brand"
+                  : "bg-base text-zinc-400"
+              }`}
+            >
+              No charge
+            </span>
+            <UserCheck
+              size={20}
+              className={
+                worldCupPayKind === "captain_paid_ack" ? "text-brand" : "text-zinc-600"
+              }
+            />
+          </div>
+          <p className="text-white font-semibold mb-1">My captain already paid</p>
+          <p className="text-zinc-400 text-sm">
+            {hasRegistration
+              ? "Your captain paid the $960 team fee. Confirm here so we can mark you paid without charging your card."
+              : "Available after you complete registration and your waiver from your confirmation link."}
+          </p>
+        </button>
       </div>
     </div>
   );

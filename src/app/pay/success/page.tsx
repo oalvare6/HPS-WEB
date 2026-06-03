@@ -19,7 +19,7 @@ import { PaySuccessTracker } from "./PaySuccessTracker";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ session_id?: string }>;
+type SearchParams = Promise<{ session_id?: string; captain_ack?: string }>;
 
 type VerifyState =
   | { status: "no_session" }
@@ -45,9 +45,12 @@ export default async function PaySuccessPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { session_id: sessionId } = await searchParams;
+  const { session_id: sessionId, captain_ack: captainAck } = await searchParams;
+  const isCaptainAck = captainAck === "1";
 
-  const verify = await verifyStripeSession(sessionId);
+  const verify = isCaptainAck
+    ? ({ status: "no_session" } as const)
+    : await verifyStripeSession(sessionId);
   const player = await getCurrentPlayer();
 
   const verifiedEmail =
@@ -65,7 +68,7 @@ export default async function PaySuccessPage({
       <section className="bg-base text-white py-12 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-3xl font-bold tracking-tight">
-            Payment Confirmed
+            {isCaptainAck ? "Confirmation Received" : "Payment Confirmed"}
           </h1>
         </div>
       </section>
@@ -87,11 +90,21 @@ export default async function PaySuccessPage({
 
             <div>
               <h2 className="text-2xl font-bold text-white mb-2">
-                You&apos;re in!
+                {isCaptainAck ? "Thanks — we received your confirmation" : "You're in!"}
               </h2>
               <p className="text-zinc-400">
-                Your payment was successful. A confirmation receipt has been
-                sent to your email by Stripe.
+                {isCaptainAck ? (
+                  <>
+                    You confirmed that your captain already paid the World Cup team
+                    fee. Houston Premier Soccer will verify with your captain and mark
+                    your registration paid — no charge was made today.
+                  </>
+                ) : (
+                  <>
+                    Your payment was successful. A confirmation receipt has been sent
+                    to your email by Stripe.
+                  </>
+                )}
               </p>
               {showError && (
                 <p className="text-yellow-400 text-sm mt-2">
@@ -101,15 +114,17 @@ export default async function PaySuccessPage({
               )}
             </div>
 
-            <div className="bg-surface-2/60 rounded-lg p-4 text-sm text-zinc-300 space-y-1">
-              <div className="flex items-center gap-2 justify-center">
-                <Calendar size={14} className="text-brand" />
-                <span>Spring Classic 2026 — Every Friday starting Mar 27</span>
+            {!isCaptainAck && (
+              <div className="bg-surface-2/60 rounded-lg p-4 text-sm text-zinc-300 space-y-1">
+                <div className="flex items-center gap-2 justify-center">
+                  <Calendar size={14} className="text-brand" />
+                  <span>Spring Classic 2026 — Every Friday starting Mar 27</span>
+                </div>
+                <p className="text-zinc-500 text-xs mt-1">
+                  14062 Ambrose St &middot; 7:00 PM &ndash; 12:00 AM
+                </p>
               </div>
-              <p className="text-zinc-500 text-xs mt-1">
-                14062 Ambrose St &middot; 7:00 PM &ndash; 12:00 AM
-              </p>
-            </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link href="/events" className="btn-secondary justify-center">

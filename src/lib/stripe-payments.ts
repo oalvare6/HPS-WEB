@@ -110,9 +110,39 @@ export async function recordCheckoutSessionPayment(
   }
 
   if (registrationId) {
+    const teamNameMeta = session.metadata?.team_name?.trim() ?? "";
+    const payKind = session.metadata?.pay_kind ?? "";
+    const rosterSizeMeta = session.metadata?.roster_size?.trim() ?? "";
+
+    const regUpdate: {
+      payment_status: "paid";
+      team_name?: string;
+      notes?: string;
+    } = { payment_status: "paid" };
+
+    if (teamNameMeta) {
+      regUpdate.team_name = teamNameMeta;
+    }
+
+    if (payKind === "team_share" && rosterSizeMeta) {
+      const { data: regRow } = await supabaseAdmin
+        .from("registrations")
+        .select("notes")
+        .eq("id", registrationId)
+        .maybeSingle();
+      const shareLine = `World Cup: paid roster share (${rosterSizeMeta} players).`;
+      const existing = regRow?.notes ?? null;
+      regUpdate.notes =
+        existing && existing.includes(shareLine)
+          ? existing
+          : existing?.trim()
+            ? `${existing.trim()}\n${shareLine}`
+            : shareLine;
+    }
+
     const { error: regErr } = await supabaseAdmin
       .from("registrations")
-      .update({ payment_status: "paid" })
+      .update(regUpdate)
       .eq("id", registrationId);
     if (regErr) {
       console.error("[stripe-payments] registration update failed:", regErr.message);

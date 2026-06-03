@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     let query = supabaseAdmin
       .from("registrations")
       .select(
-        `id, created_at, tournament_id, contact_id, team_id, registration_type, first_name, last_name, email, phone, dob,
+        `id, created_at, tournament_id, contact_id, team_id, team_name, registration_type, first_name, last_name, email, phone, dob,
          emergency_name, emergency_phone, waiver_type, waiver_signed, waiver_signed_at,
          waiver_submission_id, waiver_match_key, waiver_document_url, payment_status,
          docuseal_status, docuseal_submission_id, docuseal_sign_url,

@@ -182,6 +182,12 @@ Edit at Supabase Dashboard → Authentication → URL Configuration →
 `/admin/diagnostics` lists the URLs the app expects under "Expected redirect
 URLs". Cross-check that block against the dashboard.
 
+**Route handler note (WC-1):** `/auth/callback` and `/auth/signout` must return
+the same `NextResponse` that received session cookies via
+`createSupabaseRouteHandlerClient` in `src/lib/supabase-server.ts`. A fresh
+`NextResponse.redirect()` after `exchangeCodeForSession` drops `Set-Cookie`
+and reproduces "link works but header still says Sign in".
+
 ## Identity-merge silent duplicates
 
 Symptom: a single human ends up with two `auth.users` rows — usually one

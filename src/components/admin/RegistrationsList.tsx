@@ -98,6 +98,7 @@ type Registration = {
   created_at: string;
   tournament_id: string | null;
   contact_id: string | null;
+  team_name: string | null;
   registration_type: string;
   first_name: string;
   last_name: string;
@@ -456,6 +457,7 @@ const RegistrationsList = forwardRef<
   const handleExportCsv = (): void => {
     const headers = [
       "Name",
+      "Team",
       "Email",
       "Phone",
       "DOB",
@@ -470,6 +472,7 @@ const RegistrationsList = forwardRef<
     ];
     const rows = sorted.map((r) => [
       `${r.first_name} ${r.last_name}`,
+      r.team_name ?? "",
       r.email,
       r.phone,
       r.dob,
@@ -495,8 +498,10 @@ const RegistrationsList = forwardRef<
   };
 
   const showTournamentColumn = !tournamentId;
+  const showTeamColumn = Boolean(tournamentId);
   const showStatsCards = !tournamentId;
-  const colSpan = showTournamentColumn ? 7 : 6;
+  const colSpan =
+    (showTournamentColumn ? 7 : 6) + (showTeamColumn ? 1 : 0);
 
   return (
     <>
@@ -556,7 +561,7 @@ const RegistrationsList = forwardRef<
           {showStatsCards && <StatCardsSkeleton count={4} />}
           <TableSkeleton
             rows={6}
-            columns={showTournamentColumn ? 7 : 6}
+            columns={colSpan}
           />
         </div>
       ) : (
@@ -643,6 +648,11 @@ const RegistrationsList = forwardRef<
                         Tournament
                       </th>
                     )}
+                    {showTeamColumn && (
+                      <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">
+                        Team
+                      </th>
+                    )}
                     <th
                       className="px-4 py-3 text-zinc-400 font-medium cursor-pointer hover:text-white"
                       onClick={() => handleSort("registration_type")}
@@ -708,6 +718,17 @@ const RegistrationsList = forwardRef<
                                 <span className="text-yellow-400 text-xs">
                                   unlinked
                                 </span>
+                              )}
+                            </td>
+                          )}
+                          {showTeamColumn && (
+                            <td className="px-4 py-3 text-zinc-300 hidden md:table-cell">
+                              {r.team_name ? (
+                                <span className="text-white font-medium">
+                                  {r.team_name}
+                                </span>
+                              ) : (
+                                <span className="text-zinc-500">—</span>
                               )}
                             </td>
                           )}
@@ -805,6 +826,16 @@ const RegistrationsList = forwardRef<
                                     )}
                                   </p>
                                 </div>
+                                {r.team_name && (
+                                  <div>
+                                    <p className="text-zinc-500 text-xs uppercase">
+                                      Team name
+                                    </p>
+                                    <p className="text-zinc-200 font-medium">
+                                      {r.team_name}
+                                    </p>
+                                  </div>
+                                )}
                                 <div>
                                   <p className="text-zinc-500 text-xs uppercase">
                                     Email

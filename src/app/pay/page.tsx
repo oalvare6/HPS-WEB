@@ -1,10 +1,15 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PayForm, type TournamentPayOption } from "@/components/pay/PayForm";
 import { getPayableTournamentBySlug } from "@/lib/tournaments";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createPayResumeToken } from "@/lib/app-signing";
+import {
+  isWorldCupTournamentSlug,
+  WORLD_CUP_TOURNAMENT_SLUG,
+} from "@/lib/world-cup-pricing";
 
 export const dynamic = "force-dynamic";
 
@@ -92,16 +97,33 @@ export default async function PayPage({
   const sp = await searchParams;
   const alreadyOnPaidFlow = Boolean(sp.registrationId);
   const initialTournament = await resolveSmartRedirect(sp.tournament, alreadyOnPaidFlow);
+  const isWorldCupPay =
+    isWorldCupTournamentSlug(sp.tournament) ||
+    isWorldCupTournamentSlug(initialTournament?.slug ?? null);
 
   return (
     <>
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
-            Pay for Tournament
+            {isWorldCupPay ? "World Cup Team Payment" : "Pay for Tournament"}
           </h1>
-          <p className="text-zinc-400">
-            Secure payment via Stripe. You must register and sign the waiver before paying.
+          <p className="text-zinc-400 max-w-2xl">
+            {isWorldCupPay ? (
+              <>
+                Pay the full $960 team fee, your share of the roster, or confirm your captain
+                already paid. You must{" "}
+                <Link
+                  href={`/register?tournament=${WORLD_CUP_TOURNAMENT_SLUG}`}
+                  className="text-white underline underline-offset-2"
+                >
+                  register and sign the waiver
+                </Link>{" "}
+                before playing.
+              </>
+            ) : (
+              "Secure payment via Stripe. You must register and sign the waiver before paying."
+            )}
           </p>
         </div>
       </section>

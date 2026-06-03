@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseRouteHandlerClient } from "@/lib/supabase-server";
 
 /**
  * Magic-link / OTP / recovery / OAuth callback. Supabase Auth redirects the
@@ -46,7 +46,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(buildLoginErrorUrl(url, "missing_code"));
   }
 
-  const supabase = await createSupabaseServerClient();
+  const target = new URL(next ?? "/me", url.origin);
+  const response = NextResponse.redirect(target);
+  const { supabase } = createSupabaseRouteHandlerClient(request, response);
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
@@ -55,8 +57,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(buildLoginErrorUrl(url, reason));
   }
 
-  const target = new URL(next ?? "/me", url.origin);
-  return NextResponse.redirect(target);
+  return response;
 }
 
 function sanitizeNextPath(raw: string | null): string | null {

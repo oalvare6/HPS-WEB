@@ -3,6 +3,25 @@ import { Section, SectionHeader } from "@/components/shared/section";
 import { ArrowRight, CreditCard } from "lucide-react";
 import { TournamentCard } from "@/components/shared/TournamentCard";
 import { getFeaturedTournaments, getPublicTournaments } from "@/lib/tournaments";
+import type { Tournament, TournamentStatus } from "@/lib/types";
+
+const STATUS_SORT: Record<TournamentStatus, number> = {
+  upcoming: 0,
+  ongoing: 1,
+  completed: 2,
+  cancelled: 3,
+};
+
+function sortEventsForList(tournaments: Tournament[]): Tournament[] {
+  return [...tournaments].sort((a, b) => {
+    const statusDiff = STATUS_SORT[a.status] - STATUS_SORT[b.status];
+    if (statusDiff !== 0) return statusDiff;
+    const aTime = a.start_date ? new Date(a.start_date).getTime() : 0;
+    const bTime = b.start_date ? new Date(b.start_date).getTime() : 0;
+    if (a.status === "completed") return bTime - aTime;
+    return aTime - bTime;
+  });
+}
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +29,9 @@ const DEFAULT_HERO_SUBTITLE =
   "Upcoming tournaments, leagues, and one-day cups at Houston Premier Soccer.";
 
 export default async function EventsPage() {
-  const { tournaments, loadError: listLoadError } = await getPublicTournaments();
+  const { tournaments: rawTournaments, loadError: listLoadError } =
+    await getPublicTournaments();
+  const tournaments = sortEventsForList(rawTournaments);
   const { tournaments: featuredTournaments, loadError: featuredLoadError } =
     await getFeaturedTournaments();
   const featuredTournament = featuredTournaments[0] ?? null;
@@ -62,9 +83,14 @@ export default async function EventsPage() {
       {/* Tournaments list */}
       <Section dark className="bg-surface">
         <div className="max-w-4xl mx-auto space-y-6">
+          <SectionHeader
+            title="All events"
+            subtitle="Upcoming tournaments first, then completed events you can still browse for schedules and details."
+            dark
+          />
           {listLoadError ? null : tournaments.length === 0 ? (
             <div className="dashboard-card border-2 border-dashed border-border-token p-10 text-center">
-              <p className="text-zinc-400">No upcoming events. Check back soon!</p>
+              <p className="text-zinc-400">No events listed yet. Check back soon!</p>
             </div>
           ) : (
             tournaments.map((t) => <TournamentCard key={t.id} tournament={t} />)

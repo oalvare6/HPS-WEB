@@ -93,3 +93,47 @@ export function createSupabaseMiddlewareClient(request: NextRequest): {
 
   return { supabase, response };
 }
+
+/**
+ * Route Handler Supabase client. Binds auth cookie writes to the outgoing
+ * `NextResponse` the handler returns (redirect or otherwise). Use this in
+ * `/auth/callback` and `/auth/signout` — never `createSupabaseServerClient()`
+ * followed by a fresh `NextResponse.redirect()`, or session cookies never
+ * reach the browser.
+ *
+ * Pass the same `response` object you intend to return after
+ * `exchangeCodeForSession` / `signOut`.
+ */
+export function createSupabaseRouteHandlerClient(
+  request: NextRequest,
+  response: NextResponse
+): { supabase: SupabaseClient } {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL environment variable.");
+  }
+  if (!anonKey) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable.");
+  }
+
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies
+          .getAll()
+          .map(({ name, value }) => ({ name, value }));
+      },
+      setAll(cookiesToSet) {
+        for (const { name, value } of cookiesToSet) {
+          request.cookies.set(name, value);
+        }
+        for (const { name, value, options } of cookiesToSet) {
+          response.cookies.set(name, value, options as CookieOptions);
+        }
+      },
+    },
+  });
+
+  return { supabase };
+}

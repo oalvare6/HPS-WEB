@@ -22,7 +22,9 @@ export async function GET(
 
   const { data, error } = await supabaseAdmin
     .from("registrations")
-    .select("email, first_name, payment_status, tournament_id, tournament:tournaments ( id, title, entry_fee_cents, drop_in_fee_cents )")
+    .select(
+      "email, first_name, payment_status, tournament_id, tournament:tournaments ( id, slug, title, entry_fee_cents, drop_in_fee_cents )"
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -46,6 +48,7 @@ export async function GET(
     paymentStatus: data.payment_status,
     tournamentId: data.tournament_id,
     tournamentTitle: tournament?.title ?? null,
+    tournamentSlug: tournament?.slug ?? null,
     tournamentEntryFeeCents: tournament?.entry_fee_cents ?? null,
     tournamentDropInFeeCents: tournament?.drop_in_fee_cents ?? null,
   });
