@@ -417,7 +417,7 @@ export default async function TournamentDetailPage({
             {/* Schedule (rounds) */}
             {rounds.length > 0 && (
               <div>
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-3">
                   <CalendarDays size={18} className="text-brand" />
                   <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
                     Schedule
@@ -426,6 +426,14 @@ export default async function TournamentDetailPage({
                     {rounds.length} {rounds.length === 1 ? "round" : "rounds"}
                   </span>
                 </div>
+                <p className="text-xs text-zinc-400 italic mb-4 leading-relaxed">
+                  Schedule subject to change. Any updates will be posted on this
+                  page and pushed to our{" "}
+                  <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
+                    WhatsApp community
+                  </WhatsAppCommunityLinkFromSite>
+                  .
+                </p>
                 <ul className="dashboard-card divide-y divide-border-token overflow-hidden">
                   {rounds.map((r: TournamentRound) => {
                     const cancelled = r.status === "cancelled";
