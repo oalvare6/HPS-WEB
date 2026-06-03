@@ -4,8 +4,9 @@ import { cn } from "@/lib/utils";
 const ADDRESS = "14062 Ambrose St, Houston, TX 77045";
 const GOOGLE_MAPS_URL =
   "https://www.google.com/maps/dir/?api=1&destination=14062+Ambrose+St,+Houston,+TX+77045";
+// Satellite view, zoomed to field level — no API key needed
 const GOOGLE_MAPS_EMBED_URL =
-  "https://www.google.com/maps/search/?api=1&query=14062+Ambrose+St,+Houston,+TX+77045";
+  "https://maps.google.com/maps?q=14062+Ambrose+St,+Houston,+TX+77045&t=k&z=19&output=embed";
 
 interface LocationCardProps {
   className?: string;
@@ -21,37 +22,33 @@ export function LocationCard({ className, showMap = true, compact = false }: Loc
         className
       )}
     >
-      {/* Map Pin Header */}
-      <div className="relative">
-        {showMap && (
-          <div className="aspect-video bg-surface-2 relative overflow-hidden border-b-2 border-brand/30">
-            {/* Google Maps Embed - Satellite View */}
-            <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3466.1234567890!2d-95.4189!3d29.6547!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2s14062%20Ambrose%20St%2C%20Houston%2C%20TX%2077045!5e1!3m2!1sen!2sus!4v1234567890"
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              allowFullScreen
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              className="absolute inset-0 w-full h-full"
-            />
-            
-            {/* Coordinates overlay with brand accent */}
-            <div className="absolute bottom-3 left-3 px-2.5 py-1.5 bg-base/95 backdrop-blur-md rounded-md text-xs font-mono text-brand border border-brand/60 shadow-xl shadow-brand/40">
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 bg-brand rounded-full animate-pulse"></div>
-                29.6547° N, 95.4189° W
-              </div>
-            </div>
-            
-            {/* Map type indicator */}
-            <div className="absolute top-3 right-3 px-2 py-1 bg-base/80 backdrop-blur-sm rounded text-xs font-mono text-zinc-400 border border-border-token/50">
-              Satellite
+      {/* Map */}
+      {showMap && (
+        <div className="relative overflow-hidden border-b-2 border-brand/30" style={{ height: "320px" }}>
+          <iframe
+            src={GOOGLE_MAPS_EMBED_URL}
+            width="100%"
+            height="100%"
+            style={{ border: 0 }}
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            className="absolute inset-0 w-full h-full"
+            title="Houston Premier Soccer location"
+          />
+          {/* Coordinates pill */}
+          <div className="absolute bottom-3 left-3 px-2.5 py-1.5 bg-base/90 backdrop-blur-md rounded-md text-xs font-mono text-brand border border-brand/60 shadow-xl shadow-brand/40 pointer-events-none">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-brand rounded-full animate-pulse" />
+              29.6547° N · 95.4189° W
             </div>
           </div>
-        )}
-      </div>
+          {/* Satellite badge */}
+          <div className="absolute top-3 right-3 px-2 py-1 bg-base/80 backdrop-blur-sm rounded text-xs font-mono text-zinc-400 border border-border-token/50 pointer-events-none">
+            Satellite
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className={cn("p-6 bg-gradient-to-b from-surface to-surface/95", compact && "p-4")}>
