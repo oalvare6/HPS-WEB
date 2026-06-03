@@ -9,7 +9,10 @@ import {
   Users,
 } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
-import { safeInternalLink } from "@/lib/safe-internal-link";
+import {
+  tournamentPayHref,
+  tournamentRegisterHref,
+} from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 
@@ -43,16 +46,8 @@ function formatDateRow(t: Tournament): string {
 export function TournamentCard({ tournament }: { tournament: Tournament }) {
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = getTournamentBannerUrl(tournament);
-  const registerHref = safeInternalLink(tournament.register_url, "/register");
-  const payHrefBase = safeInternalLink(tournament.pay_url, "/pay");
-  // Default `/pay` carries the tournament slug so the pay screen knows which
-  // tournament to preselect (or smart-redirect to Stripe for logged-in players
-  // with a pending registration). Admin-customized pay URLs pass through
-  // untouched.
-  const payHref =
-    payHrefBase === "/pay"
-      ? `/pay?tournament=${encodeURIComponent(tournament.slug)}`
-      : payHrefBase;
+  const registerHref = tournamentRegisterHref(tournament);
+  const payHref = tournamentPayHref(tournament);
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`

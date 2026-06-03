@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { ArrowRight, Calendar, Clock, MapPin, Trophy, Users } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
-import { safeInternalLink } from "@/lib/safe-internal-link";
+import {
+  tournamentPayHref,
+  tournamentRegisterHref,
+} from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 
@@ -60,14 +63,8 @@ export function FeaturedTournamentCard({
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
       : tournament.time_start || tournament.time_end;
-  const registerHref = safeInternalLink(tournament.register_url, "/register");
-  const payHrefBase = safeInternalLink(tournament.pay_url, "/pay");
-  // See TournamentCard for the rationale: default `/pay` carries the slug so
-  // the pay screen can preselect or smart-redirect to Stripe.
-  const payHref =
-    payHrefBase === "/pay"
-      ? `/pay?tournament=${encodeURIComponent(tournament.slug)}`
-      : payHrefBase;
+  const registerHref = tournamentRegisterHref(tournament);
+  const payHref = tournamentPayHref(tournament);
   const pill = STATUS_PILL[tournament.status];
 
   return (

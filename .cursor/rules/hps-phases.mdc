@@ -1,58 +1,63 @@
----
-description: HPS site — shipped work (Phases 0–15, World Cup WC-0–7) and conventions for new features. No active numbered phase roadmap.
-alwaysApply: true
----
-
-# Houston Premier Soccer — Project Rules
-
-You are a senior full-stack engineer on **houstonpremiersoccer.com**. Phases **0–15**
-and **World Cup WC-0–WC-7** are **shipped on `main`**. There is **no** active
-open-play phase list (former Phases 16–19 were a plan only — **not implemented**).
-
-**Status:** `docs/PROJECT-STATUS.md`  
-**Follow-ups:** `FOLLOWUPS.md` (append-only)  
-**World Cup (archive):** `.cursor/rules/world-cup-launch.mdc`, `docs/WORLD-CUP-ACCEPTANCE.md`  
-**Auth:** `docs/AUTH.md`, `docs/AUTH-RUNBOOK.md`, `scripts/smoke-auth.ts`
-
-## Shipped — do not re-implement
-
-| Track | What |
-|-------|------|
-| 0–8 | Admin tournaments, registrants, teams, contacts, registration linking |
-| 9–15 | Smart pay redirect, Supabase player auth (magic link, password, Google, Apple), claim flow, header account menu, diagnostics |
-| WC-0–7 | World Cup portrait flyer, auth callback cookies, register copy, team pay ($960 / share / captain-paid), Stripe + admin `team_name` |
-
-New features are scoped **per session** with the operator — not from a stale phase doc.
-
-## Stack (verified — do not re-discover)
-
-- Next.js 15 App Router + React 19 + TypeScript strict.
-- Supabase Postgres + Storage + Auth; `@supabase/ssr`.
-- Server: `src/lib/supabase-server.ts` (`createSupabaseServerClient`, `createSupabaseRouteHandlerClient` for route handlers that redirect).
-- Browser: `src/lib/supabase-browser.ts`.
-- Player auth: Supabase only. Admin auth: HMAC cookie in `src/lib/app-signing.ts` — **do not refactor admin auth** unless explicitly asked.
-- Stripe `^20`, DocuSeal waivers, Tailwind, in-repo components.
-- World Cup slug-gated pricing: `src/lib/world-cup-pricing.ts` (`world-cup-summer-tournament`).
-- No new npm packages without operator approval.
-
-## Conventions for new work
-
-- **Scope:** Smallest correct diff. Match existing patterns. Log surprises in `FOLLOWUPS.md` (`- [topic] … — discovered YYYY-MM-DD`).
-- **Migrations:** `supabase/migrations/YYYYMMDDHHMMSS_name.sql` only; include rollback in a comment; never destructive without explicit yes.
-- **Player routes:** `getCurrentPlayer()`, `supabase.auth.getUser()` (not `getSession()`).
-- **Admin routes:** `verifyAdmin` / `verifyAdminSessionCookieValue`; pages use `AdminGate`.
-- **Auth route handlers:** Bind cookies to the outgoing `NextResponse` (see `/auth/callback`).
-- **TypeScript:** Strict; no `any` at API boundaries.
-- **No emojis** in code, comments, or UI copy.
-
-## What not to redo without a regression report
-
-- Full player auth surface (Phases 9–15).
-- World Cup pay/register paths unless slug `world-cup-summer-tournament`.
-- Admin `drop_ins` tool (guest play per round — separate from any future “open play” product idea).
-
-## Deferred idea (not built)
-
-A past roadmap proposed **open-play** single-day events (`event_type` on `tournaments`,
-simplified register, public roster). **None of that exists in the repo.** Do not
-start it unless the operator defines a new scoped project.
+---
+description: HPS site — shipped work (Phases 0–15, World Cup WC-0–7, pay gate T1–T4) and conventions for new features. No active numbered phase roadmap.
+alwaysApply: true
+---
+
+# Houston Premier Soccer — Project Rules
+
+You are a senior full-stack engineer on **houstonpremiersoccer.com**. Phases **0–15**,
+**World Cup WC-0–WC-7**, and **tournament email pay gate T1–T4** are **shipped on `main`**.
+There is **no** active open-play phase list (former Phases 16–19 were a plan only — **not implemented**).
+
+**Status:** `docs/PROJECT-STATUS.md`  
+**Follow-ups:** `FOLLOWUPS.md` (append-only)  
+**Pay gate (archive):** `docs/PAY-GATE-ACCEPTANCE.md`, `docs/archive/tournament-email-pay-gate-plan.md`  
+**World Cup (archive):** `.cursor/rules/world-cup-launch.mdc`, `docs/WORLD-CUP-ACCEPTANCE.md`  
+**Auth:** `docs/AUTH.md`, `docs/AUTH-RUNBOOK.md`, `scripts/smoke-auth.ts`
+
+## Shipped — do not re-implement
+
+| Track | What |
+|-------|------|
+| 0–8 | Admin tournaments, registrants, teams, contacts, registration linking |
+| 9–15 | Smart pay redirect, Supabase player auth (magic link, password, Google, Apple), claim flow, header account menu, diagnostics |
+| WC-0–7 | World Cup portrait flyer, auth callback cookies, register copy, team pay ($960 / share / captain-paid), Stripe + admin `team_name` |
+| Pay T1–T4 | `/pay` email gate, `POST /api/pay/eligibility`, contact waiver 365d, `WhatsAppCommunityLink`, register `?type=` + slug pay URLs |
+
+New features are scoped **per session** with the operator — not from a stale phase doc.
+
+## Stack (verified — do not re-discover)
+
+- Next.js 15 App Router + React 19 + TypeScript strict.
+- Supabase Postgres + Storage + Auth; `@supabase/ssr`.
+- Server: `src/lib/supabase-server.ts` (`createSupabaseServerClient`, `createSupabaseRouteHandlerClient` for route handlers that redirect).
+- Browser: `src/lib/supabase-browser.ts`.
+- Player auth: Supabase only. Admin auth: HMAC cookie in `src/lib/app-signing.ts` — **do not refactor admin auth** unless explicitly asked.
+- Stripe `^20`, DocuSeal waivers, Tailwind, in-repo components.
+- World Cup slug-gated pricing: `src/lib/world-cup-pricing.ts` (`world-cup-summer-tournament`).
+- Pay gate: `src/lib/pay-eligibility.ts`, `src/components/pay/PayEmailGate.tsx`.
+- No new npm packages without operator approval.
+
+## Conventions for new work
+
+- **Scope:** Smallest correct diff. Match existing patterns. Log surprises in `FOLLOWUPS.md` (`- [topic] … — discovered YYYY-MM-DD`).
+- **Migrations:** `supabase/migrations/YYYYMMDDHHMMSS_name.sql` only; include rollback in a comment; never destructive without explicit yes.
+- **Player routes:** `getCurrentPlayer()`, `supabase.auth.getUser()` (not `getSession()`).
+- **Admin routes:** `verifyAdmin` / `verifyAdminSessionCookieValue`; pages use `AdminGate`.
+- **Auth route handlers:** Bind cookies to the outgoing `NextResponse` (see `/auth/callback`).
+- **TypeScript:** Strict; no `any` at API boundaries.
+- **No emojis** in code, comments, or UI copy.
+
+## What not to redo without a regression report
+
+- Full player auth surface (Phases 9–15).
+- World Cup pay/register paths unless slug `world-cup-summer-tournament`.
+- Tournament email pay gate (T1–T4) unless operator reports a regression.
+- Admin `drop_ins` tool (guest play per round — separate from any future “open play” product idea).
+
+## Deferred idea (not built)
+
+A past roadmap proposed **open-play** single-day events (`event_type` on `tournaments`,
+simplified register, public roster). **None of that exists in the repo.** Do not
+start it unless the operator defines a new scoped project.
+

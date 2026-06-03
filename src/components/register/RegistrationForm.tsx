@@ -81,10 +81,13 @@ const labelClass = "block text-xs font-medium text-zinc-400 mb-1.5";
 export function RegistrationForm({
   tournaments,
   preselectedSlug,
+  preselectedType = null,
   prefill = null,
 }: {
   tournaments: RegistrationOption[];
   preselectedSlug: string | null;
+  /** From `/register?type=adult|youth` (pay gate register links). */
+  preselectedType?: "adult" | "youth" | null;
   prefill?: RegistrationPrefill | null;
 }) {
   const initialId = useMemo(() => {
@@ -113,7 +116,9 @@ export function RegistrationForm({
   );
 
   const [tournamentId, setTournamentId] = useState<string>(initialId);
-  const [registrationType, setRegistrationType] = useState<string>("");
+  const [registrationType, setRegistrationType] = useState<string>(
+    preselectedType ?? ""
+  );
   const [waiverAccepted, setWaiverAccepted] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -328,6 +333,12 @@ export function RegistrationForm({
           Adults sign the adult waiver. Youth registrations use the youth
           waiver (signed by a parent or guardian).
         </p>
+        {preselectedType && (
+          <p className="text-xs text-zinc-500">
+            Pre-selected from the payment page — change if you need the other
+            waiver type.
+          </p>
+        )}
         {isLoggedIn && registrationType && waiverOnFileForType && (
           <p className="inline-flex items-center gap-1.5 text-xs text-brand mt-1">
             <ShieldCheck size={12} />

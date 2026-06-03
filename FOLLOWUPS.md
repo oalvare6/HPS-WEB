@@ -69,3 +69,5 @@ Format:
 - [WC-6] Admin Registrants tab shows `team_name` column per tournament + CSV export — discovered 2026-06-03
 - [WC-7] Operator acceptance checklist `docs/WORLD-CUP-ACCEPTANCE.md`; pre-flight `scripts/verify-world-cup-launch.mjs` — discovered 2026-06-03
 - [meta] Project status + open-play handoff: `docs/PROJECT-STATUS.md`, `.cursor/plans/open-play-session.md`; `hps-phases.mdc` active Phases 17–19; `world-cup-launch.mdc` archived (`alwaysApply: false`) — discovered 2026-06-03 — SUPERSEDED: open-play Phases 16–19 never built; removed from active planning 2026-06-03
+- [pay-gate] Tournament email pay gate T1–T4 shipped; acceptance `docs/PAY-GATE-ACCEPTANCE.md`; plan archived `docs/archive/tournament-email-pay-gate-plan.md` — discovered 2026-06-03 — SHIPPED 2026-06-03
+- [pay-gate UX] Operator reports email eligibility loop blocks checkout; wants single pay/register CTA, facility-level waiver copy, signed-in "enroll" not "register", full tournament context on flow — handoff `docs/HANDOFF-PLAYER-PAY-FLOW.md` for Claude — discovered 2026-06-03

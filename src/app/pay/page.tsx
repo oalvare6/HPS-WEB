@@ -1,15 +1,17 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { PayForm, type TournamentPayOption } from "@/components/pay/PayForm";
-import { getPayableTournamentBySlug } from "@/lib/tournaments";
+import { PayPageClient } from "@/components/pay/PayPageClient";
+import type { TournamentPayOption } from "@/components/pay/PayForm";
+import { verifyPayResumeToken } from "@/lib/app-signing";
 import { getCurrentPlayer } from "@/lib/player-auth";
-import { supabaseAdmin } from "@/lib/supabase-admin";
-import { createPayResumeToken } from "@/lib/app-signing";
+import { getPayableTournamentBySlug } from "@/lib/tournaments";
+import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
+import { getSiteSetting } from "@/lib/site-settings";
 import {
   isWorldCupTournamentSlug,
   WORLD_CUP_TOURNAMENT_SLUG,
 } from "@/lib/world-cup-pricing";
+import type { PayEligibilityWaiverType } from "@/lib/pay-eligibility-types";
 
 export const dynamic = "force-dynamic";
 
@@ -20,29 +22,10 @@ type PaySearchParams = {
   cancelled?: string;
 };
 
-/**
- * Server-side smart-redirect for `/pay?tournament=<slug>`.
- *
- * When the slug resolves to a payments-open tournament AND the visitor is a
- * logged-in player with a pending, waiver-signed registration for that
- * tournament, we mint a fresh pay-resume token and forward them to the
- * existing paid-flow path (`/pay?registrationId=...&payToken=...`) so the
- * email is locked and they're one click from Stripe Checkout.
- *
- * Otherwise we just return the resolved tournament so it can pre-populate the
- * tournament selector in `<PayForm />`. A null return falls back to the
- * default form (no preselect).
- */
-async function resolveSmartRedirect(
-  slug: string | undefined,
-  alreadyOnPaidFlow: boolean
-): Promise<TournamentPayOption | null> {
-  if (!slug) return null;
-
-  const tournament = await getPayableTournamentBySlug(slug);
-  if (!tournament) return null;
-
-  const initialTournament: TournamentPayOption = {
+function toPayOption(
+  tournament: NonNullable<Awaited<ReturnType<typeof getPayableTournamentBySlug>>>
+): TournamentPayOption {
+  return {
     id: tournament.id,
     title: tournament.title,
     slug: tournament.slug,
@@ -54,39 +37,12 @@ async function resolveSmartRedirect(
     entry_fee_cents: tournament.entry_fee_cents,
     drop_in_fee_cents: tournament.drop_in_fee_cents,
   };
+}
 
-  // Guard against redirect loops: if the URL already carries a registrationId
-  // (e.g. cancel-back from Stripe, or the second pass after this very redirect)
-  // we render the paid-flow form directly and let the client handle it.
-  if (alreadyOnPaidFlow) return initialTournament;
-
-  const player = await getCurrentPlayer();
-  if (!player) return initialTournament;
-
-  const { data: registration, error } = await supabaseAdmin
-    .from("registrations")
-    .select("id, payment_status, waiver_signed")
-    .eq("contact_id", player.contact.id)
-    .eq("tournament_id", tournament.id)
-    .eq("payment_status", "pending")
-    .eq("waiver_signed", true)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[pay] smart-redirect registration lookup failed:", error.message);
-    return initialTournament;
-  }
-
-  if (!registration) return initialTournament;
-
-  const token = createPayResumeToken(registration.id);
-  const params = new URLSearchParams({
-    registrationId: registration.id,
-    payToken: token,
-  });
-  redirect(`/pay?${params.toString()}`);
+function resolveDefaultWaiverType(
+  waiverType: string | null | undefined
+): PayEligibilityWaiverType {
+  return waiverType === "youth" ? "youth" : "adult";
 }
 
 export default async function PayPage({
@@ -95,10 +51,28 @@ export default async function PayPage({
   searchParams: Promise<PaySearchParams>;
 }) {
   const sp = await searchParams;
-  const alreadyOnPaidFlow = Boolean(sp.registrationId);
-  const initialTournament = await resolveSmartRedirect(sp.tournament, alreadyOnPaidFlow);
+  const registrationId = sp.registrationId?.trim() ?? "";
+  const payToken = sp.payToken?.trim() ?? "";
+  const skipGate =
+    Boolean(registrationId) &&
+    Boolean(payToken) &&
+    verifyPayResumeToken(registrationId, payToken);
+
+  const tournamentSlug = sp.tournament?.trim() || null;
+  const requestedTournament = tournamentSlug
+    ? await getPayableTournamentBySlug(tournamentSlug)
+    : null;
+
+  const [player, whatsappUrl] = await Promise.all([
+    getCurrentPlayer(),
+    getSiteSetting("footer.whatsapp_url"),
+  ]);
+
+  const initialTournament = requestedTournament ? toPayOption(requestedTournament) : null;
+  const tournamentMissing = Boolean(tournamentSlug) && !requestedTournament;
+
   const isWorldCupPay =
-    isWorldCupTournamentSlug(sp.tournament) ||
+    isWorldCupTournamentSlug(tournamentSlug) ||
     isWorldCupTournamentSlug(initialTournament?.slug ?? null);
 
   return (
@@ -121,20 +95,46 @@ export default async function PayPage({
                 </Link>{" "}
                 before playing.
               </>
+            ) : skipGate ? (
+              "Secure payment via Stripe. Your registration is verified — choose your payment option below."
             ) : (
-              "Secure payment via Stripe. You must register and sign the waiver before paying."
+              "Secure payment via Stripe. Verify your email and waiver, then complete payment."
             )}
           </p>
+          {!skipGate && (
+            <p className="mt-3 text-sm text-zinc-500">
+              Questions?{" "}
+              <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false} />
+            </p>
+          )}
         </div>
       </section>
 
       <section className="bg-surface min-h-[60vh]">
-        <Suspense fallback={null}>
-          <PayForm
-            initialTournamentId={initialTournament?.id ?? null}
-            initialTournament={initialTournament}
-          />
-        </Suspense>
+        {tournamentMissing && !skipGate ? (
+          <div className="max-w-lg mx-auto px-6 py-16 text-center">
+            <h2 className="text-xl font-semibold text-white mb-3">Payments not available</h2>
+            <p className="text-sm text-zinc-400 mb-6">
+              This event is not accepting payments right now, or the link may be outdated.
+            </p>
+            <Link href="/events" className="btn-primary inline-flex justify-center px-6">
+              View events
+            </Link>
+          </div>
+        ) : (
+          <Suspense fallback={null}>
+            <PayPageClient
+              skipGate={skipGate}
+              tournamentSlug={tournamentSlug}
+              initialTournament={initialTournament}
+              initialTournamentId={initialTournament?.id ?? null}
+              whatsappUrl={whatsappUrl}
+              playerEmail={player?.email ?? null}
+              defaultWaiverType={resolveDefaultWaiverType(player?.contact.waiver_type)}
+              tournamentMissing={tournamentMissing}
+            />
+          </Suspense>
+        )}
       </section>
     </>
   );

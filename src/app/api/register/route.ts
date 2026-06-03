@@ -9,6 +9,7 @@ import {
   upsertContactByEmail,
 } from "@/lib/contacts";
 import { linkRegistrationToContact } from "@/lib/registration-contact-linking";
+import { buildPayResumeUrl } from "@/lib/pay-resume-url";
 
 type RegistrationType = "adult" | "youth";
 
@@ -46,7 +47,7 @@ function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-type ResolvedTournament = { id: string; title: string } | null;
+type ResolvedTournament = { id: string; title: string; slug: string } | null;
 
 /**
  * Resolve the tournament to attach to this registration. We trust an explicit
@@ -61,22 +62,26 @@ async function resolveTournament(
   if (requested && UUID_RE.test(requested)) {
     const { data } = await supabaseAdmin
       .from("tournaments")
-      .select("id, title, registration_open")
+      .select("id, title, slug, registration_open")
       .eq("id", requested)
       .maybeSingle();
-    if (data?.id && data.registration_open) {
-      return { id: data.id, title: data.title };
+    if (data?.id && data.registration_open && data.slug) {
+      return { id: data.id, title: data.title, slug: data.slug };
     }
   }
 
   const { data: openOnes } = await supabaseAdmin
     .from("tournaments")
-    .select("id, title")
+    .select("id, title, slug")
     .eq("registration_open", true)
     .limit(2);
 
-  if (openOnes && openOnes.length === 1) {
-    return { id: openOnes[0].id, title: openOnes[0].title };
+  if (openOnes && openOnes.length === 1 && openOnes[0].slug) {
+    return {
+      id: openOnes[0].id,
+      title: openOnes[0].title,
+      slug: openOnes[0].slug,
+    };
   }
 
   return null;
@@ -136,6 +141,7 @@ export async function POST(request: Request) {
     const resolvedTournament = await resolveTournament(payload.tournamentId);
     const tournamentId = resolvedTournament?.id ?? null;
     const tournamentTitle = resolvedTournament?.title ?? null;
+    const tournamentSlug = resolvedTournament?.slug ?? null;
 
     const { data: inserted, error } = await supabaseAdmin
       .from("registrations")
@@ -194,11 +200,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const payQuery = new URLSearchParams({
+    const completedRedirectUrl = buildPayResumeUrl(baseUrl, {
       registrationId: inserted.id,
       payToken,
+      tournamentSlug,
     });
-    const completedRedirectUrl = `${baseUrl}/pay?${payQuery.toString()}`;
     const canSkipWaiver = isContactWaiverValid(contact, waiverType);
 
     if (canSkipWaiver) {

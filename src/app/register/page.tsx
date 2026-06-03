@@ -6,18 +6,27 @@ import {
 import { getRegistrationOpenTournaments } from "@/lib/tournaments";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { isContactWaiverValid } from "@/lib/contacts";
+import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ tournament?: string }>;
+type SearchParams = Promise<{ tournament?: string; type?: string }>;
+
+function parsePreselectedType(
+  raw: string | undefined
+): "adult" | "youth" | null {
+  if (raw === "adult" || raw === "youth") return raw;
+  return null;
+}
 
 export default async function RegisterPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const { tournament: preselected = null } = await searchParams;
+  const { tournament: preselected = null, type: typeParam } = await searchParams;
+  const preselectedType = parsePreselectedType(typeParam);
   const [{ tournaments, loadError }, player] = await Promise.all([
     getRegistrationOpenTournaments(),
     getCurrentPlayer(),
@@ -60,6 +69,10 @@ export default async function RegisterPage({
               ? "Each player completes their own registration and waiver. Team payment and team name come next on the pay page."
               : "Sign up for upcoming 7v7 leagues and tournaments at Houston Premier Soccer."}
           </p>
+          <p className="mt-4 text-sm text-zinc-500">
+            Questions?{" "}
+            <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false} />
+          </p>
         </div>
       </section>
 
@@ -86,6 +99,7 @@ export default async function RegisterPage({
           <RegistrationForm
             tournaments={options}
             preselectedSlug={preselected}
+            preselectedType={preselectedType}
             prefill={prefill}
           />
         </div>

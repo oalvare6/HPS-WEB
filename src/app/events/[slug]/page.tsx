@@ -27,8 +27,12 @@ import type {
   TournamentUpdate,
 } from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
-import { safeInternalLink } from "@/lib/safe-internal-link";
+import {
+  tournamentPayHref,
+  tournamentRegisterHref,
+} from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
+import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 
 export const dynamic = "force-dynamic";
 
@@ -128,15 +132,8 @@ export default async function TournamentDetailPage({
 
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
-  const registerHref = safeInternalLink(tournament.register_url, "/register");
-  const payHrefBase = safeInternalLink(tournament.pay_url, "/pay");
-  // Default `/pay` carries the tournament slug so the pay screen can
-  // preselect the right tournament — and smart-redirect logged-in players
-  // with a pending registration straight to the Stripe-bound paid-flow form.
-  const payHref =
-    payHrefBase === "/pay"
-      ? `/pay?tournament=${encodeURIComponent(tournament.slug)}`
-      : payHrefBase;
+  const registerHref = tournamentRegisterHref(tournament);
+  const payHref = tournamentPayHref(tournament);
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
@@ -390,14 +387,21 @@ export default async function TournamentDetailPage({
                   </p>
                 )}
                 {tournament.payments_open && tournament.status !== "completed" && (
-                  <Link
-                    href={payHref}
-                    className="btn-secondary w-full justify-center text-sm"
-                  >
-                    <CreditCard size={14} />
-                    Pay Entry Fee
-                    <ArrowRight size={14} />
-                  </Link>
+                  <>
+                    <Link
+                      href={payHref}
+                      className="btn-secondary w-full justify-center text-sm"
+                    >
+                      <CreditCard size={14} />
+                      Pay Entry Fee
+                      <ArrowRight size={14} />
+                    </Link>
+                    <p className="text-center text-xs text-zinc-500 pt-1">
+                      <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
+                        Questions? Join WhatsApp
+                      </WhatsAppCommunityLinkFromSite>
+                    </p>
+                  </>
                 )}
                 {tournament.entry_fee != null && (
                   <p className="text-xs text-zinc-500 text-center pt-1 border-t border-border-token/50">

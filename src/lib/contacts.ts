@@ -35,6 +35,11 @@ export function getWaiverExpiryIso(
   return new Date(signedAtMs + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+/**
+ * Contact-level waiver (adult or youth, 365 days). When valid, the pay gate treats
+ * the person as waiver-eligible for any tournament; step 2 only selects which
+ * template/type to validate against (and new registrations).
+ */
 export function isContactWaiverValid(
   contact: Pick<Contact, "waiver_type" | "waiver_signed_at" | "waiver_expires_at"> | null,
   waiverType: "adult" | "youth",

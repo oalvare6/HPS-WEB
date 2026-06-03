@@ -15,6 +15,7 @@ import {
 } from "@/lib/player-auth";
 import { getStripe } from "@/lib/stripe";
 import { recordCheckoutSessionPayment } from "@/lib/stripe-payments";
+import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { PaySuccessTracker } from "./PaySuccessTracker";
 
 export const dynamic = "force-dynamic";
@@ -138,9 +139,12 @@ export default async function PaySuccessPage({
               </Link>
             </div>
 
-            <p className="text-xs text-zinc-500">
-              Questions? Reach out via the contact info on our site.
-            </p>
+            <div className="pt-2 border-t border-border-token/50">
+              <p className="text-xs text-zinc-500 mb-3">
+                Join our community for schedules, updates, and questions.
+              </p>
+              <WhatsAppCommunityLinkFromSite variant="card" />
+            </div>
           </div>
 
           {player ? (
