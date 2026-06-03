@@ -34,6 +34,7 @@ import type {
   TournamentUpdate,
 } from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
+import { getTournamentBannerUrl } from "@/lib/tournament-image";
 import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
@@ -155,10 +156,49 @@ export async function generateMetadata({
   const { slug } = await params;
   const t = await getTournamentBySlug(slug);
   if (!t) return { title: "Tournament not found" };
+
+  const title = `${t.title} | Houston Premier Soccer`;
+  const description =
+    t.description?.slice(0, 200)?.trim() ||
+    `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer. ` +
+      `Real grass field, 30-min halves, refs on every match, MVP awards at the end.`;
+
+  // Link-preview image: tournament banner first (custom upload or preset),
+  // fall back to the brand badge so iMessage / WhatsApp / Twitter always
+  // get something to render a rich card. Relative URLs are resolved against
+  // metadataBase (set in src/app/layout.tsx).
+  const bannerUrl = getTournamentBannerUrl(t);
+  const ogImage = bannerUrl ?? "/brand/hps-badge.png";
+  const ogImageIsBadge = !bannerUrl;
+  const canonicalPath = `/events/${t.slug}`;
+
   return {
-    title: `${t.title} | Houston Premier Soccer`,
-    description:
-      t.description?.slice(0, 160) ?? `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer.`,
+    title,
+    description,
+    alternates: { canonical: canonicalPath },
+    openGraph: {
+      type: "website",
+      url: canonicalPath,
+      siteName: "Houston Premier Soccer",
+      title,
+      description,
+      images: [
+        {
+          url: ogImage,
+          // Square badge fallback uses square dims; banners use a standard
+          // landscape ratio. Crawlers honor whatever we declare and crop.
+          width: ogImageIsBadge ? 512 : 1200,
+          height: ogImageIsBadge ? 512 : 630,
+          alt: t.title,
+        },
+      ],
+    },
+    twitter: {
+      card: ogImageIsBadge ? "summary" : "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
   };
 }
 

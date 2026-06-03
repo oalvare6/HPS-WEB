@@ -21,7 +21,16 @@ const jetbrains = JetBrains_Mono({
   variable: "--font-jetbrains",
 });
 
+// Without `metadataBase` Next.js can't resolve relative OG/twitter image
+// URLs into absolute ones — and iMessage / WhatsApp / Facebook crawlers
+// REQUIRE absolute URLs to render link previews. We prefer the env var so
+// preview deploys get correct URLs, fall back to the canonical domain.
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+  "https://houstonpremiersoccer.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Houston Premier Soccer | Your Local Soccer Spot",
   description: "Schedules, standings, and field status for Houston Premier Soccer leagues and tournaments. Check game times, get directions, and register for events.",
   icons: {
