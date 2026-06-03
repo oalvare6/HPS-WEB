@@ -1,6 +1,14 @@
 # World Cup Launch — Session Handoff Prompt
 
-> **Paste this entire file into a new Cursor session.** One focused workstream: ship World Cup registration + team payment for Jun 8 start, fix player login enough for returning users, mark Spring Classic completed. Do NOT start Phase 16–19 open-play work unless explicitly asked.
+> **STATUS: COMPLETE (WC-0–WC-7).** Archive only — do not paste for new feature work.
+>
+> **Next workstream:** `.cursor/plans/open-play-session.md` (Phases 17–19)  
+> **Active rules:** `.cursor/rules/hps-phases.mdc`  
+> **Status board:** `docs/PROJECT-STATUS.md`
+
+---
+
+## Historical handoff (WC-0–WC-7 — shipped)
 
 ---
 

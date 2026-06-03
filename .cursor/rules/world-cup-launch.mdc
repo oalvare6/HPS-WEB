@@ -1,68 +1,33 @@
 ---
-description: World Cup 2026 launch workstream (auth fix, team payment, register UX). Takes precedence over Phases 16–19 in hps-phases.mdc until all WC phases below are verified. Read this every session before writing code.
-alwaysApply: true
+description: "ARCHIVE — World Cup WC-0–WC-7 complete. Use hps-phases.mdc for open-play (Phases 17–19). Reference only for World Cup regressions."
+alwaysApply: false
 ---
 
-# HPS World Cup Launch — Project Rules (Phases WC-0–WC-7)
+# HPS World Cup Launch — ARCHIVE (Phases WC-0–WC-7 COMPLETE)
 
-You are a senior full-stack engineer on **houstonpremiersoccer.com**. The site
-already ships admin UX, tournament registration, DocuSeal waivers, Stripe pay,
-and a player auth surface (magic link, password, Google, Apple). **That auth
-surface is broken in production** — fix it in Phase WC-1 before World Cup pay
-flows depend on returning users.
+> **Do not start new WC phases.** Active workstream: **open play Phases 17–19**
+> in `.cursor/rules/hps-phases.mdc` and `.cursor/plans/open-play-session.md`.
+>
+> **Acceptance:** `docs/WORLD-CUP-ACCEPTANCE.md`  
+> **Pre-flight:** `scripts/verify-world-cup-launch.mjs`  
+> **Pricing/constants:** `src/lib/world-cup-pricing.ts` (slug `world-cup-summer-tournament`)
 
-This workstream launches the **World Cup 7v7 Soccer Tournament** (starts
-**2026-06-08**). Work in **one phase per turn**. Stop after each phase for
-manual operator testing.
+WC-0–WC-7 shipped on `main` (portrait flyer, auth callback cookies, team pay,
+admin team names). Re-open this file only for World Cup production regressions.
 
-**Precedence:** While any WC phase below is incomplete, **do NOT start Phase 16
-(open-play `event_type`)** from `hps-phases.mdc`. Open-play is a separate
-follow-up after World Cup launch.
-
-Handoff plan (paste into new sessions): `.cursor/plans/world-cup-launch-session.md`
+Handoff (historical): `.cursor/plans/world-cup-launch-session.md`
 
 ---
 
-## Confirmed production bugs (operator-reported 2026-06-03)
+## WC-1 auth fix (shipped — regression checklist)
 
-Treat these as **WC-1 acceptance criteria**, not hypothetical:
+If login breaks again after deploy:
 
-1. **Magic link** — User clicks email link; session does **not** stick. Header
-   still shows **"Sign in"** instead of account menu with their name. `/me`
-   does not show profile/stats as a signed-in user.
-2. **Google OAuth** — **Does not work at all** (button click fails or redirect
-   loop / error; never lands signed in).
-3. **Apple OAuth** — **Does not work at all** (same as Google).
+1. Magic link / OAuth → `/auth/callback` must use `createSupabaseRouteHandlerClient(request, response)` so cookies attach to the redirect.
+2. Supabase redirect allow-list must include production `/auth/callback`.
+3. Run `scripts/smoke-auth.ts` and `/admin/diagnostics`.
 
-**Leading code hypothesis for magic link (verify, do not assume):**
-`src/app/auth/callback/route.ts` calls `exchangeCodeForSession` via
-`createSupabaseServerClient()` then returns `NextResponse.redirect()` **without
-attaching session cookies to that redirect response**. `@supabase/ssr` route
-handlers must bind cookie writes to the outgoing `NextResponse`. Compare with
-the middleware recipe in `src/lib/supabase-server.ts::createSupabaseMiddlewareClient`.
-
-**OAuth leading hypotheses:** Supabase Auth redirect URL allow-list missing
-production origin + `/auth/callback`; Google/Apple provider misconfiguration
-in Supabase dashboard; see `docs/AUTH-CONFIG.md` and `/admin/diagnostics`.
-
-**Key auth files (WC-1 only — do not refactor admin auth):**
-- `src/app/auth/callback/route.ts`
-- `src/lib/supabase-server.ts`
-- `src/lib/supabase-browser.ts`
-- `src/middleware.ts`
-- `src/lib/player-auth.ts`
-- `src/components/layout/header.tsx` (server `getCurrentPlayer` → `isAuthed`)
-- `src/app/login/MagicLinkForm.tsx`
-- `src/app/login/OAuthButtons.tsx`
-- `docs/AUTH-CONFIG.md`, `docs/AUTH-RUNBOOK.md`, `scripts/smoke-auth.ts`
-
-**WC-1 manual test (all must pass):**
-1. Magic link from fresh email → lands on `/me` (or `next`) → header shows
-   **AccountMenu with first name** → reload page → still signed in.
-2. Google sign-in → same result.
-3. Apple sign-in → same result (or document provider config blocker with exact
-   Supabase error if dashboard not wired).
-4. Run `scripts/smoke-auth.ts` if env allows.
+Key files: `src/app/auth/callback/route.ts`, `src/lib/supabase-server.ts`, `docs/AUTH-CONFIG.md`
 
 ---
 
@@ -283,9 +248,9 @@ Registrants tab shows team name.
 
 ---
 
-## What NOT to do in WC phases
+## What NOT to do (when fixing WC regressions only)
 
-- No Phase 16 `event_type` / open-play migration.
+- Do not mix open-play Phase 17–19 work into a WC hotfix PR.
 - No admin auth refactor.
 - No auto Group A/B or WhatsApp integration.
 - No new npm packages.

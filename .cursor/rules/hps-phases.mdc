@@ -1,0 +1,496 @@
+---
+description: Active workstream — open-play Phases 17–19. Phases 0–15, World Cup WC-0–7, and Phase 16 are shipped; read docs/PROJECT-STATUS.md first.
+alwaysApply: true
+---
+
+# HPS Open-Play Events — Project Rules (Phases 17–19)
+
+You are a senior full-stack engineer on **houstonpremiersoccer.com**. Prior
+workstreams are **complete** — build only what Phase 17–19 describe below.
+
+**Status board:** `docs/PROJECT-STATUS.md`  
+**Session handoff:** `.cursor/plans/open-play-session.md`  
+**World Cup (archive):** `.cursor/rules/world-cup-launch.mdc`, `docs/WORLD-CUP-ACCEPTANCE.md`
+
+## Shipped — do not redo
+
+| Track | Scope |
+|-------|--------|
+| Phases 0–8 | Admin tournaments, registrants, teams, contacts, linking |
+| Phases 9–15 | Smart pay, full player auth, diagnostics, `docs/AUTH-RUNBOOK.md` |
+| WC-0–WC-7 | World Cup flyer, auth cookie fix, team pay $960, admin `team_name` |
+| Phase 16 | `tournaments.event_type` + admin Event type radio (verify on `main` before Phase 17) |
+
+## Active problem (Phases 17–19)
+
+Single-day **open-play** events (`event_type='open_play'`) must:
+
+1. Show on homepage and `/events` while upcoming, with an **Open Play** pill.
+2. **Disappear** from homepage and `/events` when `end_date` is in the past (query-side; no cron).
+3. Keep `/events/<slug>` live forever.
+4. Use a **simplified register form** (liability checkbox; no DocuSeal).
+5. Show a **public roster** (first name + last initial) after the event ends.
+
+Reuse the `tournaments` table. Do **not** conflate with the admin-only `drop_ins`
+table (`supabase/migrations/20260513120400_create_drop_ins.sql`).
+
+Work in **one phase per turn** — never 17+18 in the same session.
+
+## Stack (verified — do not re-discover)
+
+- Next.js 15 (App Router) + React 19 + TypeScript (strict).
+- Supabase (Postgres + Storage + Auth). Client/admin clients in `src/lib/`.
+- `@supabase/ssr` in active use. Server client: `src/lib/supabase-server.ts`
+  (`createSupabaseServerClient`, `createSupabaseMiddlewareClient`). Browser
+  client: `src/lib/supabase-browser.ts`.
+- Supabase Auth is the only player-auth surface. Magic link, password, Google,
+  Apple all ship; account claim flow runs from `/pay/success`. SMTP is wired
+  through Gmail (see `docs/AUTH-CONFIG.md` §4a).
+- Stripe (`stripe@^20`). Payment-link resume tokens via `src/lib/app-signing.ts`.
+  Tournament Stripe product/price sync lives in `src/lib/stripe.ts`
+  (`syncTournamentStripePricing`). Per-tournament smart-pay redirect already
+  works for logged-in players with pending registrations.
+- DocuSeal (webhook at `src/app/api/docuseal/webhook/route.ts`, env-driven
+  template IDs). Adult and youth templates only.
+- Tailwind + a small in-repo component library under `src/components/`.
+- No NextAuth, no shadcn, no Radix beyond what is already imported. Additions
+  require explicit approval.
+
+## Admin auth (verified — DO NOT TOUCH)
+
+- Single shared admin user from env (`ADMIN_USER`, `ADMIN_PASSWORD`).
+- HMAC-signed cookie issued and verified in `src/lib/app-signing.ts`.
+- Pages gated client-side by `src/components/admin/AdminGate.tsx`; API routes
+  verify via `verifyAdminSessionCookieValue`.
+- **Do not refactor admin auth in Phases 16–19.** Player auth uses Supabase
+  Auth (`@supabase/ssr`) and is fully parallel.
+
+## What was already shipped (Phases 0–15, for context only)
+
+Already done, do not redo:
+
+- Phase 0: SQL hygiene + migrations baseline.
+- Phase 1: admin tournament read-only view at
+  `src/app/admin/tournaments/[id]/page.tsx`.
+- Phase 2: per-tournament `RegistrationsList` + `/api/admin/registrations`.
+- Phase 3: admin Teams workflow.
+- Phase 4: URL-state + scroll restoration + `Breadcrumbs`.
+- Phase 5: registration → contact auto-linking via
+  `src/lib/registration-contact-linking.ts`.
+- Phase 6: player magic-link sign-in, `/me`, `getCurrentPlayer`.
+- Phase 7: one-click re-registration with waiver-on-file skip.
+- Phase 8: skeletons, empty states, analytics emitter at
+  `src/lib/analytics.ts` + `/api/analytics`.
+- Phase 9: smart pay redirect — `/pay?tournament=<slug>` preselects, logged-in
+  players with a pending+waiver-signed registration jump straight to Stripe.
+- Phase 10: Supabase Auth config + email deliverability docs + admin
+  diagnostics page at `/admin/diagnostics`. SMTP runs through Gmail (see
+  `docs/AUTH-CONFIG.md` §4a) — no DNS work required.
+- Phase 11: password sign-in (`/login` Password tab), forgot-password
+  (`/login/forgot-password`), `/auth/reset` recovery landing, `/me/security`
+  set/change.
+- Phase 12: Google + Apple OAuth on `/login` via `OAuthButtons`. Identity
+  merging by email is handled by Supabase Auth when "Confirm Email" is on.
+- Phase 13: account claim from `/pay/success` (`ClaimAccountForm`) plus a
+  one-shot Stripe-webhook-driven `inviteUserByEmail` for first-time payers.
+- Phase 14: header `AccountMenu` dropdown (Profile, My registrations, Security,
+  Sign out), `/me` provider summary, `/api/me/status` lightweight probe,
+  `cache()`-wrapped server lookups so `getUser` runs once per request.
+- Phase 15: hardening + `docs/AUTH.md` rewrite + `docs/AUTH-RUNBOOK.md` +
+  `scripts/smoke-auth.ts`. Middleware comment-block explains why `/auth/*` is
+  intentionally NOT in the protected matcher.
+
+All followups: `FOLLOWUPS.md` (append-only).
+
+## North Star (acceptance test for Phases 17–19)
+
+> 1. (carried over) A returning, logged-in player can submit `/register` and
+>    reach the payment link in ≤3 clicks and ≤30s, with no DocuSeal redirect
+>    when a non-expired waiver of the matching type is on file.
+> 2. (carried over) An admin can open any tournament and immediately see roster
+>    + payment status + waiver status per player.
+> 3. (carried over) Any player can sign in via magic link, password, OR
+>    Google/Apple in ≤2 clicks; sessions persist across visits; the right "Sign
+>    in" / "My account" CTA is always visible in the header; and someone who
+>    pays without a prior account is offered a one-click way to claim it from
+>    the success page.
+> 4. (carried over) "Pay Entry Fee" on any tournament card lands the user on a
+>    payment screen pre-scoped to that exact tournament — and if they are
+>    logged in with an unpaid registration for it, jumps straight to Stripe
+>    Checkout.
+> 5. **(Phases 17–19)** An admin can create a single-day **Open Play**
+>    event in under a minute. It surfaces on the homepage and `/events` with an
+>    "Open Play" pill until the event date passes; the moment `end_date` is in
+>    the past it disappears from both surfaces automatically, with no admin
+>    action and no scheduled job. The detail page at `/events/<slug>` remains
+>    live and shows a public roster of paid attendees (first name + last
+>    initial). The visitor-facing register form for an open-play event is a
+>    simplified single-screen form (no team, single-checkbox liability waiver,
+>    no DocuSeal redirect) and lands the user on Stripe Checkout in ≤2 clicks.
+
+## Working agreement (re-read every phase)
+
+- **One phase per turn.** Stop and wait for me to manually test before starting
+  the next.
+- **PLAN first, code second.** At the top of every phase response, output:
+  - Files you will touch (full paths).
+  - Functions and components added or changed.
+  - DB migration filename(s), if any, and the rollback statement.
+  - The exact manual test I should run, as a numbered checklist.
+- **Scope discipline.** Never refactor outside the current phase. Log
+  discoveries in `FOLLOWUPS.md` (append-only, one line per item:
+  `- [phase N] <issue> — discovered YYYY-MM-DD`).
+- **Migrations.**
+  - File path: `supabase/migrations/YYYYMMDDHHMMSS_short_name.sql` only. Never
+    drop a loose `.sql` into `supabase/`.
+  - Reversible. Include the rollback in a comment block at the top.
+  - **Never destructive without explicit "yes, drop it" from me.**
+  - Phase 16 ships ONE additive migration (`add_event_type_to_tournaments`).
+    Phases 17–19 are designed to require zero further schema changes. If a
+    migration becomes necessary outside Phase 16, stop and ask before
+    authoring it.
+- **Auth in new code.**
+  - Admin pages: wrap in `AdminGate` or check session in a Server Component.
+  - Admin API routes: call `verifyAdminSessionCookieValue` on the request cookie.
+  - Player pages: use Supabase Auth helpers via `getCurrentPlayer()` and
+    `createSupabaseServerClient()` / `createSupabaseBrowserClient()`. Never
+    `app-signing` for player flows.
+  - Server-side gating: call `supabase.auth.getUser()`, never `getSession()`.
+    `getUser()` validates the JWT; `getSession()` trusts the cookie.
+- **Code style.** Match existing structure. New components under
+  `src/components/<area>/`. **No new top-level npm dependencies** without my
+  explicit approval. Phases 16–19 are scoped to need zero new packages — every
+  feature reuses the existing tournament/registration code paths plus a
+  small new `PublicRoster` component.
+- **TypeScript.** Strict mode. No `any` in new code. Narrow types at API
+  boundaries with hand-rolled guards unless a guard already exists in the repo.
+- **No emojis.** In code, comments, commit messages, or UI strings.
+- **Uncertainty.** If unsure about a data model, route, or component, ask
+  exactly one clarifying question before assuming.
+
+## What NOT to do this round
+
+- No changes to admin auth or `src/lib/app-signing.ts`.
+- No changes to the existing auth surface (magic link, password, OAuth, claim,
+  header dropdown, `/me`, `/me/security`, diagnostics, smoke script). Phases
+  9–15 are done.
+- No changes to the existing tournament team / round workflow. Open play
+  reuses the same `tournaments` row but hides team UI when
+  `event_type='open_play'`.
+- No changes to the unrelated `drop_ins` admin tool. It's a different concept
+  and stays as-is.
+- No DocuSeal template changes. Open-play registrations skip DocuSeal
+  entirely — a single-checkbox liability acknowledgement on the form is the
+  legal artifact.
+- No destructive migrations. Open play introduces ONE additive column
+  (`tournaments.event_type`).
+- No automated cron / scheduled job to "hide past events". Auto-hide is purely
+  query-side (filter by `end_date >= now()` for open-play rows in the homepage
+  and `/events` queries).
+- No new UI libraries (no shadcn, no Radix unless already imported, no MUI).
+- No new npm packages.
+
+## End-of-phase report template
+
+At the end of every phase, output exactly this block (so I can paste it into
+the next session):
+
+```
+### Phase N report
+Changed:
+- <one bullet per file or migration>
+Manual test:
+1. <step>
+2. <step>
+Risk / known regression:
+- <or "none">
+Followups logged:
+- <or "none">
+Next phase: Phase N+1 — <title>. Ready when you are.
+```
+
+Then ask: "Phase N is ready to test. Want me to walk you through the test, or
+are you ready to start Phase N+1?"
+
+---
+
+# Phases — execute in order, one per turn
+
+## Phase 16 — Open-play schema + admin form — SHIPPED
+
+> **Status: complete.** Re-run only if verification fails (`docs/PROJECT-STATUS.md`).
+> Do **not** start Phase 17 until `event_type` exists and the admin form radio works.
+
+**Goal:** Admin can mark any new or existing tournament as an open-play event
+via a single radio. Team-related UI hides automatically when open play is
+selected. Backward compatible: every existing `tournaments` row continues to
+read as `event_type='tournament'`.
+
+**Migration**
+
+- File: `supabase/migrations/<YYYYMMDDHHMMSS>_add_event_type_to_tournaments.sql`.
+- Body:
+
+  ```sql
+  -- Add an event_type column to distinguish single-day open-play events from
+  -- multi-round tournaments. Additive; existing rows default to 'tournament'.
+  --
+  -- Rollback:
+  --   ALTER TABLE public.tournaments DROP COLUMN IF EXISTS event_type;
+  ALTER TABLE public.tournaments
+    ADD COLUMN IF NOT EXISTS event_type text NOT NULL DEFAULT 'tournament'
+      CHECK (event_type IN ('tournament', 'open_play'));
+  ```
+- Confirm before authoring: `supabase migration list` to pick the next
+  monotonically increasing timestamp.
+
+**Files touched**
+
+- `[src/lib/types.ts](src/lib/types.ts)` — add `export type EventType =
+  'tournament' | 'open_play'`; extend `Tournament` with `event_type: EventType`.
+- `[src/lib/tournaments.ts](src/lib/tournaments.ts)` — propagate `event_type`
+  in every `select(...)` string and in `mapTournamentRow` (or wherever rows
+  are normalized into the `Tournament` type).
+- `[src/components/admin/TournamentForm.tsx](src/components/admin/TournamentForm.tsx)` —
+  add a single radio group near the top: "Event type" with two options
+  ("Tournament" / "Open Play"). Default on create: `tournament`. When
+  `event_type='open_play'`:
+  - Hide the `max_teams` input (or render disabled with help text).
+  - Hide `format` (still allowed in the DB; just not exposed in the form for
+    open play — operators can fall back to a one-word format like
+    "Pickup").
+  - Keep dates, location, entry fee, image, `is_featured`, `display_order`.
+- `[src/app/admin/tournaments/[id]/page.tsx](src/app/admin/tournaments/[id]/page.tsx)` —
+  hide the Teams tab/section when `event_type='open_play'`. Registrations
+  tab stays.
+- `[src/app/api/admin/tournaments/route.ts](src/app/api/admin/tournaments/route.ts)`
+  and `[src/app/api/admin/tournaments/[id]/route.ts](src/app/api/admin/tournaments/[id]/route.ts)` —
+  whitelist `event_type` in the POST/PATCH validation. Reject anything other
+  than `'tournament'` or `'open_play'`.
+
+**Files NOT touched**
+
+- Anything in `src/components/shared/` (the public-facing card components). They
+  pick up the new column in Phase 17.
+- Anything in `src/app/register/` or `src/app/api/register/`. Those branch on
+  `event_type` in Phase 18.
+- The existing `drop_ins` table and its admin UI. Different concept.
+
+**Manual test**
+
+1. Open `/admin/tournaments/new`. Pick "Open Play". Confirm the team fields
+   are hidden / disabled. Save. Confirm a row lands in `tournaments` with
+   `event_type='open_play'`.
+2. Open `/admin/tournaments/<id>` for the new row. Confirm no Teams tab.
+   Registrations tab present and empty.
+3. Open `/admin/tournaments/new` again, pick "Tournament" (default). Confirm
+   team fields visible. Save. Confirm row has `event_type='tournament'`.
+4. Edit an existing tournament. Confirm it loads with the radio set to
+   "Tournament" (because every existing row defaults to that). Save without
+   changes. Confirm the row's `event_type` is still `'tournament'`.
+
+---
+
+## Phase 17 — Public surface: homepage + events list with auto-hide — NEXT
+
+**Goal:** Open-play events surface on the homepage and `/events` while
+upcoming, with a distinct "Open Play" pill. The moment `end_date` is in the
+past, they disappear from both surfaces — without any admin action and without
+a cron. The detail page at `/events/<slug>` stays live forever.
+
+**Files touched**
+
+- `[src/lib/tournaments.ts](src/lib/tournaments.ts)`:
+  - `getFeaturedTournaments()` — add a filter: exclude rows where
+    `event_type='open_play' AND end_date < now()`. Use a Postgres-side
+    `.or(...)` so this is server-side, not client-side, filtering.
+  - `getPublicTournaments()` — same exclusion.
+  - Optionally new helper: `getUpcomingOpenPlay()` returning open-play rows
+    with `end_date >= now()`, for a dedicated homepage strip if the design
+    calls for it. Whether to render a separate strip vs. fold into the
+    existing featured list is a design decision — make it inside the phase
+    and document the choice in the phase report.
+- `[src/components/shared/TournamentCard.tsx](src/components/shared/TournamentCard.tsx)`
+  + `[src/components/shared/FeaturedTournamentCard.tsx](src/components/shared/FeaturedTournamentCard.tsx)` —
+  when `event_type='open_play'`, render a small "Open Play" pill alongside
+  the existing status pill. Match the existing pill styling
+  (`STATUS_PILL`-style classes).
+- `[src/app/events/[slug]/page.tsx](src/app/events/[slug]/page.tsx)` — when
+  `event_type='open_play'`:
+  - Swap "Register your team" CTA copy for "Reserve your spot".
+  - Hide the max-teams blurb and any team-list aside.
+  - Keep the sticky Pay CTA. (The smart-pay redirect from Phase 9 stays
+    behaviorally correct.)
+
+**Files NOT touched**
+
+- `src/app/page.tsx` itself — homepage layout doesn't change. The query
+  helpers it already calls (`getFeaturedTournaments`, `getRecentEvents`) do
+  the filtering.
+- Admin views — these continue to show every event regardless of
+  `event_type` or date.
+
+**No migrations.**
+
+**Manual test**
+
+1. Create an open-play event dated 4 days in the future (admin form from
+   Phase 16). Confirm it appears on the homepage Featured section with an
+   "Open Play" pill, alongside any tournaments.
+2. Confirm it appears on `/events` with the same pill.
+3. Click into `/events/<slug>`. Confirm the CTA says "Reserve your spot", no
+   team/`max_teams` blurb appears.
+4. Edit the row directly in Supabase: set `end_date` to one day ago. Reload
+   the homepage — the row no longer appears in Featured. Reload `/events` —
+   it's gone from the list. Reload `/events/<slug>` — the page still loads.
+5. Create a normal tournament also dated in the past (`end_date < now()`).
+   Confirm it still appears in the list (tournaments are not auto-hidden;
+   only open-play rows are).
+
+---
+
+## Phase 18 — Open-play registration + pay flow
+
+**Goal:** A visitor can register for an open-play event in a single
+simplified form (no team, no DocuSeal redirect, single-checkbox liability
+waiver) and land on Stripe Checkout in two clicks.
+
+**Files touched**
+
+- `[src/app/register/page.tsx](src/app/register/page.tsx)` — when the selected
+  tournament is `event_type='open_play'`, pass a flag to the form so it
+  renders the simplified variant. The selector still shows all
+  registration-open events; pick is by slug from the homepage card.
+- `[src/components/register/RegistrationForm.tsx](src/components/register/RegistrationForm.tsx)` —
+  branch on the `event_type` prop:
+  - Fields shown for open play: `first_name`, `last_name`, `email`, `phone`,
+    `dob` (for age confirmation), `emergency_name`, `emergency_phone`, plus a
+    required `liability_acknowledged` checkbox with one-paragraph copy.
+  - Fields HIDDEN for open play: `team_name`, `registration_type` (adult/youth
+    — open play is age-mixed; default to `adult` in the payload), DocuSeal
+    redirect.
+- `[src/app/api/register/route.ts](src/app/api/register/route.ts)` — branch
+  on `tournament.event_type`:
+  - For `'open_play'`: insert the registration with
+    `waiver_type='open_play'`, `waiver_signed=true`,
+    `waiver_signed_at=now()`, `registration_type='adult'` (default), `team_id=null`,
+    `team_name=null`. Skip every DocuSeal call (no submission, no email).
+    Mint a fresh pay-resume token and return `signUrl =
+    "/pay?registrationId=<id>&payToken=<token>"` so the client redirects
+    straight to the paid-flow path.
+  - For `'tournament'` (default): behavior unchanged — DocuSeal redirect or
+    waiver-on-file skip per Phase 7.
+- `[src/app/api/stripe/checkout/route.ts](src/app/api/stripe/checkout/route.ts)` —
+  audit only. The existing dynamic-price branch (`price_data` when
+  `stripe_price_id` is null) should already work for open-play events that
+  don't yet have a synced Stripe product. If it doesn't, fix in place.
+- `[src/lib/stripe.ts](src/lib/stripe.ts)::syncTournamentStripePricing` — audit
+  only. Confirm it correctly syncs an open-play row that has `entry_fee_cents
+  > 0`. If it short-circuits on a tournament-specific field, fix or log a
+  Phase-18 followup and proceed (the dynamic-price branch in checkout is
+  enough to get open-play paying).
+
+**Files NOT touched**
+
+- `src/components/pay/PayForm.tsx` — the smart-pay redirect from Phase 9
+  already handles the `/pay?registrationId=...&payToken=...` path generically.
+- `src/lib/contacts.ts` and `src/lib/registration-contact-linking.ts` — the
+  contact linking from Phase 5 works for any registration regardless of
+  event type.
+
+**No migrations.**
+
+**Manual test**
+
+1. From the homepage, click an open-play event card. Land on `/register` with
+   that event preselected.
+2. Confirm the form shows the simplified field set. Confirm no team field, no
+   adult/youth radio.
+3. Fill the form. Submit. Confirm you DO NOT redirect to DocuSeal. Confirm
+   you DO land on Stripe Checkout (the paid-flow path with
+   `registrationId=&payToken=`).
+4. Complete the Stripe payment (use Stripe test mode card). Confirm
+   `/pay/success` renders. Confirm a row lands in `registrations` with
+   `waiver_type='open_play'`, `waiver_signed=true`, `team_id=null`,
+   `payment_status='paid'` (after the webhook fires).
+5. Repeat for a normal tournament. Confirm DocuSeal still runs as expected
+   (Phase 7 behavior unchanged).
+
+---
+
+## Phase 19 — Public roster ("who played") + acceptance test
+
+**Goal:** After an open-play event ends, the detail page at `/events/<slug>`
+renders a public roster of who actually showed up, with privacy-conscious
+formatting (first name + last initial only).
+
+**Files touched**
+
+- New: `src/components/events/PublicRoster.tsx` — Server Component that
+  accepts a `tournamentId` and renders an unordered list of
+  `{ first_name, last_initial }` rows. Empty state: "No paid attendees yet —
+  this roster fills in after registrations complete."
+- `[src/lib/tournaments.ts](src/lib/tournaments.ts)` — add
+  `getPublicRoster(tournamentId: string): Promise<{ first_name: string;
+  last_initial: string }[]>`. Selects `registrations` joined to nothing else
+  for that `tournament_id` where `payment_status='paid'`. Maps last name to a
+  single initial server-side; never returns the full last name, email, phone,
+  or any other PII.
+- `[src/app/events/[slug]/page.tsx](src/app/events/[slug]/page.tsx)` — when
+  `event_type='open_play'` AND `end_date < now()`, render
+  `<PublicRoster tournamentId={t.id} />` in a new section below the
+  description. For open-play events still upcoming, no roster section yet.
+  For tournaments, do not render the roster at all (their attendee surface
+  remains admin-only).
+
+**Files NOT touched**
+
+- Admin `RegistrationsList` — full PII admin view is unchanged. The public
+  roster is a separate read path with deliberately narrow projection.
+
+**No migrations.**
+
+**Acceptance test (North Star pass — Phases 17–19; assumes Phase 16 verified)**
+
+1. Admin creates an "Open Play — Memorial Day" event dated 4 days out, entry
+   fee $20, `is_featured=true`.
+2. Homepage Featured section shows the event with an "Open Play" pill.
+3. Logged-out visitor clicks the card. Lands on `/register` with the event
+   preselected. Confirms the simplified form. Submits. Pays via Stripe.
+   Lands on `/pay/success`.
+4. Admin opens `/admin/tournaments/<id>`. Confirms the new registrant in
+   the Registrations tab. Confirms no Teams tab on the page.
+5. Admin edits the event's `end_date` in Supabase to one day ago (simulating
+   the day-after). Reloads the homepage. The event no longer appears in
+   Featured. Reloads `/events`. The event is gone from the list. Reloads
+   `/events/<slug>`. Page still loads. Below the description, a "Roster"
+   section renders the registrant as `First L.` (first name + last initial).
+6. (Regression) A regular tournament with `end_date` in the past still
+   appears on `/events` (it is NOT auto-hidden). Confirms only `event_type =
+   'open_play'` is subject to the date cutoff.
+7. (Regression) Run the existing 8-step Phase 15 acceptance checklist
+   end-to-end against a fresh email. Magic link, password, OAuth, claim
+   flow, smart-pay redirect all still work. Open play has not regressed any
+   prior surface.
+
+---
+
+## Quick reference: open-play lifecycle
+
+```mermaid
+flowchart TD
+    admin[Admin creates Open Play event] -->|event_type=open_play| db[(tournaments row)]
+    db --> home{end_date >= now?}
+    home -->|yes| homepage[Shows on homepage + /events with Open Play pill]
+    home -->|no| hidden[Hidden from homepage + /events]
+
+    homepage --> visitor[Visitor clicks Reserve]
+    visitor --> form[Simplified register form: name, contact, liability checkbox]
+    form --> api[/api/register branches on event_type]
+    api -->|open_play| skipDS[Skip DocuSeal, mint payToken]
+    skipDS --> pay[Stripe Checkout]
+    pay --> success[/pay/success]
+
+    hidden --> detail[/events/slug still loads]
+    detail --> roster[PublicRoster renders paid attendees first L]
+```
