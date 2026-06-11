@@ -382,11 +382,48 @@ export async function runPayEligibilityCheck(
         ok: true,
         body: { status: "no_waiver", contactId: resolved.contactId! },
       };
-    case "needs_registration":
+    case "needs_registration": {
+      // Valid waiver on file but no registration row for this tournament.
+      // The operator's rule: a signed facility waiver means the player should
+      // not have to "register" again per event — auto-create the pending
+      // registration and send them straight to pay. Only fall back to the
+      // `needs_registration` card when we can't enroll automatically (e.g. the
+      // contact is missing the emergency fields the registrations table
+      // requires NOT NULL, which the /register form collects).
+      if (contact) {
+        const enroll = await enrollContactInTournament({
+          contact,
+          tournamentId: input.tournamentId,
+          waiverType: input.waiverType,
+        });
+        if (enroll.ok) {
+          let payToken: string;
+          try {
+            payToken = createPayResumeToken(enroll.registrationId);
+          } catch (e) {
+            console.error("[pay-eligibility] pay token signing failed after enroll:", e);
+            return {
+              ok: false,
+              httpStatus: 500,
+              error: "Payment could not be prepared (server signing misconfiguration).",
+            };
+          }
+          return {
+            ok: true,
+            body: {
+              status: "ready_to_pay",
+              contactId: resolved.contactId!,
+              registrationId: enroll.registrationId,
+              payToken,
+            },
+          };
+        }
+      }
       return {
         ok: true,
         body: { status: "needs_registration", contactId: resolved.contactId! },
       };
+    }
     case "needs_waiver":
       return {
         ok: true,

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { PayPageClient } from "@/components/pay/PayPageClient";
 import { PayForm, type TournamentPayOption } from "@/components/pay/PayForm";
 import { PayGateResultCard } from "@/components/pay/PayGateResultCard";
-import { createPayResumeToken, verifyPayResumeToken } from "@/lib/app-signing";
+import { verifyPayResumeToken } from "@/lib/app-signing";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { getPayableTournamentBySlug } from "@/lib/tournaments";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
@@ -13,10 +13,7 @@ import {
   isWorldCupTournamentSlug,
   WORLD_CUP_TOURNAMENT_SLUG,
 } from "@/lib/world-cup-pricing";
-import {
-  enrollContactInTournament,
-  runPayEligibilityCheck,
-} from "@/lib/pay-eligibility";
+import { runPayEligibilityCheck } from "@/lib/pay-eligibility";
 import { buildPayResumePath } from "@/lib/pay-resume-url";
 import type {
   PayEligibilitySuccessBody,
@@ -112,6 +109,11 @@ export default async function PayPage({
     if (eligibility.ok) {
       const body = eligibility.body;
 
+      // `runPayEligibilityCheck` auto-enrolls a contact that already has a
+      // valid waiver (no per-event re-registration), so a valid-waiver player
+      // comes back as `ready_to_pay` here. A `needs_registration` result means
+      // we could not auto-enroll (e.g. missing emergency contact) and the
+      // inline card below routes them to /register to fill the gap.
       if (body.status === "ready_to_pay") {
         redirect(
           buildPayResumePath({
@@ -120,34 +122,6 @@ export default async function PayPage({
             tournamentSlug,
           })
         );
-      }
-
-      if (body.status === "needs_registration") {
-        const enroll = await enrollContactInTournament({
-          contact: player.contact,
-          tournamentId: requestedTournament.id,
-          waiverType,
-        });
-        if (enroll.ok) {
-          let token: string | null = null;
-          try {
-            token = createPayResumeToken(enroll.registrationId);
-          } catch (err) {
-            console.error("[pay] pay token signing failed after enroll:", err);
-          }
-          if (token) {
-            redirect(
-              buildPayResumePath({
-                registrationId: enroll.registrationId,
-                payToken: token,
-                tournamentSlug,
-              })
-            );
-          }
-        }
-        // missing_emergency / insert_failed / signing failed: render the
-        // inline card below (`needs_registration` copy nudges them to the
-        // /register form which collects emergency contact details).
       }
 
       serverResolved = { body, waiverType };
