@@ -117,7 +117,13 @@ export function PayForm({
       return worldCupShareCents > 0 ? worldCupShareCents : null;
     }
     if (hasRegistration) {
-      return registrationTournament?.entryFeeCents ?? null;
+      // Open play (and any drop-in-priced event) has no entry fee — charge the
+      // configured drop-in amount instead so the preset admin price is used.
+      return (
+        registrationTournament?.entryFeeCents ??
+        registrationTournament?.dropInFeeCents ??
+        null
+      );
     }
     if (selectedPayKind === "drop_in") {
       return selectedTournament?.drop_in_fee_cents ?? null;
@@ -301,7 +307,9 @@ export function PayForm({
       const payKind = isWorldCup
         ? worldCupPayKind
         : hasRegistration
-          ? "entry"
+          ? registrationTournament?.entryFeeCents
+            ? "entry"
+            : "drop_in"
           : selectedPayKind;
 
       const res = await fetch("/api/stripe/checkout", {

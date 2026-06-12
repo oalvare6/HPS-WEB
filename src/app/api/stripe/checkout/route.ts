@@ -10,6 +10,7 @@ import {
   worldCupShareAmountCents,
   WORLD_CUP_TEAM_FEE_CENTS,
   type CheckoutPayKind,
+  type GenericPayKind,
 } from "@/lib/world-cup-pricing";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -140,13 +141,27 @@ async function resolveTournamentCheckout(
     };
   }
 
-  const kind = payKindInput === "drop_in" ? "drop_in" : "entry";
-  const cents = kind === "drop_in" ? t.drop_in_fee_cents : t.entry_fee_cents;
+  const requestedKind: GenericPayKind = payKindInput === "drop_in" ? "drop_in" : "entry";
+  let kind: GenericPayKind = requestedKind;
+  let cents = kind === "drop_in" ? t.drop_in_fee_cents : t.entry_fee_cents;
+
+  // Fall back to whichever fee is actually configured. Open play and similar
+  // events are priced via drop-in only (no entry fee), so a registration-resume
+  // pay that defaults to "entry" should still charge the preset drop-in amount.
+  if (!cents || cents <= 0) {
+    if (kind === "entry" && t.drop_in_fee_cents && t.drop_in_fee_cents > 0) {
+      kind = "drop_in";
+      cents = t.drop_in_fee_cents;
+    } else if (kind === "drop_in" && t.entry_fee_cents && t.entry_fee_cents > 0) {
+      kind = "entry";
+      cents = t.entry_fee_cents;
+    }
+  }
 
   if (!cents || cents <= 0) {
     return {
       error:
-        kind === "drop_in"
+        requestedKind === "drop_in"
           ? "No drop-in fee is configured for this tournament."
           : "No entry fee is configured for this tournament.",
       status: 400,
