@@ -705,6 +705,15 @@ export function PayForm({
           <p className="text-xs text-zinc-500 text-center">
             Powered by Stripe. Your card details are never stored on our servers.
           </p>
+
+          <div className="mt-1 flex items-start gap-2 rounded-md border border-zinc-700/50 bg-zinc-800/40 px-3 py-2.5 text-xs text-zinc-400">
+            <span className="mt-px flex-shrink-0 text-sm leading-none">💸</span>
+            <span>
+              Prefer Zelle? Send payment to{" "}
+              <span className="font-medium text-zinc-200">houspremiersoccer@gmail.com</span>
+              {" "}and message us so we can confirm your spot.
+            </span>
+          </div>
         </form>
       </div>
     </div>
