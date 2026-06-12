@@ -137,15 +137,19 @@ export type EnrollContactInTournamentInput = {
 
 export type EnrollContactInTournamentResult =
   | { ok: true; registrationId: string }
-  | { ok: false; reason: "missing_emergency" | "missing_waiver" | "insert_failed" };
+  | { ok: false; reason: "missing_waiver" | "insert_failed" };
 
 /**
- * Create a pending registration row for a logged-in player whose contact
- * already has a valid waiver + emergency contact on file. Marks the new
- * registration's waiver as signed (mirrored from the contact). Returns
- * `missing_emergency` when the contact is missing the emergency fields the
- * registrations table requires NOT NULL — caller should fall back to the
- * normal `/register` flow which collects them.
+ * Create a pending registration row for a player whose contact already has a
+ * valid facility waiver on file. This is the heart of the operator's rule: one
+ * signed waiver (365 days) means the player never re-registers per event — any
+ * tournament they want to pay for just gets a pending registration created here
+ * and they go straight to checkout at the event's preset price.
+ *
+ * Emergency contact is mirrored from the contact when present but is NOT
+ * required — most waiver-on-file contacts were captured without it, and forcing
+ * re-registration just to collect it defeats the whole "pay without registering
+ * again" flow. The registrations table stores empty strings in that case.
  */
 export async function enrollContactInTournament(
   input: EnrollContactInTournamentInput
@@ -158,9 +162,6 @@ export async function enrollContactInTournament(
 
   const emergencyName = (contact.emergency_name ?? "").trim();
   const emergencyPhone = (contact.emergency_phone ?? "").trim();
-  if (!emergencyName || !emergencyPhone) {
-    return { ok: false, reason: "missing_emergency" };
-  }
 
   const signedAt = contact.waiver_signed_at ?? new Date().toISOString();
 
