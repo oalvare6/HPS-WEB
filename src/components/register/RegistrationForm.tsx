@@ -602,7 +602,7 @@ function PersonalInfoFields({
             </button>
           )}
         </div>
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="firstName" className={labelClass}>
               First name <span className="text-red-400">*</span>
@@ -647,7 +647,7 @@ function PersonalInfoFields({
             Contact Info <span className="text-red-400">*</span>
           </span>
         </div>
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="email" className={labelClass}>
               Email Address
@@ -724,7 +724,7 @@ function PersonalInfoFields({
         <p className="text-xs text-zinc-500 -mt-2">
           Someone we can reach in case of an emergency during the event.
         </p>
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="emergencyName" className={labelClass}>
               Emergency contact name

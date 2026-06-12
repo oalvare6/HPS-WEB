@@ -69,9 +69,9 @@ export function FeaturedTournamentCarousel({
           type="button"
           onClick={prev}
           aria-label="Previous featured tournament"
-          className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-surface-2/80 hover:bg-surface-2 text-zinc-300 hover:text-white border border-border-token transition-colors"
+          className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-surface-2/80 hover:bg-surface-2 text-zinc-300 hover:text-white border border-border-token transition-colors"
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft size={18} />
         </button>
 
         <div
@@ -89,8 +89,8 @@ export function FeaturedTournamentCarousel({
                 aria-selected={active}
                 aria-label={`Show ${t.title}`}
                 onClick={() => goTo(i)}
-                className={`h-2 rounded-full transition-all ${
-                  active ? "w-6 bg-brand" : "w-2 bg-zinc-600 hover:bg-zinc-400"
+                className={`h-3 rounded-full transition-all ${
+                  active ? "w-8 bg-brand" : "w-3 bg-zinc-600 hover:bg-zinc-400"
                 }`}
               />
             );
@@ -101,9 +101,9 @@ export function FeaturedTournamentCarousel({
           type="button"
           onClick={next}
           aria-label="Next featured tournament"
-          className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-surface-2/80 hover:bg-surface-2 text-zinc-300 hover:text-white border border-border-token transition-colors"
+          className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-surface-2/80 hover:bg-surface-2 text-zinc-300 hover:text-white border border-border-token transition-colors"
         >
-          <ChevronRight size={16} />
+          <ChevronRight size={18} />
         </button>
       </div>
     </div>
