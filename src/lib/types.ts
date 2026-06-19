@@ -99,6 +99,93 @@ export type TournamentRound = {
   updated_at: string;
 };
 
+export type MatchStatus = "scheduled" | "completed" | "postponed" | "cancelled";
+
+export const MATCH_STATUSES: MatchStatus[] = [
+  "scheduled",
+  "completed",
+  "postponed",
+  "cancelled",
+];
+
+/**
+ * A single fixture inside a tournament, optionally tied to a round/matchweek.
+ * Teams reuse the per-tournament `teams` table. When a side has no concrete
+ * team yet (e.g. the final's "Winner SF1"), the `*_label` free-text stands in.
+ */
+export type Match = {
+  id: string;
+  tournament_id: string;
+  round_id: string | null;
+  home_team_id: string | null;
+  away_team_id: string | null;
+  home_team_label: string | null;
+  away_team_label: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  status: MatchStatus;
+  kickoff_time: string | null;
+  /** YYYY-MM-DD or null. Falls back to the round's date when null. */
+  match_date: string | null;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** One goal-tally row per scorer per match. Powers the Golden Boot. */
+export type MatchScorer = {
+  id: string;
+  match_id: string;
+  team_id: string | null;
+  scorer_name: string;
+  goals: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A match enriched with resolved team names + its scorers, for rendering. */
+export type MatchWithDetails = Match & {
+  home_team_name: string | null;
+  away_team_name: string | null;
+  home_team_color: string | null;
+  away_team_color: string | null;
+  scorers: MatchScorer[];
+};
+
+/** A single row in the computed standings table. */
+export type StandingRow = {
+  team_id: string;
+  team_name: string;
+  team_color: string | null;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_difference: number;
+  points: number;
+};
+
+/** A single row in the computed top-scorers (Golden Boot) leaderboard. */
+export type TopScorerRow = {
+  scorer_name: string;
+  team_id: string | null;
+  team_name: string | null;
+  team_color: string | null;
+  goals: number;
+};
+
+/** Hard cap on a scorer's name length. */
+export const MAX_SCORER_NAME_LENGTH = 80;
+
+/** Hard cap on a match's note length. */
+export const MAX_MATCH_NOTE_LENGTH = 280;
+
+/** Hard cap on a team placeholder label length (e.g. "Winner SF1"). */
+export const MAX_TEAM_LABEL_LENGTH = 80;
+
 /** Hard cap on how many tournaments may be featured at once. */
 export const MAX_FEATURED_TOURNAMENTS = 3;
 

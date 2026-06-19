@@ -25,6 +25,8 @@ import {
   getTournamentRounds,
   getTournamentUpdates,
 } from "@/lib/tournaments";
+import { getTournamentLeague } from "@/lib/matches";
+import { LeagueExperience } from "@/components/shared/league/LeagueExperience";
 import type {
   Tournament,
   TournamentRound,
@@ -210,9 +212,10 @@ export default async function TournamentDetailPage({
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
-  const [{ updates }, { rounds }] = await Promise.all([
+  const [{ updates }, { rounds }, league] = await Promise.all([
     getTournamentUpdates(tournament.id),
     getTournamentRounds(tournament.id),
+    getTournamentLeague(tournament.id),
   ]);
 
   const pill = STATUS_PILL[tournament.status];
@@ -318,6 +321,9 @@ export default async function TournamentDetailPage({
               )}
             </div>
 
+            {/* League: standings, fixtures & results, top scorers (data-driven) */}
+            <LeagueExperience league={league} rounds={rounds} />
+
             {/* What to expect — generic tournament playbook, same every event */}
             <div>
               <div className="flex items-center gap-2 mb-4">
@@ -412,8 +418,8 @@ export default async function TournamentDetailPage({
               )}
             </div>
 
-            {/* Schedule (rounds) */}
-            {rounds.length > 0 && (
+            {/* Schedule (rounds) — fallback when no per-match fixtures exist yet */}
+            {rounds.length > 0 && league.matches.length === 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <CalendarDays size={18} className="text-brand" />
