@@ -5,6 +5,7 @@ import { Section } from "@/components/shared/section";
 import { FormFieldsSkeleton } from "@/components/shared/skeleton";
 import { TournamentForm } from "@/components/admin/TournamentForm";
 import { TournamentRoundsPanel } from "@/components/admin/TournamentRoundsPanel";
+import { TournamentMatchesPanel } from "@/components/admin/TournamentMatchesPanel";
 import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import type { Tournament } from "@/lib/types";
@@ -79,6 +80,7 @@ function EditContent({ id }: { id: string }) {
             <>
               <TournamentForm initial={tournament} />
               <TournamentRoundsPanel tournamentId={tournament.id} />
+              <TournamentMatchesPanel tournamentId={tournament.id} />
               <TournamentUpdatesPanel tournamentId={tournament.id} />
             </>
           )}
