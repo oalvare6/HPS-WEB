@@ -22,15 +22,18 @@ import {
 } from "lucide-react";
 import {
   getTournamentBySlug,
+  getTournamentMatches,
   getTournamentRounds,
   getTournamentUpdates,
 } from "@/lib/tournaments";
+import { computeStandings, computeTopScorers } from "@/lib/standings";
 import type {
   Tournament,
   TournamentRound,
   TournamentStatus,
   TournamentUpdate,
 } from "@/lib/types";
+import { TournamentHub } from "@/components/tournament/TournamentHub";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
@@ -75,11 +78,6 @@ const TOURNAMENT_FEATURES: {
     icon: Handshake,
     title: "Friendly play — no slide tackling",
     body: "Competitive, but keep it on the ball. We're here to play.",
-  },
-  {
-    icon: Trophy,
-    title: "Live scores tracked",
-    body: "Goals, assists, and saves logged through every match.",
   },
 ];
 
@@ -210,10 +208,15 @@ export default async function TournamentDetailPage({
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
-  const [{ updates }, { rounds }] = await Promise.all([
+  const [{ updates }, { rounds }, { matches, teams }] = await Promise.all([
     getTournamentUpdates(tournament.id),
     getTournamentRounds(tournament.id),
+    getTournamentMatches(tournament.id),
   ]);
+
+  const hasHub = matches.length > 0;
+  const standings = hasHub ? computeStandings(teams, matches) : [];
+  const topScorers = hasHub ? computeTopScorers(matches) : [];
 
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
@@ -412,87 +415,112 @@ export default async function TournamentDetailPage({
               )}
             </div>
 
-            {/* Schedule (rounds) */}
-            {rounds.length > 0 && (
+            {/* Tournament hub: schedule, results, standings, top scorers */}
+            {hasHub ? (
               <div>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-1">
                   <CalendarDays size={18} className="text-brand" />
                   <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
-                    Schedule
+                    Schedule &amp; standings
                   </h2>
-                  <span className="text-xs text-zinc-500">
-                    {rounds.length} {rounds.length === 1 ? "round" : "rounds"}
-                  </span>
                 </div>
                 <p className="text-xs text-zinc-400 italic mb-4 leading-relaxed">
-                  Schedule subject to change. Any updates will be posted on this
-                  page and pushed to our{" "}
+                  Scores update through the tournament. Schedule subject to
+                  change — updates are posted here and pushed to our{" "}
                   <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
                     WhatsApp community
                   </WhatsAppCommunityLinkFromSite>
                   .
                 </p>
-                <ul className="dashboard-card divide-y divide-border-token overflow-hidden">
-                  {rounds.map((r: TournamentRound) => {
-                    const cancelled = r.status === "cancelled";
-                    const rescheduled = r.status === "rescheduled";
-                    const timeRange =
-                      r.time_start && r.time_end
-                        ? `${r.time_start} – ${r.time_end}`
-                        : r.time_start || r.time_end || null;
-                    return (
-                      <li
-                        key={r.id}
-                        className={`px-5 py-4 ${cancelled ? "opacity-70" : ""}`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
+                <TournamentHub
+                  matches={matches}
+                  rounds={rounds}
+                  standings={standings}
+                  topScorers={topScorers}
+                />
+              </div>
+            ) : (
+              rounds.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <CalendarDays size={18} className="text-brand" />
+                    <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+                      Schedule
+                    </h2>
+                    <span className="text-xs text-zinc-500">
+                      {rounds.length} {rounds.length === 1 ? "round" : "rounds"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 italic mb-4 leading-relaxed">
+                    Schedule subject to change. Any updates will be posted on this
+                    page and pushed to our{" "}
+                    <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
+                      WhatsApp community
+                    </WhatsAppCommunityLinkFromSite>
+                    .
+                  </p>
+                  <ul className="dashboard-card divide-y divide-border-token overflow-hidden">
+                    {rounds.map((r: TournamentRound) => {
+                      const cancelled = r.status === "cancelled";
+                      const rescheduled = r.status === "rescheduled";
+                      const timeRange =
+                        r.time_start && r.time_end
+                          ? `${r.time_start} – ${r.time_end}`
+                          : r.time_start || r.time_end || null;
+                      return (
+                        <li
+                          key={r.id}
+                          className={`px-5 py-4 ${cancelled ? "opacity-70" : ""}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span
+                                className={`font-medium truncate ${
+                                  cancelled
+                                    ? "text-zinc-500 line-through"
+                                    : r.status === "note"
+                                      ? "text-zinc-300"
+                                      : "text-white"
+                                }`}
+                              >
+                                {r.label}
+                              </span>
+                              {cancelled && (
+                                <span className="text-xs font-mono bg-red-500/20 text-red-300 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
+                                  Cancelled
+                                </span>
+                              )}
+                              {rescheduled && (
+                                <span className="text-xs font-mono bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
+                                  Rescheduled
+                                </span>
+                              )}
+                            </div>
                             <span
-                              className={`font-medium truncate ${
-                                cancelled
-                                  ? "text-zinc-500 line-through"
-                                  : r.status === "note"
-                                    ? "text-zinc-300"
-                                    : "text-white"
+                              className={`text-sm text-right pl-4 flex-shrink-0 ${
+                                cancelled ? "text-zinc-500 line-through" : "text-zinc-300"
                               }`}
                             >
-                              {r.label}
+                              {formatRoundDate(r.round_date)}
                             </span>
-                            {cancelled && (
-                              <span className="text-xs font-mono bg-red-500/20 text-red-300 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
-                                Cancelled
-                              </span>
-                            )}
-                            {rescheduled && (
-                              <span className="text-xs font-mono bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
-                                Rescheduled
-                              </span>
-                            )}
                           </div>
-                          <span
-                            className={`text-sm text-right pl-4 flex-shrink-0 ${
-                              cancelled ? "text-zinc-500 line-through" : "text-zinc-300"
-                            }`}
-                          >
-                            {formatRoundDate(r.round_date)}
-                          </span>
-                        </div>
-                        {(timeRange || r.note || (rescheduled && r.rescheduled_to)) && (
-                          <div className="text-xs text-zinc-400 mt-1 space-x-2">
-                            {timeRange && <span>{timeRange}</span>}
-                            {rescheduled && r.rescheduled_to && (
-                              <span className="text-yellow-300">
-                                → {formatRoundDate(r.rescheduled_to)}
-                              </span>
-                            )}
-                            {r.note && <span>· {r.note}</span>}
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+                          {(timeRange || r.note || (rescheduled && r.rescheduled_to)) && (
+                            <div className="text-xs text-zinc-400 mt-1 space-x-2">
+                              {timeRange && <span>{timeRange}</span>}
+                              {rescheduled && r.rescheduled_to && (
+                                <span className="text-yellow-300">
+                                  → {formatRoundDate(r.rescheduled_to)}
+                                </span>
+                              )}
+                              {r.note && <span>· {r.note}</span>}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )
             )}
           </div>
 

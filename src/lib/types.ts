@@ -112,6 +112,105 @@ export const MAX_ROUND_LABEL_LENGTH = 80;
 export const MAX_ROUND_NOTE_LENGTH = 280;
 
 // ============================================================================
+// Matches, goals, standings (tournament hub)
+// ============================================================================
+
+export type MatchStatus = "scheduled" | "completed" | "postponed" | "cancelled";
+
+export const MATCH_STATUSES: MatchStatus[] = [
+  "scheduled",
+  "completed",
+  "postponed",
+  "cancelled",
+];
+
+/** Hard cap on a scorer name length. */
+export const MAX_SCORER_NAME_LENGTH = 60;
+
+/** Hard cap on a team placeholder label length (e.g. "Winner SF1"). */
+export const MAX_MATCH_LABEL_LENGTH = 60;
+
+/** Hard cap on a match note length. */
+export const MAX_MATCH_NOTE_LENGTH = 280;
+
+/**
+ * One scorer's tally for one side of one match (table `match_scorers`). Scorers
+ * are free-text names (e.g. "Daniel"), not linked accounts. `team_id` records
+ * which side scored.
+ */
+export type MatchScorer = {
+  id: string;
+  match_id: string;
+  team_id: string | null;
+  scorer_name: string;
+  goals: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * A team-vs-team fixture within a tournament (table `matches`). Either side may
+ * use a text placeholder (`home_team_label` / `away_team_label`, e.g.
+ * "Winner SF1") instead of a concrete team while the bracket is unresolved.
+ * Scores are null until played.
+ */
+export type TournamentMatch = {
+  id: string;
+  tournament_id: string;
+  round_id: string | null;
+  match_number: number | null;
+  home_team_id: string | null;
+  away_team_id: string | null;
+  home_team_label: string | null;
+  away_team_label: string | null;
+  /** YYYY-MM-DD or null */
+  match_date: string | null;
+  kickoff_time: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  status: MatchStatus;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Match enriched with resolved team display info and its scorers, as returned
+ * to the public tournament hub. Built server-side in `getTournamentMatches`.
+ */
+export type MatchWithDetails = TournamentMatch & {
+  home_team: Pick<Team, "id" | "name" | "color"> | null;
+  away_team: Pick<Team, "id" | "name" | "color"> | null;
+  scorers: MatchScorer[];
+};
+
+/** A single row of a computed league table. Derived, never stored. */
+export type StandingsRow = {
+  team_id: string;
+  team_name: string;
+  team_color: string | null;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_difference: number;
+  points: number;
+};
+
+/** A single row of the computed top-scorer leaderboard. Derived, never stored. */
+export type ScorerRow = {
+  scorer_name: string;
+  team_id: string | null;
+  team_name: string | null;
+  team_color: string | null;
+  goals: number;
+};
+
+// ============================================================================
 // People + commerce types (Phase 0 schema overhaul)
 // ============================================================================
 

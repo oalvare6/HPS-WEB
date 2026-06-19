@@ -1,6 +1,10 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import type {
+  MatchScorer,
+  MatchWithDetails,
+  Team,
   Tournament,
+  TournamentMatch,
   TournamentRound,
   TournamentStatus,
   TournamentUpdate,
@@ -34,6 +38,12 @@ export type TournamentUpdatesResult = {
 
 export type TournamentRoundsResult = {
   rounds: TournamentRound[];
+  loadError: string | null;
+};
+
+export type TournamentMatchesResult = {
+  matches: MatchWithDetails[];
+  teams: Pick<Team, "id" | "name" | "color">[];
   loadError: string | null;
 };
 
@@ -314,6 +324,81 @@ export async function getTournamentRounds(
   } catch (err) {
     console.error("[tournament_rounds] fetch failed:", err);
     return { rounds: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+  }
+}
+
+/**
+ * Matches for a tournament, enriched with team display info and nested scorers.
+ * Fetched in three queries (matches, teams, scorers) and stitched in code to
+ * avoid PostgREST ambiguity from the two team foreign keys on a single row.
+ * Sorted by sort_order then match_number. Empty arrays on miss/error.
+ */
+export async function getTournamentMatches(
+  tournamentId: string
+): Promise<TournamentMatchesResult> {
+  try {
+    const [matchesRes, teamsRes] = await Promise.all([
+      supabaseAdmin
+        .from("matches")
+        .select("*")
+        .eq("tournament_id", tournamentId)
+        .order("sort_order", { ascending: true })
+        .order("match_number", { ascending: true }),
+      supabaseAdmin
+        .from("teams")
+        .select("id, name, color")
+        .eq("tournament_id", tournamentId)
+        .order("name", { ascending: true }),
+    ]);
+
+    if (matchesRes.error) {
+      console.error("[matches] fetch failed:", matchesRes.error.message);
+      return { matches: [], teams: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    }
+    if (teamsRes.error) {
+      console.error("[matches] teams fetch failed:", teamsRes.error.message);
+      return { matches: [], teams: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
+    }
+
+    const matchRows = (matchesRes.data ?? []) as TournamentMatch[];
+    const teams = (teamsRes.data ?? []) as Pick<Team, "id" | "name" | "color">[];
+    const teamById = new Map(teams.map((t) => [t.id, t]));
+
+    let scorers: MatchScorer[] = [];
+    if (matchRows.length > 0) {
+      const { data: scorerRows, error: scorerErr } = await supabaseAdmin
+        .from("match_scorers")
+        .select("*")
+        .in(
+          "match_id",
+          matchRows.map((m) => m.id)
+        )
+        .order("sort_order", { ascending: true });
+      if (scorerErr) {
+        console.error("[match_scorers] fetch failed:", scorerErr.message);
+      } else {
+        scorers = (scorerRows ?? []) as MatchScorer[];
+      }
+    }
+
+    const scorersByMatch = new Map<string, MatchScorer[]>();
+    for (const s of scorers) {
+      const list = scorersByMatch.get(s.match_id) ?? [];
+      list.push(s);
+      scorersByMatch.set(s.match_id, list);
+    }
+
+    const matches: MatchWithDetails[] = matchRows.map((m) => ({
+      ...m,
+      home_team: m.home_team_id ? teamById.get(m.home_team_id) ?? null : null,
+      away_team: m.away_team_id ? teamById.get(m.away_team_id) ?? null : null,
+      scorers: scorersByMatch.get(m.id) ?? [],
+    }));
+
+    return { matches, teams, loadError: null };
+  } catch (err) {
+    console.error("[matches] fetch failed:", err);
+    return { matches: [], teams: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
   }
 }
 
