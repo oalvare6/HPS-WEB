@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Share2 } from "lucide-react";
+import { summarizeText } from "@/lib/text";
 
 type ShareTournamentButtonProps = {
   /** Tournament title, used as the share sheet title and message prefix. */
@@ -40,7 +41,8 @@ export function ShareTournamentButton({
           : window.location.href
         : path ?? "";
 
-    const text = description ? `${title} — ${description}` : title;
+    const tagline = description ? summarizeText(description, 100) : "";
+    const text = tagline ? `${title} — ${tagline}` : title;
 
     // Web Share API (mobile). User can cancel safely; AbortError is silent.
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {

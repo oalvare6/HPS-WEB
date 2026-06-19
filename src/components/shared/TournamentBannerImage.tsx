@@ -28,7 +28,7 @@ export function TournamentBannerImage({
   if (portrait) {
     const frameCls =
       variant === "hero"
-        ? "relative w-full max-w-lg mx-auto aspect-[2/3] bg-surface-2"
+        ? "relative w-full max-w-lg mx-auto aspect-[2/3] max-h-[55vh] md:max-h-none bg-surface-2"
         : "relative w-full aspect-[2/3] max-h-[420px] mx-auto bg-surface-2";
     return (
       <div className={`${frameCls} ${className}`}>

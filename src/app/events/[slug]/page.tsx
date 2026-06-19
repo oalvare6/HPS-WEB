@@ -9,7 +9,10 @@ import {
   Clock,
   CreditCard,
   Flag,
+  Goal,
   Handshake,
+  ListOrdered,
+  Medal,
   Megaphone,
   MapPin,
   Pin,
@@ -34,9 +37,16 @@ import type {
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
+import { summarizeText } from "@/lib/text";
+import {
+  getTournamentMatches,
+  computeStandings,
+  computeTopScorers,
+} from "@/lib/tournament-matches";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { ShareTournamentButton } from "@/components/shared/ShareTournamentButton";
+import { MobileTournamentCtaBar } from "@/components/shared/MobileTournamentCtaBar";
 import { LocationCard } from "@/components/shared/location-card";
 
 export const dynamic = "force-dynamic";
@@ -157,9 +167,9 @@ export async function generateMetadata({
   if (!t) return { title: "Tournament not found" };
 
   const title = `${t.title} | Houston Premier Soccer`;
-  const description =
-    t.description?.slice(0, 200)?.trim() ||
-    `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer. ` +
+  const description = t.description
+    ? summarizeText(t.description, 200)
+    : `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer. ` +
       `Real grass field, 30-min halves, refs on every match, MVP awards at the end.`;
 
   // Link-preview image: tournament banner first (custom upload or preset),
@@ -210,14 +220,23 @@ export default async function TournamentDetailPage({
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
-  const [{ updates }, { rounds }] = await Promise.all([
+  const [{ updates }, { rounds }, { matches }] = await Promise.all([
     getTournamentUpdates(tournament.id),
     getTournamentRounds(tournament.id),
+    getTournamentMatches(tournament.id),
   ]);
+
+  const standings = computeStandings(matches);
+  const topScorers = computeTopScorers(matches, 5);
+  const playedMatches = matches
+    .filter((m) => m.status === "final" || m.status === "postponed")
+    .slice()
+    .reverse();
 
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
   const cta = tournamentPrimaryCta(tournament);
+  const showMobileCta = tournament.status !== "completed" && cta.kind !== "none";
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
@@ -226,17 +245,17 @@ export default async function TournamentDetailPage({
   return (
     <>
       {/* Header strip */}
-      <section className="bg-base text-white py-10 md:py-14 bg-tactical-grid">
+      <section className="bg-base text-white py-6 md:py-14 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <Link
             href="/events"
-            className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-4"
+            className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-3 md:mb-4"
           >
             <ArrowLeft size={14} />
             All events
           </Link>
 
-          <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3 mb-3 md:mb-4">
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold border ${pill.cls}`}
             >
@@ -255,9 +274,9 @@ export default async function TournamentDetailPage({
             )}
           </div>
 
-          <div className="flex items-center gap-3 mb-4">
-            <Trophy size={28} className="text-brand flex-shrink-0" />
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+          <div className="flex items-center gap-3 mb-3 md:mb-4">
+            <Trophy size={24} className="text-brand flex-shrink-0" />
+            <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold tracking-tight">
               {tournament.title}
             </h1>
           </div>
@@ -317,6 +336,129 @@ export default async function TournamentDetailPage({
                 </p>
               )}
             </div>
+
+            {/* Standings + results — only renders once matches exist */}
+            {matches.length > 0 && (
+              <div className="space-y-8">
+                {standings.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <ListOrdered size={18} className="text-brand" />
+                      <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+                        Standings
+                      </h2>
+                    </div>
+                    <div className="dashboard-card overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-zinc-500 uppercase tracking-wider border-b border-border-token">
+                            <th className="px-4 py-3 font-medium">Team</th>
+                            <th className="px-3 py-3 font-medium text-center">P</th>
+                            <th className="px-3 py-3 font-medium text-center">W</th>
+                            <th className="px-3 py-3 font-medium text-center">D</th>
+                            <th className="px-3 py-3 font-medium text-center">L</th>
+                            <th className="px-3 py-3 font-medium text-center">GD</th>
+                            <th className="px-4 py-3 font-medium text-center">Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border-token">
+                          {standings.map((row, i) => (
+                            <tr key={row.team_id} className={i === 0 ? "bg-brand/5" : ""}>
+                              <td className="px-4 py-3 font-medium text-white whitespace-nowrap">
+                                {row.team_name}
+                              </td>
+                              <td className="px-3 py-3 text-center text-zinc-300">{row.played}</td>
+                              <td className="px-3 py-3 text-center text-zinc-300">{row.won}</td>
+                              <td className="px-3 py-3 text-center text-zinc-300">{row.drawn}</td>
+                              <td className="px-3 py-3 text-center text-zinc-300">{row.lost}</td>
+                              <td className="px-3 py-3 text-center text-zinc-300">
+                                {row.goal_diff > 0 ? `+${row.goal_diff}` : row.goal_diff}
+                              </td>
+                              <td className="px-4 py-3 text-center font-semibold text-white">
+                                {row.points}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {topScorers.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Medal size={18} className="text-brand" />
+                      <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+                        Top scorers
+                      </h2>
+                    </div>
+                    <ul className="dashboard-card divide-y divide-border-token overflow-hidden">
+                      {topScorers.map((s, i) => (
+                        <li
+                          key={`${s.team_id}-${s.player_name}`}
+                          className="px-5 py-3 flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-xs font-mono text-zinc-500 w-5 flex-shrink-0">
+                              {i + 1}
+                            </span>
+                            <span className="font-medium text-white truncate">{s.player_name}</span>
+                            <span className="text-xs text-zinc-500 truncate">{s.team_name}</span>
+                          </div>
+                          <span className="text-sm font-semibold text-brand flex-shrink-0">
+                            {s.goals} {s.goals === 1 ? "goal" : "goals"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {playedMatches.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Goal size={18} className="text-brand" />
+                      <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+                        Results
+                      </h2>
+                    </div>
+                    <ul className="space-y-3">
+                      {playedMatches.map((m) => (
+                        <li key={m.id} className="dashboard-card p-4">
+                          <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-2 text-sm flex-wrap">
+                              <span className="font-medium text-white">{m.home_team_name}</span>
+                              {m.status === "final" ? (
+                                <span className="font-mono text-brand">
+                                  {m.home_score} – {m.away_score}
+                                </span>
+                              ) : (
+                                <span className="text-xs font-mono uppercase tracking-wider text-yellow-300">
+                                  Postponed
+                                </span>
+                              )}
+                              <span className="font-medium text-white">{m.away_team_name}</span>
+                            </div>
+                            <span className="text-xs text-zinc-500 flex-shrink-0">
+                              {formatRoundDate(m.match_date)}
+                            </span>
+                          </div>
+                          {m.goals.length > 0 && (
+                            <p className="text-xs text-zinc-400 mt-2">
+                              {m.goals.map((g) => `${g.player_name} ${g.goals}`).join(" · ")}
+                            </p>
+                          )}
+                          {m.notes && (
+                            <p className="text-xs text-zinc-500 mt-1 italic">{m.notes}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* What to expect — generic tournament playbook, same every event */}
             <div>
@@ -561,8 +703,9 @@ export default async function TournamentDetailPage({
         </div>
       </section>
 
-      {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-surface" />
+      {/* Spacer so content can scroll clear of the fixed mobile CTA bar */}
+      {showMobileCta && <div className="h-20 md:hidden" />}
+      <MobileTournamentCtaBar show={showMobileCta} cta={cta} />
     </>
   );
 }

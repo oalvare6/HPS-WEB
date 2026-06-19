@@ -309,3 +309,89 @@ export const MAX_CONTACT_NOTES_LENGTH = 1000;
 
 /** Hard cap on a drop-in's note length. */
 export const MAX_DROP_IN_NOTE_LENGTH = 280;
+
+// ============================================================================
+// Matches + results (round-robin scorelines, standings, top scorers)
+// ============================================================================
+
+export type MatchStage = "group" | "semifinal" | "final";
+
+export const MATCH_STAGES: MatchStage[] = ["group", "semifinal", "final"];
+
+export type MatchStatus = "scheduled" | "final" | "postponed" | "cancelled";
+
+export const MATCH_STATUSES: MatchStatus[] = [
+  "scheduled",
+  "final",
+  "postponed",
+  "cancelled",
+];
+
+export type TournamentMatch = {
+  id: string;
+  tournament_id: string;
+  round_id: string | null;
+  stage: MatchStage;
+  /** YYYY-MM-DD or null */
+  match_date: string | null;
+  kickoff_time: string | null;
+  home_team_id: string;
+  away_team_id: string;
+  home_score: number | null;
+  away_score: number | null;
+  status: MatchStatus;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MatchGoal = {
+  id: string;
+  match_id: string;
+  team_id: string;
+  player_name: string;
+  goals: number;
+  created_at: string;
+};
+
+export type MatchGoalInput = {
+  team_id: string;
+  player_name: string;
+  goals: number;
+};
+
+/** Match hydrated with team names/colors and its goal-scorer lines, for display. */
+export type TournamentMatchWithDetail = TournamentMatch & {
+  home_team_name: string;
+  home_team_color: string | null;
+  away_team_name: string;
+  away_team_color: string | null;
+  goals: MatchGoal[];
+};
+
+export type StandingsRow = {
+  team_id: string;
+  team_name: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goals_for: number;
+  goals_against: number;
+  goal_diff: number;
+  points: number;
+};
+
+export type TopScorerRow = {
+  team_id: string;
+  team_name: string;
+  player_name: string;
+  goals: number;
+};
+
+/** Hard cap on a match's note length. */
+export const MAX_MATCH_NOTE_LENGTH = 280;
+
+/** Hard cap on a goal-scorer's player name. */
+export const MAX_PLAYER_NAME_LENGTH = 80;

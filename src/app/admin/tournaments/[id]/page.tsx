@@ -31,6 +31,7 @@ import {
 } from "@/lib/admin-tournaments";
 import RegistrationsList from "@/components/admin/RegistrationsList";
 import TournamentTeamsPanel from "@/components/admin/TournamentTeamsPanel";
+import { TournamentMatchesPanel } from "@/components/admin/TournamentMatchesPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { useQueryParam } from "@/lib/admin-url-state";
 import { TournamentDetailSkeleton } from "@/components/shared/skeleton";
@@ -238,6 +239,8 @@ function ViewContent({ id }: { id: string }) {
                   />
                 )}
               </div>
+
+              <TournamentMatchesPanel tournamentId={tournament.id} />
             </>
           )}
         </div>
