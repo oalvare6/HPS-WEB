@@ -61,8 +61,8 @@ const TOURNAMENT_FEATURES: {
   },
   {
     icon: Timer,
-    title: "30-minute halves",
-    body: "Full 60 minutes of football. Not pickup — real games, real clock.",
+    title: "25-minute halves",
+    body: "Full 50 minutes of football. Not pickup — real games, real clock.",
   },
   {
     icon: Flag,
@@ -158,7 +158,7 @@ export async function generateMetadata({
   const description =
     t.description?.slice(0, 200)?.trim() ||
     `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer. ` +
-      `Real grass field, 30-min halves, refs on every match, MVP awards at the end.`;
+      `Real grass field, 25-min halves, refs on every match, MVP awards at the end.`;
 
   // Link-preview image: tournament banner first (custom upload or preset),
   // fall back to the brand badge so iMessage / WhatsApp / Twitter always
