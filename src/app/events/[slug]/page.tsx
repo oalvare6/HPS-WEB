@@ -27,6 +27,8 @@ import {
   getTournamentUpdates,
 } from "@/lib/tournaments";
 import { computeStandings, computeTopScorers } from "@/lib/standings";
+import { getWorldCupStandingsOverride } from "@/lib/world-cup-standings";
+import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
 import type {
   Tournament,
   TournamentRound,
@@ -215,7 +217,11 @@ export default async function TournamentDetailPage({
   ]);
 
   const hasHub = matches.length > 0;
-  const standings = hasHub ? computeStandings(teams, matches) : [];
+  const standings = hasHub
+    ? tournament.slug === WORLD_CUP_TOURNAMENT_SLUG
+      ? getWorldCupStandingsOverride(teams)
+      : computeStandings(teams, matches)
+    : [];
   const topScorers = hasHub ? computeTopScorers(matches) : [];
 
   const pill = STATUS_PILL[tournament.status];

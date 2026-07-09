@@ -1,6 +1,7 @@
 /**
  * One-shot: seed the World Cup 7v7 teams, the full 24-match schedule from the
- * tournament flyer, and Round 1 results (scores + scorers).
+ * tournament flyer, and Rounds 1-5 results (scores + scorers). Rounds 1 and 4
+ * each have one postponed fixture (matches #1 and #10).
  *
  * Idempotent: teams/rounds are matched by name/label (created only if missing),
  * and the tournament's matches + goals are cleared and rebuilt on every run, so
@@ -53,7 +54,7 @@ const MATCHES = [
     home: "Brazil",
     away: "USA",
     status: "postponed",
-    note: "Postponed",
+    note: "Make up July 14",
   },
   {
     n: 2,
@@ -85,24 +86,172 @@ const MATCHES = [
   },
 
   // Round 2 — Friday June 19
-  { n: 4, round: "Round 2", time: "7:00 PM", home: "Brazil", away: "Mexico" },
-  { n: 5, round: "Round 2", time: "8:00 PM", home: "USA", away: "Morocco" },
-  { n: 6, round: "Round 2", time: "9:00 PM", home: "Kazakhstan", away: "India" },
+  {
+    n: 4,
+    round: "Round 2",
+    time: "7:00 PM",
+    home: "Brazil",
+    away: "Mexico",
+    status: "completed",
+    hs: 3,
+    as: 4,
+    goals: {
+      home: [["Ethan", 1], ["Alex", 2]],
+      away: [["Alejandro", 2], ["Sergio", 1]],
+    },
+  },
+  {
+    n: 5,
+    round: "Round 2",
+    time: "8:00 PM",
+    home: "USA",
+    away: "Morocco",
+    status: "completed",
+    hs: 5,
+    as: 3,
+    goals: {
+      home: [["Will", 1], ["Evan", 2], ["Jason", 2]],
+      away: [["JanC", 1], ["Josh", 1], ["Gilbert", 1]],
+    },
+  },
+  {
+    n: 6,
+    round: "Round 2",
+    time: "9:00 PM",
+    home: "Kazakhstan",
+    away: "India",
+    status: "completed",
+    hs: 2,
+    as: 6,
+    goals: {
+      home: [["Jesse", 2]],
+      away: [["Daniel", 2], ["Mahnek", 1], ["Flyin", 2]],
+    },
+  },
 
   // Round 3 — Friday June 26
-  { n: 7, round: "Round 3", time: "7:00 PM", home: "Brazil", away: "Morocco" },
-  { n: 8, round: "Round 3", time: "8:00 PM", home: "USA", away: "Kazakhstan" },
-  { n: 9, round: "Round 3", time: "9:00 PM", home: "Mexico", away: "India" },
+  {
+    n: 7,
+    round: "Round 3",
+    time: "7:00 PM",
+    home: "Brazil",
+    away: "Morocco",
+    status: "completed",
+    hs: 2,
+    as: 8,
+    goals: {
+      home: [["Abu", 1], ["Tony", 1]],
+      away: [["Kelvin", 3], ["William", 2], ["Edgar", 2]],
+    },
+  },
+  {
+    n: 8,
+    round: "Round 3",
+    time: "8:00 PM",
+    home: "USA",
+    away: "Kazakhstan",
+    status: "completed",
+    hs: 9,
+    as: 3,
+    goals: {
+      home: [["CarlosC", 6]],
+      away: [["#7", 2], ["#5", 1]],
+    },
+  },
+  {
+    n: 9,
+    round: "Round 3",
+    time: "9:00 PM",
+    home: "Mexico",
+    away: "India",
+    status: "completed",
+    hs: 1,
+    as: 3,
+    goals: {
+      home: [["#3", 1]],
+      away: [["Mahnek", 1], ["Shiv", 1], ["Gavin", 1]],
+    },
+  },
 
   // Round 4 — Tuesday June 30
-  { n: 10, round: "Round 4", time: "7:00 PM", home: "Brazil", away: "Kazakhstan" },
-  { n: 11, round: "Round 4", time: "8:00 PM", home: "USA", away: "India" },
-  { n: 12, round: "Round 4", time: "9:00 PM", home: "Mexico", away: "Morocco" },
+  {
+    n: 10,
+    round: "Round 4",
+    time: "7:00 PM",
+    home: "Brazil",
+    away: "Kazakhstan",
+    status: "postponed",
+    note: "Make up Tue July 7 @ 7pm",
+  },
+  {
+    n: 11,
+    round: "Round 4",
+    time: "8:00 PM",
+    home: "USA",
+    away: "India",
+    status: "completed",
+    hs: 3,
+    as: 7,
+    goals: {
+      home: [["Brandon", 2], ["Eduardo", 1]],
+      away: [["Mahnek", 4], ["Daniel", 1], ["Gavin", 2]],
+    },
+  },
+  {
+    n: 12,
+    round: "Round 4",
+    time: "9:00 PM",
+    home: "Mexico",
+    away: "Morocco",
+    status: "completed",
+    hs: 7,
+    as: 5,
+    goals: {
+      home: [["Alejandro", 1], ["Emir", 2], ["Chris", 1]],
+      away: [["Kelvin", 2], ["Eduardo", 1], ["Ethan", 1]],
+    },
+  },
 
   // Round 5 — Thursday July 2
-  { n: 13, round: "Round 5", time: "7:00 PM", home: "Brazil", away: "India" },
-  { n: 14, round: "Round 5", time: "8:00 PM", home: "USA", away: "Mexico" },
-  { n: 15, round: "Round 5", time: "9:00 PM", home: "Morocco", away: "Kazakhstan" },
+  {
+    n: 13,
+    round: "Round 5",
+    time: "7:00 PM",
+    home: "Brazil",
+    away: "India",
+    status: "completed",
+    hs: 10,
+    as: 3,
+    goals: {
+      home: [["Ethan", 3], ["Abu", 3], ["Alex", 1], ["Eidhan", 1]],
+      away: [["Daniel", 2], ["Shiv", 1]],
+    },
+  },
+  {
+    n: 14,
+    round: "Round 5",
+    time: "8:00 PM",
+    home: "USA",
+    away: "Mexico",
+    status: "completed",
+    hs: 4,
+    as: 2,
+    goals: {
+      home: [["CarlosC", 2], ["Jason", 1], ["Evan", 1]],
+      away: [["Julian", 1], ["Emir", 1]],
+    },
+  },
+  {
+    n: 15,
+    round: "Round 5",
+    time: "9:00 PM",
+    home: "Morocco",
+    away: "Kazakhstan",
+    status: "completed",
+    hs: 3,
+    as: 0,
+    note: "Kazakhstan forfeit (technical score)",
+  },
 
   // Round 6 — Friday July 10
   { n: 16, round: "Round 6", time: "7:00 PM", home: "Brazil", away: "USA" },
