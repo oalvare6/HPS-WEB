@@ -51,7 +51,7 @@ export function HeaderClient({
           </Link>
 
           {/* Desktop: Status + Nav */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden lg:flex items-center gap-8">
             <StatusIndicatorCompact items={statusItems} />
 
             <div className="h-6 w-px bg-border-token" />
@@ -89,7 +89,7 @@ export function HeaderClient({
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2 -mr-2 text-zinc-400 hover:text-white"
+            className="lg:hidden p-2 -mr-2 text-zinc-400 hover:text-white"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle menu"
             aria-expanded={mobileMenuOpen}
@@ -101,7 +101,7 @@ export function HeaderClient({
         {/* Mobile Nav */}
         <div
           className={cn(
-            "md:hidden overflow-hidden transition-all duration-200",
+            "lg:hidden overflow-hidden transition-all duration-200",
             mobileMenuOpen ? "max-h-[640px] pb-6" : "max-h-0"
           )}
         >

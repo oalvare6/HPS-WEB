@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
@@ -183,10 +182,14 @@ export async function generateMetadata({
 
 export default async function TournamentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { slug } = await params;
+  const { tab } = await searchParams;
+  const initialTab = typeof tab === "string" ? tab : null;
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
@@ -325,17 +328,16 @@ export default async function TournamentDetailPage({
         </WhatsAppCommunityLinkFromSite>
         .
       </p>
-      <Suspense fallback={null}>
-        <TournamentHub
-          matches={matches}
-          rounds={rounds}
-          standings={standings}
-          topScorers={topScorers}
-          unconfirmedScorers={scorersOverride?.unconfirmed}
-          standingsCaption={isWorldCup ? WORLD_CUP_STANDINGS_CAPTION : undefined}
-          standingsFootnote={isWorldCup ? WORLD_CUP_STANDINGS_FOOTNOTE : undefined}
-        />
-      </Suspense>
+      <TournamentHub
+        matches={matches}
+        rounds={rounds}
+        standings={standings}
+        topScorers={topScorers}
+        unconfirmedScorers={scorersOverride?.unconfirmed}
+        initialTab={initialTab}
+        standingsCaption={isWorldCup ? WORLD_CUP_STANDINGS_CAPTION : undefined}
+        standingsFootnote={isWorldCup ? WORLD_CUP_STANDINGS_FOOTNOTE : undefined}
+      />
     </div>
   ) : null;
 

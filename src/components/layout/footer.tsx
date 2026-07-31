@@ -92,7 +92,10 @@ export async function Footer() {
             </h3>
             <ul className="space-y-3 text-sm text-zinc-400">
               <li>
-                <a href={`mailto:${contactEmail}`} className="hover:text-white transition-colors">
+                <a
+                  href={`mailto:${contactEmail}`}
+                  className="break-all hover:text-white transition-colors"
+                >
                   {contactEmail}
                 </a>
               </li>

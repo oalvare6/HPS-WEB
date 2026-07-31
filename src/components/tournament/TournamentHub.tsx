@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import { motion } from "motion/react";
 import type {
@@ -27,6 +26,8 @@ type Props = {
   topScorers: ScorerRow[];
   /** Published rows that can't be matched to a named player; rendered muted. */
   unconfirmedScorers?: ScorerRow[];
+  /** Tab from the ?tab= query, read server-side so the first paint is correct. */
+  initialTab?: string | null;
   standingsCaption?: string | null;
   standingsFootnote?: string | null;
 };
@@ -80,6 +81,7 @@ export function TournamentHub({
   standings,
   topScorers,
   unconfirmedScorers,
+  initialTab,
   standingsCaption,
   standingsFootnote,
 }: Props) {
@@ -127,7 +129,15 @@ export function TournamentHub({
     ? rounds.find((r) => r.id === nextMatch.round_id)?.label ?? null
     : null;
 
-  const form = useMemo(() => computeForm(completed), [completed]);
+  // Form mirrors the table it sits in: the standings cover the group stage, so
+  // knockout results must not leak into the last-five guide.
+  const form = useMemo(
+    () =>
+      computeForm(
+        completed.filter((m) => !m.round_id || !knockoutRoundIds.has(m.round_id))
+      ),
+    [completed, knockoutRoundIds]
+  );
 
   const tabs = useMemo(() => {
     const list: { key: TabKey; label: string }[] = [];
@@ -148,24 +158,26 @@ export function TournamentHub({
 
   const defaultTab: TabKey = hasStandings ? "standings" : tabs[0]?.key ?? "schedule";
 
-  // Tab state lives in ?tab= so a specific view is shareable and survives
-  // refresh; invalid values fall back to the default.
-  const searchParams = useSearchParams();
-  const pathname = usePathname();
-  const router = useRouter();
-  const tabParam = searchParams.get("tab");
-  const active: TabKey = tabs.some((t) => t.key === tabParam)
-    ? (tabParam as TabKey)
-    : defaultTab;
+  // The initial tab comes from the server (this page is force-dynamic, so it
+  // already sees ?tab=), which keeps the first paint correct without a
+  // useSearchParams suspend. From then on the tab is local state — instant to
+  // switch — mirrored back into the URL with history.replaceState so the view
+  // stays shareable. router.replace would refetch the page and remount the hub
+  // on every click.
+  const [selected, setSelected] = useState<TabKey | null>(
+    tabs.some((t) => t.key === initialTab) ? (initialTab as TabKey) : null
+  );
+  const active: TabKey = selected ?? defaultTab;
   const setActive = (value: string) => {
-    const params = new URLSearchParams(searchParams.toString());
+    setSelected(value as TabKey);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
     if (value === defaultTab) {
-      params.delete("tab");
+      url.searchParams.delete("tab");
     } else {
-      params.set("tab", value);
+      url.searchParams.set("tab", value);
     }
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    window.history.replaceState(window.history.state, "", url);
   };
 
   if (tabs.length === 0) return null;
