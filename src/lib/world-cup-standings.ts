@@ -4,15 +4,30 @@ type TeamLite = Pick<Team, "id" | "name" | "color">;
 
 /**
  * World Cup group-stage standings are published verbatim from the operator's
- * final table (July 24 semis sheet), not derived from match scores. The table
- * is internally consistent (points math checks out; GF and GA both total 189)
- * but it is NOT reproducible by computeStandings because the Round 1 Brazil vs
- * USA fixture was never played on its date — it was replayed in Round 6 for
- * DOUBLE points, a rule the generic 3/1/0 calculator does not model. So the
- * Standings tab uses this override while Schedule/Results keep the real match
- * data. Row order is the published order (final group placement) and the table
- * renders rows in this order. Scoring: win 3, draw 1, loss 0 (doubled for the
- * Round 6 Brazil–USA make-up).
+ * final table (July 24 semis sheet), not derived from match scores.
+ *
+ * Two reasons it can't just be computed:
+ *
+ * 1. The Round 1 Brazil vs USA fixture was never played on its date — it was
+ *    replayed in Round 6 for DOUBLE points, a rule the generic 3/1/0
+ *    calculator does not model. This fully explains Brazil's and USA's rows
+ *    (each shows 7 played from 6 fixtures, with the 6-6 counted twice).
+ *
+ * 2. MEXICO'S ROW DISAGREES WITH THE MATCH DATA and no rule reconciles it.
+ *    The sheet publishes 1W/1D/5L = 4 pts, but Mexico won both #4 (Brazil
+ *    3-4 Mexico) and #12 (Mexico 7-5 Morocco), which computes to 2W/1D/4L =
+ *    7 pts. Goals agree (27-38) — only the win/loss split differs. The
+ *    published table also can't balance: it totals 17 wins against 19 losses,
+ *    where every match must produce exactly one of each. Recomputing from the
+ *    seeded results gives a balanced 18/18 over 20 completed group matches,
+ *    with GF and GA both totalling 189.
+ *
+ * We still publish the operator's numbers verbatim — this table is what was
+ * handed out to players — but the discrepancy is real and unresolved. It does
+ * NOT affect qualification: Morocco/India/Brazil/USA take the top four either
+ * way, and Mexico finishes last under both. Ask the operator before changing
+ * Mexico's row. Schedule/Results keep the real match data. Row order is the
+ * published order (final group placement). Scoring: win 3, draw 1, loss 0.
  */
 const OVERRIDE_ROWS = [
   { name: "Morocco", played: 7, won: 4, drawn: 0, lost: 3, gf: 39, ga: 30, gd: 9, points: 12 },
