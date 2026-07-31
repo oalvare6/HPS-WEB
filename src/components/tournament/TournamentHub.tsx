@@ -1,13 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CalendarDays, ListChecks, Table2, Trophy } from "lucide-react";
+import { useMemo } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import * as Tabs from "@radix-ui/react-tabs";
+import { motion } from "motion/react";
 import type {
   MatchWithDetails,
   ScorerRow,
   StandingsRow,
   TournamentRound,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { BracketView, type BracketStage } from "./BracketView";
+import { NextMatchHero } from "./NextMatchHero";
+import { ResultsTab } from "./ResultsTab";
+import { ScheduleTab } from "./ScheduleTab";
+import { ScorersTab } from "./ScorersTab";
+import { StandingsTab, type FormResult } from "./StandingsTab";
 
 type TabKey = "schedule" | "results" | "standings" | "scorers";
 
@@ -16,379 +25,213 @@ type Props = {
   rounds: TournamentRound[];
   standings: StandingsRow[];
   topScorers: ScorerRow[];
+  /** Published rows that can't be matched to a named player; rendered muted. */
+  unconfirmedScorers?: ScorerRow[];
+  standingsCaption?: string | null;
+  standingsFootnote?: string | null;
 };
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "Date TBA";
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+/** Rounds whose label marks a knockout stage rendered as a bracket. */
+const KNOCKOUT_RE = /\b(final|semi|quarter)/i;
+
+function computeForm(completed: MatchWithDetails[]): Map<string, FormResult[]> {
+  const byTeam = new Map<string, FormResult[]>();
+  const push = (teamId: string, r: FormResult) => {
+    const list = byTeam.get(teamId) ?? [];
+    list.push(r);
+    byTeam.set(teamId, list);
+  };
+  for (const m of completed) {
+    if (!m.home_team_id || !m.away_team_id || m.home_score == null || m.away_score == null) {
+      continue;
+    }
+    if (m.home_score > m.away_score) {
+      push(m.home_team_id, "W");
+      push(m.away_team_id, "L");
+    } else if (m.home_score < m.away_score) {
+      push(m.home_team_id, "L");
+      push(m.away_team_id, "W");
+    } else {
+      push(m.home_team_id, "D");
+      push(m.away_team_id, "D");
+    }
+  }
+  for (const [teamId, list] of byTeam) {
+    byTeam.set(teamId, list.slice(-5));
+  }
+  return byTeam;
 }
 
-function TeamLabel({
-  name,
-  color,
-  align = "left",
-  strong = false,
-}: {
-  name: string;
-  color: string | null;
-  align?: "left" | "right";
-  strong?: boolean;
-}) {
+function TabPanel({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      className={`inline-flex items-center gap-2 min-w-0 ${
-        align === "right" ? "flex-row-reverse text-right" : ""
-      }`}
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
     >
-      <span
-        className="w-2.5 h-2.5 rounded-full flex-shrink-0 border border-white/10"
-        style={{ backgroundColor: color || "#3f3f46" }}
-      />
-      <span className={`truncate ${strong ? "text-white font-semibold" : "text-zinc-200"}`}>
-        {name}
-      </span>
-    </span>
+      {children}
+    </motion.div>
   );
 }
 
-function ScorerList({ goals }: { goals: { scorer_name: string; goals: number }[] }) {
-  if (goals.length === 0) return null;
-  return (
-    <span className="text-xs text-zinc-400">
-      {goals
-        .map((g) => (g.goals > 1 ? `${g.scorer_name} ${g.goals}` : g.scorer_name))
-        .join(", ")}
-    </span>
-  );
-}
-
-export function TournamentHub({ matches, rounds, standings, topScorers }: Props) {
+export function TournamentHub({
+  matches,
+  rounds,
+  standings,
+  topScorers,
+  unconfirmedScorers,
+  standingsCaption,
+  standingsFootnote,
+}: Props) {
   const completed = useMemo(
     () => matches.filter((m) => m.status === "completed" && m.home_score != null),
     [matches]
   );
   const hasStandings = standings.some((r) => r.played > 0);
-  const hasScorers = topScorers.length > 0;
+  const hasScorers = topScorers.length > 0 || (unconfirmedScorers?.length ?? 0) > 0;
+
+  // Knockout stages (semis/final) render as a bracket; the group-stage
+  // schedule keeps the flat round list.
+  const stages: BracketStage[] = useMemo(() => {
+    return rounds
+      .filter((r) => KNOCKOUT_RE.test(r.label))
+      .map((round) => ({
+        round,
+        matches: matches.filter((m) => m.round_id === round.id),
+      }))
+      .filter((s) => s.matches.length > 0);
+  }, [matches, rounds]);
+  const knockoutRoundIds = useMemo(
+    () => new Set(stages.map((s) => s.round.id)),
+    [stages]
+  );
+  const groupMatches = useMemo(
+    () => matches.filter((m) => !m.round_id || !knockoutRoundIds.has(m.round_id)),
+    [matches, knockoutRoundIds]
+  );
+  const groupRounds = useMemo(
+    () => rounds.filter((r) => !knockoutRoundIds.has(r.id)),
+    [rounds, knockoutRoundIds]
+  );
+
+  // 2 teams per knockout match in the earliest stage = qualification spots.
+  const qualificationSpots = stages.length > 0 ? stages[0].matches.length * 2 : 0;
+  const qualificationLabel =
+    stages.length > 0 ? `Top ${qualificationSpots} advanced to ${stages[0].round.label}` : null;
+
+  const nextMatch = useMemo(
+    () => matches.find((m) => m.status === "scheduled" && (m.home_team || m.home_team_label)),
+    [matches]
+  );
+  const nextMatchRound = nextMatch?.round_id
+    ? rounds.find((r) => r.id === nextMatch.round_id)?.label ?? null
+    : null;
+
+  const form = useMemo(() => computeForm(completed), [completed]);
 
   const tabs = useMemo(() => {
-    const list: { key: TabKey; label: string; icon: typeof CalendarDays }[] = [];
+    const list: { key: TabKey; label: string }[] = [];
     if (matches.length > 0 || rounds.length > 0) {
-      list.push({ key: "schedule", label: "Schedule", icon: CalendarDays });
+      list.push({ key: "schedule", label: "Schedule" });
     }
     if (completed.length > 0) {
-      list.push({ key: "results", label: "Results", icon: ListChecks });
+      list.push({ key: "results", label: "Results" });
     }
     if (hasStandings) {
-      list.push({ key: "standings", label: "Standings", icon: Table2 });
+      list.push({ key: "standings", label: "Standings" });
     }
     if (hasScorers) {
-      list.push({ key: "scorers", label: "Top Scorers", icon: Trophy });
+      list.push({ key: "scorers", label: "Top Scorers" });
     }
     return list;
   }, [matches.length, rounds.length, completed.length, hasStandings, hasScorers]);
 
-  const defaultTab: TabKey = hasStandings
-    ? "standings"
-    : tabs[0]?.key ?? "schedule";
-  const [active, setActive] = useState<TabKey>(defaultTab);
+  const defaultTab: TabKey = hasStandings ? "standings" : tabs[0]?.key ?? "schedule";
+
+  // Tab state lives in ?tab= so a specific view is shareable and survives
+  // refresh; invalid values fall back to the default.
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const tabParam = searchParams.get("tab");
+  const active: TabKey = tabs.some((t) => t.key === tabParam)
+    ? (tabParam as TabKey)
+    : defaultTab;
+  const setActive = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === defaultTab) {
+      params.delete("tab");
+    } else {
+      params.set("tab", value);
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   if (tabs.length === 0) return null;
-  const activeTab = tabs.some((t) => t.key === active) ? active : tabs[0].key;
 
   return (
-    <div>
-      <div className="flex items-center gap-1 border-b border-border-token mb-5 overflow-x-auto">
-        {tabs.map((t) => {
-          const Icon = t.icon;
-          const on = t.key === activeTab;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setActive(t.key)}
-              className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-                on
-                  ? "border-brand text-white"
-                  : "border-transparent text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <Icon size={15} className={on ? "text-brand" : ""} />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeTab === "schedule" && (
-        <ScheduleTab matches={matches} rounds={rounds} />
+    <div className="space-y-5">
+      {nextMatch && completed.length > 0 && (
+        <NextMatchHero match={nextMatch} roundLabel={nextMatchRound} />
       )}
-      {activeTab === "results" && <ResultsTab matches={completed} />}
-      {activeTab === "standings" && <StandingsTab standings={standings} />}
-      {activeTab === "scorers" && <ScorersTab scorers={topScorers} />}
-    </div>
-  );
-}
 
-function ScheduleTab({
-  matches,
-  rounds,
-}: {
-  matches: MatchWithDetails[];
-  rounds: TournamentRound[];
-}) {
-  const groups = useMemo(() => {
-    const byRound = new Map<string, MatchWithDetails[]>();
-    const noRound: MatchWithDetails[] = [];
-    for (const m of matches) {
-      if (m.round_id) {
-        const list = byRound.get(m.round_id) ?? [];
-        list.push(m);
-        byRound.set(m.round_id, list);
-      } else {
-        noRound.push(m);
-      }
-    }
-    const ordered: { key: string; label: string; date: string | null; items: MatchWithDetails[] }[] =
-      [];
-    for (const r of rounds) {
-      const items = byRound.get(r.id);
-      if (items && items.length > 0) {
-        ordered.push({ key: r.id, label: r.label, date: r.round_date, items });
-      }
-    }
-    if (noRound.length > 0) {
-      ordered.push({ key: "none", label: "Fixtures", date: null, items: noRound });
-    }
-    return ordered;
-  }, [matches, rounds]);
-
-  if (matches.length === 0) {
-    return (
-      <p className="text-sm text-zinc-500 italic">
-        The match schedule will appear here once it&apos;s posted.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {groups.map((g) => (
-        <div key={g.key}>
-          <div className="flex items-baseline justify-between mb-2">
-            <h3 className="text-sm font-semibold text-white">{g.label}</h3>
-            {g.date && (
-              <span className="text-xs text-zinc-500">{formatDate(g.date)}</span>
-            )}
-          </div>
-          <ul className="dashboard-card divide-y divide-border-token overflow-hidden">
-            {g.items.map((m) => {
-              const home = m.home_team?.name ?? m.home_team_label ?? "TBD";
-              const away = m.away_team?.name ?? m.away_team_label ?? "TBD";
-              const done = m.status === "completed" && m.home_score != null;
-              return (
-                <li key={m.id} className="px-4 py-3">
-                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                    <TeamLabel
-                      name={home}
-                      color={m.home_team?.color ?? null}
-                      align="right"
-                      strong={done && (m.home_score ?? 0) >= (m.away_score ?? 0)}
-                    />
-                    <div className="text-center flex-shrink-0">
-                      {done ? (
-                        <span className="font-mono font-bold text-white tabular-nums">
-                          {m.home_score} <span className="text-zinc-600">–</span>{" "}
-                          {m.away_score}
-                        </span>
-                      ) : m.status === "postponed" ? (
-                        <span className="text-xs font-mono uppercase tracking-wider text-yellow-300 bg-yellow-500/10 px-2 py-0.5 rounded">
-                          PPD
-                        </span>
-                      ) : m.status === "cancelled" ? (
-                        <span className="text-xs font-mono uppercase tracking-wider text-red-300 bg-red-500/10 px-2 py-0.5 rounded">
-                          Cxl
-                        </span>
-                      ) : (
-                        <span className="text-xs text-zinc-500 font-mono">
-                          {m.kickoff_time || "vs"}
-                        </span>
-                      )}
-                    </div>
-                    <TeamLabel
-                      name={away}
-                      color={m.away_team?.color ?? null}
-                      align="left"
-                      strong={done && (m.away_score ?? 0) >= (m.home_score ?? 0)}
-                    />
-                  </div>
-                  {m.notes && (
-                    <p className="text-xs text-zinc-500 text-center mt-1.5">{m.notes}</p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ResultsTab({ matches }: { matches: MatchWithDetails[] }) {
-  return (
-    <div className="space-y-3">
-      {matches.map((m) => {
-        const homeGoals = m.scorers.filter((g) => g.team_id === m.home_team_id);
-        const awayGoals = m.scorers.filter((g) => g.team_id === m.away_team_id);
-        const homeWin = (m.home_score ?? 0) > (m.away_score ?? 0);
-        const awayWin = (m.away_score ?? 0) > (m.home_score ?? 0);
-        return (
-          <div key={m.id} className="dashboard-card p-4">
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-              <div className="text-right min-w-0">
-                <TeamLabel
-                  name={m.home_team?.name ?? m.home_team_label ?? "TBD"}
-                  color={m.home_team?.color ?? null}
-                  align="right"
-                  strong={homeWin}
-                />
-                <div className="mt-1">
-                  <ScorerList goals={homeGoals} />
-                </div>
-              </div>
-              <div className="text-center flex-shrink-0 px-2">
-                <span className="font-mono text-2xl font-bold text-white tabular-nums">
-                  {m.home_score}
-                  <span className="text-zinc-600 mx-1">–</span>
-                  {m.away_score}
-                </span>
-                {m.match_date && (
-                  <div className="text-[10px] uppercase tracking-wider text-zinc-500 mt-0.5">
-                    {formatDate(m.match_date)}
-                  </div>
-                )}
-              </div>
-              <div className="text-left min-w-0">
-                <TeamLabel
-                  name={m.away_team?.name ?? m.away_team_label ?? "TBD"}
-                  color={m.away_team?.color ?? null}
-                  align="left"
-                  strong={awayWin}
-                />
-                <div className="mt-1">
-                  <ScorerList goals={awayGoals} />
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function StandingsTab({ standings }: { standings: StandingsRow[] }) {
-  return (
-    <div className="dashboard-card overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs font-mono uppercase tracking-wider text-zinc-500 border-b border-border-token">
-            <th className="text-left font-medium px-4 py-3 w-8">#</th>
-            <th className="text-left font-medium px-2 py-3">Team</th>
-            <th className="text-center font-medium px-2 py-3" title="Played">P</th>
-            <th className="text-center font-medium px-2 py-3" title="Won">W</th>
-            <th className="text-center font-medium px-2 py-3" title="Drawn">D</th>
-            <th className="text-center font-medium px-2 py-3" title="Lost">L</th>
-            <th className="text-center font-medium px-2 py-3 hidden sm:table-cell" title="Goals for">
-              GF
-            </th>
-            <th className="text-center font-medium px-2 py-3 hidden sm:table-cell" title="Goals against">
-              GA
-            </th>
-            <th className="text-center font-medium px-2 py-3" title="Goal difference">GD</th>
-            <th className="text-center font-semibold px-4 py-3 text-zinc-300" title="Points">
-              Pts
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((r, i) => (
-            <tr
-              key={r.team_id}
-              className="border-b border-border-token/60 last:border-0 hover:bg-surface-2/40 transition-colors"
-            >
-              <td className="px-4 py-3 text-zinc-500 font-mono">{i + 1}</td>
-              <td className="px-2 py-3">
-                <TeamLabel name={r.team_name} color={r.team_color} strong />
-              </td>
-              <td className="text-center px-2 py-3 text-zinc-300 tabular-nums">{r.played}</td>
-              <td className="text-center px-2 py-3 text-zinc-300 tabular-nums">{r.won}</td>
-              <td className="text-center px-2 py-3 text-zinc-300 tabular-nums">{r.drawn}</td>
-              <td className="text-center px-2 py-3 text-zinc-300 tabular-nums">{r.lost}</td>
-              <td className="text-center px-2 py-3 text-zinc-400 tabular-nums hidden sm:table-cell">
-                {r.goals_for}
-              </td>
-              <td className="text-center px-2 py-3 text-zinc-400 tabular-nums hidden sm:table-cell">
-                {r.goals_against}
-              </td>
-              <td className="text-center px-2 py-3 text-zinc-300 tabular-nums">
-                {r.goal_difference > 0 ? `+${r.goal_difference}` : r.goal_difference}
-              </td>
-              <td className="text-center px-4 py-3 font-bold text-white tabular-nums">
-                {r.points}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ScorersTab({ scorers }: { scorers: ScorerRow[] }) {
-  const top = scorers[0]?.goals ?? 0;
-  return (
-    <ul className="dashboard-card divide-y divide-border-token overflow-hidden">
-      {scorers.map((s, i) => (
-        <li
-          key={`${s.scorer_name}-${s.team_id ?? "none"}`}
-          className="flex items-center gap-3 px-4 py-3"
+      <Tabs.Root value={active} onValueChange={setActive}>
+        <Tabs.List
+          aria-label="Tournament information"
+          className="mb-5 flex items-center gap-1 overflow-x-auto border-b border-border-token"
         >
-          <span
-            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-              i === 0 && s.goals === top
-                ? "bg-brand text-white"
-                : "bg-surface-2 text-zinc-400"
-            }`}
-          >
-            {i + 1}
-          </span>
-          <div className="min-w-0 flex-1">
-            <span className="text-white font-medium truncate block">{s.scorer_name}</span>
-            {s.team_name && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-zinc-500">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: s.team_color || "#3f3f46" }}
-                />
-                {s.team_name}
-              </span>
-            )}
-          </div>
-          <span className="font-mono font-bold text-white tabular-nums flex-shrink-0">
-            {s.goals}
-            <span className="text-zinc-500 text-xs font-normal ml-1">
-              {s.goals === 1 ? "goal" : "goals"}
-            </span>
-          </span>
-        </li>
-      ))}
-    </ul>
+          {tabs.map((t) => (
+            <Tabs.Trigger
+              key={t.key}
+              value={t.key}
+              className={cn(
+                "-mb-px whitespace-nowrap border-b-2 border-transparent px-4 py-2.5",
+                "font-condensed text-[15px] font-semibold uppercase tracking-wider",
+                "text-zinc-400 transition-colors hover:text-zinc-200",
+                "data-[state=active]:border-brand data-[state=active]:text-white",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-0 rounded-t"
+              )}
+            >
+              {t.label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+
+        <Tabs.Content value="schedule" className="focus-visible:outline-none">
+          <TabPanel>
+            <div className="space-y-6">
+              {stages.length > 0 && <BracketView stages={stages} />}
+              <ScheduleTab matches={groupMatches} rounds={groupRounds} />
+            </div>
+          </TabPanel>
+        </Tabs.Content>
+
+        <Tabs.Content value="results" className="focus-visible:outline-none">
+          <TabPanel>
+            <ResultsTab matches={completed} rounds={rounds} />
+          </TabPanel>
+        </Tabs.Content>
+
+        <Tabs.Content value="standings" className="focus-visible:outline-none">
+          <TabPanel>
+            <StandingsTab
+              standings={standings}
+              form={form}
+              qualificationSpots={qualificationSpots}
+              qualificationLabel={qualificationLabel}
+              caption={standingsCaption}
+              footnote={standingsFootnote}
+            />
+          </TabPanel>
+        </Tabs.Content>
+
+        <Tabs.Content value="scorers" className="focus-visible:outline-none">
+          <TabPanel>
+            <ScorersTab scorers={topScorers} unconfirmed={unconfirmedScorers} />
+          </TabPanel>
+        </Tabs.Content>
+      </Tabs.Root>
+    </div>
   );
 }
