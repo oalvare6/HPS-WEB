@@ -3,26 +3,37 @@ import type { StandingsRow, Team } from "@/lib/types";
 type TeamLite = Pick<Team, "id" | "name" | "color">;
 
 /**
- * World Cup standings are published verbatim from the operator's tournament
- * flyer summary table, not derived from match scores. The flyer's summary and
- * its match grid disagree (and the summary is not reproducible from any set of
- * scores), so the Standings tab uses this override while Schedule/Results/Top
- * Scorers stay computed from the real match data. Row order is the flyer order
- * (final placement); the table renders rows in this order.
+ * World Cup group-stage standings are published verbatim from the operator's
+ * final table (July 24 semis sheet), not derived from match scores. The table
+ * is internally consistent (points math checks out; GF and GA both total 189)
+ * but it is NOT reproducible by computeStandings because the Round 1 Brazil vs
+ * USA fixture was never played on its date — it was replayed in Round 6 for
+ * DOUBLE points, a rule the generic 3/1/0 calculator does not model. So the
+ * Standings tab uses this override while Schedule/Results keep the real match
+ * data. Row order is the published order (final group placement) and the table
+ * renders rows in this order. Scoring: win 3, draw 1, loss 0 (doubled for the
+ * Round 6 Brazil–USA make-up).
  */
 const OVERRIDE_ROWS = [
-  { name: "India", played: 5, won: 4, drawn: 0, lost: 1, gf: 36, ga: 22, gd: 14, points: 12 },
-  { name: "USA", played: 4, won: 3, drawn: 0, lost: 1, gf: 21, ga: 15, gd: 6, points: 9 },
-  { name: "Morocco", played: 5, won: 2, drawn: 0, lost: 3, gf: 25, ga: 25, gd: 0, points: 6 },
-  { name: "Mexico", played: 5, won: 1, drawn: 1, lost: 3, gf: 19, ga: 26, gd: -7, points: 4 },
-  { name: "Brazil", played: 3, won: 1, drawn: 0, lost: 2, gf: 15, ga: 15, gd: 0, points: 3 },
-  { name: "Kazakhstan", played: 4, won: 0, drawn: 1, lost: 3, gf: 10, ga: 23, gd: -13, points: 1 },
+  { name: "Morocco", played: 7, won: 4, drawn: 0, lost: 3, gf: 39, ga: 30, gd: 9, points: 12 },
+  { name: "India", played: 7, won: 4, drawn: 0, lost: 3, gf: 41, ga: 35, gd: 6, points: 12 },
+  { name: "Brazil", played: 7, won: 3, drawn: 2, lost: 2, gf: 31, ga: 27, gd: 4, points: 11 },
+  { name: "USA", played: 7, won: 3, drawn: 2, lost: 2, gf: 28, ga: 30, gd: -2, points: 11 },
+  { name: "Kazakhstan", played: 7, won: 2, drawn: 1, lost: 4, gf: 23, ga: 29, gd: -6, points: 7 },
+  { name: "Mexico", played: 7, won: 1, drawn: 1, lost: 5, gf: 27, ga: 38, gd: -11, points: 4 },
 ] as const;
 
+/** Caption rendered above the published World Cup standings table. */
+export const WORLD_CUP_STANDINGS_CAPTION = "Group stage — final";
+
+/** Footnote explaining why the published points don't match a naive 3/1/0 recount. */
+export const WORLD_CUP_STANDINGS_FOOTNOTE =
+  "Round 1's Brazil vs USA fixture was not played on its original date; it was replayed in Round 6 for double points (6-6 — two points each). Win 3 · draw 1 · loss 0.";
+
 /**
- * Build the published World Cup standings in flyer order, mapping each row onto
- * the tournament's teams by name to pick up the team id and color. Teams that
- * are not part of the flyer summary are omitted.
+ * Build the published World Cup standings in published order, mapping each row
+ * onto the tournament's teams by name to pick up the team id and color. Teams
+ * that are not part of the published table are omitted.
  */
 export function getWorldCupStandingsOverride(teams: TeamLite[]): StandingsRow[] {
   const teamByName = new Map<string, TeamLite>();

@@ -171,6 +171,8 @@ export type TournamentMatch = {
   away_score: number | null;
   status: MatchStatus;
   notes: string | null;
+  /** Team that advanced from a knockout match not decided by the scoreline (e.g. draw + shootout). */
+  advanced_team_id: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
