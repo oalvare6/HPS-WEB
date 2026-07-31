@@ -40,6 +40,11 @@ function formatDateRow(t: Tournament): string {
   return s;
 }
 
+/**
+ * One card, one destination: the whole card (banner included) is a single
+ * stretched link to the tournament page; only the pay/register CTA sits above
+ * it at z-10 because it goes somewhere else.
+ */
 export function TournamentCard({ tournament }: { tournament: Tournament }) {
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = getTournamentBannerUrl(tournament);
@@ -50,7 +55,13 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
       : tournament.time_start || tournament.time_end || null;
 
   return (
-    <div className="dashboard-card overflow-hidden">
+    <div className="dashboard-card group relative overflow-hidden transition-colors hover:border-brand/40">
+      <Link
+        href={`/events/${tournament.slug}`}
+        aria-label={`View ${tournament.title}`}
+        className="absolute inset-0 z-0"
+      />
+
       <div className={`border-b px-6 py-3 flex items-center gap-2 ${pill.cls}`}>
         <div
           className={`w-2 h-2 ${pill.dot} rounded-full ${
@@ -73,13 +84,8 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3">
               <Trophy size={22} className="text-brand flex-shrink-0" />
-              <h2 className="text-2xl font-bold text-white">
-                <Link
-                  href={`/events/${tournament.slug}`}
-                  className="hover:text-brand transition-colors"
-                >
-                  {tournament.title}
-                </Link>
+              <h2 className="text-2xl font-bold text-white transition-colors group-hover:text-brand">
+                {tournament.title}
               </h2>
             </div>
 
@@ -115,19 +121,19 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
 
           <div className="flex flex-col gap-3 md:min-w-[200px]">
             {cta.kind !== "none" && (
-              <Link href={cta.href} className="btn-primary justify-center text-sm">
+              <Link
+                href={cta.href}
+                className="btn-primary relative z-10 min-h-11 justify-center text-sm"
+              >
                 {cta.kind === "pay" ? <CreditCard size={16} /> : <Trophy size={16} />}
                 {cta.label}
                 <ArrowRight size={14} />
               </Link>
             )}
-            <Link
-              href={`/events/${tournament.slug}`}
-              className="inline-flex items-center justify-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors"
-            >
+            <span className="inline-flex min-h-11 items-center justify-center gap-1.5 text-sm text-zinc-400 transition-colors group-hover:text-white">
               View details
-              <ArrowRight size={14} />
-            </Link>
+              <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
+            </span>
           </div>
         </div>
       </div>

@@ -120,51 +120,47 @@ export default async function Home() {
               </div>
             </div>
 
-            <div className="dashboard-card overflow-hidden border-brand/25 bg-base/65 shadow-2xl shadow-black/50">
+            <div className="dashboard-card relative overflow-hidden border-brand/25 bg-base/65 shadow-2xl shadow-black/50 group">
               {heroTournament ? (
                 <>
-                  <Link href="#featured-tournaments" className="group block">
-                    {heroTournamentImage && (
-                      <TournamentBannerImage
-                        tournament={heroTournament}
-                        variant="card"
-                        priority
-                      />
-                    )}
-                    <div className="p-5 space-y-4">
-                      <p className="text-xs font-mono uppercase tracking-[0.24em] text-brand">
-                        Featured Tournament
-                      </p>
-                      <div>
-                        <h2 className="text-2xl font-bold text-white transition-colors group-hover:text-brand">
-                          {heroTournament.title}
-                        </h2>
-                        <div className="mt-3 grid gap-2 text-sm text-zinc-300">
-                          <div className="flex items-center gap-2">
-                            <Calendar size={15} className="text-brand" />
-                            <span>{formatFeaturedTournamentDate(heroTournament.start_date)}</span>
-                          </div>
-                          {heroTournament.recurrence && (
-                            <div className="flex items-center gap-2">
-                              <Clock size={15} className="text-brand" />
-                              <span>{heroTournament.recurrence}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <span className="inline-flex items-center gap-2 text-sm font-semibold text-white transition-colors group-hover:text-brand">
-                        See all featured tournaments
-                        <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
-                      </span>
-                    </div>
-                  </Link>
                   <Link
                     href={heroTournamentHref}
-                    className="mx-5 mb-5 inline-flex items-center gap-2 rounded-lg border border-brand/35 bg-brand/10 px-3 py-2 text-sm font-semibold text-white hover:bg-brand/20 transition-colors group"
-                  >
-                    {heroTournament.registration_open ? "Register now" : "View tournament"}
-                    <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
-                  </Link>
+                    aria-label={`View ${heroTournament.title}`}
+                    className="absolute inset-0 z-0"
+                  />
+                  {heroTournamentImage && (
+                    <TournamentBannerImage
+                      tournament={heroTournament}
+                      variant="card"
+                      priority
+                    />
+                  )}
+                  <div className="p-5 space-y-4">
+                    <p className="text-xs font-mono uppercase tracking-[0.24em] text-brand">
+                      Featured Tournament
+                    </p>
+                    <div>
+                      <h2 className="text-2xl font-bold text-white transition-colors group-hover:text-brand">
+                        {heroTournament.title}
+                      </h2>
+                      <div className="mt-3 grid gap-2 text-sm text-zinc-300">
+                        <div className="flex items-center gap-2">
+                          <Calendar size={15} className="text-brand" />
+                          <span>{formatFeaturedTournamentDate(heroTournament.start_date)}</span>
+                        </div>
+                        {heroTournament.recurrence && (
+                          <div className="flex items-center gap-2">
+                            <Clock size={15} className="text-brand" />
+                            <span>{heroTournament.recurrence}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <span className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-brand/35 bg-brand/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors group-hover:bg-brand/20">
+                      {heroTournament.registration_open ? "Register now" : "View tournament"}
+                      <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                    </span>
+                  </div>
                 </>
               ) : (
                 <div className="p-5 space-y-4">

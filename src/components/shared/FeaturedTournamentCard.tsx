@@ -45,6 +45,11 @@ const STATUS_PILL: Record<
   },
 };
 
+/**
+ * One card, one destination: the whole card is a single stretched link to the
+ * tournament page; only the pay/register CTA (a different destination) sits
+ * above it at z-10.
+ */
 export function FeaturedTournamentCard({
   tournament,
   imagePriority = true,
@@ -65,24 +70,27 @@ export function FeaturedTournamentCard({
 
   return (
     <div
-      className={`dashboard-card overflow-hidden border shadow-xl transition-all ${
+      className={`dashboard-card group relative overflow-hidden border shadow-xl transition-all ${
         highlighted
           ? "border-brand/70 ring-2 ring-brand/50 shadow-brand/20"
-          : "border-border-token/70 shadow-black/30"
+          : "border-border-token/70 shadow-black/30 hover:border-brand/40"
       }`}
     >
+      <Link
+        href={`/events/${tournament.slug}`}
+        aria-label={`View ${tournament.title}`}
+        className="absolute inset-0 z-0"
+      />
+
       {bannerUrl ? (
-        <Link
-          href={`/events/${tournament.slug}`}
-          className="block bg-surface-2 group"
-        >
+        <div className="bg-surface-2 overflow-hidden">
           <TournamentBannerImage
             tournament={tournament}
             variant="card"
             priority={imagePriority}
             className="transition-transform duration-300 group-hover:scale-[1.01]"
           />
-        </Link>
+        </div>
       ) : null}
 
       <div className="p-5 space-y-3">
@@ -108,13 +116,8 @@ export function FeaturedTournamentCard({
                 </span>
               )}
             </div>
-            <h2 className="text-xl font-bold text-white">
-              <Link
-                href={`/events/${tournament.slug}`}
-                className="hover:text-brand transition-colors"
-              >
-                {tournament.title}
-              </Link>
+            <h2 className="text-xl font-bold text-white transition-colors group-hover:text-brand">
+              {tournament.title}
             </h2>
           </div>
           <Trophy size={24} className="text-brand flex-shrink-0" />
@@ -145,22 +148,16 @@ export function FeaturedTournamentCard({
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
-          {cta.kind !== "none" && (
-            <Link href={cta.href} className="btn-primary w-full justify-center text-sm">
-              {cta.kind === "pay" ? <CreditCard size={14} /> : <Trophy size={14} />}
-              {cta.label}
-              <ArrowRight size={14} />
-            </Link>
-          )}
+        {cta.kind !== "none" && (
           <Link
-            href={`/events/${tournament.slug}`}
-            className="text-xs text-zinc-400 hover:text-white text-center inline-flex items-center justify-center gap-1 transition-colors mt-1"
+            href={cta.href}
+            className="btn-primary relative z-10 w-full min-h-11 justify-center text-sm"
           >
-            View tournament details
-            <ArrowRight size={12} />
+            {cta.kind === "pay" ? <CreditCard size={14} /> : <Trophy size={14} />}
+            {cta.label}
+            <ArrowRight size={14} />
           </Link>
-        </div>
+        )}
       </div>
     </div>
   );
