@@ -3,25 +3,96 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Loader2, Upload, Image as ImageIcon, Check } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  Image as ImageIcon,
+  Check,
+  ChevronDown,
+  Star,
+  Lock,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   TOURNAMENT_FORMATS,
-  TOURNAMENT_STATUSES,
   type Tournament,
   type TournamentStatus,
 } from "@/lib/types";
 import { TOURNAMENT_IMAGE_PRESETS, getPresetUrl } from "@/lib/tournament-image-presets";
 import { slugify } from "@/lib/slug";
 import { dateInputToIsoPreservingCalendarDay } from "@/lib/date-input";
+import { isPastEvent } from "@/lib/tournament-state";
 
 const DEFAULT_LOCATION = "14062 Ambrose St, Houston TX";
+
+/**
+ * The states an operator can actually *choose* (D1).
+ *
+ * `finished` is deliberately absent: it is derived from the end date by
+ * `isPastEvent`, never stored. If it were selectable, the owner could mark a
+ * future event finished, or leave a past event open — which is exactly the
+ * failure this replaces.
+ */
+type StoredEventState = "draft" | "open" | "closed" | "cancelled";
+
+const EVENT_STATE_OPTIONS: {
+  value: StoredEventState;
+  label: string;
+  /** Shown under the dropdown once selected — plain English, no jargon. */
+  help: string;
+}[] = [
+  {
+    value: "draft",
+    label: "Draft — hidden from the public",
+    help: "Only you can see this event. Nobody can find it, sign up, or pay.",
+  },
+  {
+    value: "open",
+    label: "Open — taking sign-ups and payments",
+    help: "The event is on the site, people can sign up and pay.",
+  },
+  {
+    value: "closed",
+    label: "Closed — on the site, but not taking money",
+    help: "People can see the event and the schedule, but sign-ups and payments are turned off.",
+  },
+  {
+    value: "cancelled",
+    label: "Cancelled — called off",
+    help: "The event is removed from the site. Use this if it was called off.",
+  },
+];
+
+/**
+ * Which state to show for an event that is already stored. Mirrors
+ * `resolveEventState` minus the calendar backstop — "finished" is rendered
+ * separately, not selected, so the operator's underlying choice stays intact.
+ */
+function storedStateFrom(t: Tournament | null): StoredEventState {
+  if (!t) return "draft";
+  if (t.status === "cancelled") return "cancelled";
+  if (t.registration_open || t.payments_open) return "open";
+  return "closed";
+}
+
+function formatEventDay(dateInput: string): string {
+  const iso = dateInputToIsoPreservingCalendarDay(dateInput);
+  if (!iso) return dateInput;
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
 
 type FormState = {
   title: string;
   slug: string;
   format: string;
   description: string;
+  /** The one switch (D1). Replaces status + registration_open + payments_open. */
+  state: StoredEventState;
   status: TournamentStatus;
   start_date: string;
   end_date: string;
@@ -69,6 +140,7 @@ function fromInitial(t: Tournament | null): FormState {
     slug: t?.slug ?? "",
     format: t?.format ?? "Adult 7v7",
     description: t?.description ?? "",
+    state: storedStateFrom(t),
     status: (t?.status ?? "upcoming") as TournamentStatus,
     start_date: toDateInput(t?.start_date ?? null),
     end_date: toDateInput(t?.end_date ?? null),
@@ -102,6 +174,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [slugTouched, setSlugTouched] = useState(Boolean(initial?.slug));
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Auto-derive slug from title until user edits slug field
   useEffect(() => {
@@ -116,6 +189,23 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
     return getPresetUrl(form.image_preset);
   }, [form.image_url, form.image_preset]);
 
+  /**
+   * "Finished" is a fact about the calendar, not a setting. Recomputed from the
+   * dates *currently in the form*, so fixing a wrong end date lifts the lock
+   * immediately instead of after a save-and-reload.
+   */
+  const finished = useMemo(
+    () =>
+      isPastEvent({
+        start_date: form.start_date || null,
+        end_date: form.end_date || null,
+      }),
+    [form.start_date, form.end_date]
+  );
+  const lastDay = form.end_date || form.start_date;
+
+  const selectedState = EVENT_STATE_OPTIONS.find((o) => o.value === form.state);
+
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -125,7 +215,6 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
     if (!form.title.trim()) e.title = "Title is required.";
     if (!form.slug.trim()) e.slug = "Slug is required.";
     if (!form.format.trim()) e.format = "Format is required.";
-    if (!form.status) e.status = "Status is required.";
     if (!form.start_date) e.start_date = "Start date is required.";
     if (!form.time_start.trim()) e.time_start = "Start time is required.";
     if (!form.time_end.trim()) e.time_end = "End time is required.";
@@ -141,6 +230,8 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       }
     }
     setErrors(e);
+    // Slug and the URLs live behind the disclosure; a hidden error is a dead end.
+    if (e.slug || e.register_url || e.pay_url || e.display_order) setAdvancedOpen(true);
     return Object.keys(e).length === 0;
   };
 
@@ -219,6 +310,10 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
     const dropInFeeCents = form.offer_drop_in_tier
       ? Math.max(0, Math.round(Number(form.drop_in_fee) * 100))
       : 0;
+    // TODO(A1): `form.state` is not written yet — this still round-trips the
+    // event's existing status / registration_open / payments_open untouched, so
+    // showing the new control cannot change any live event. Wiring lands once
+    // the storage question for `draft` is settled.
     const payload = {
       title: form.title.trim(),
       slug: form.slug.trim(),
@@ -279,6 +374,68 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
 
   return (
     <form onSubmit={handleSubmit} className="dashboard-card p-6 md:p-8 space-y-8">
+      {/* EVENT STATUS — the one switch (D1) */}
+      <Section title="Event Status">
+        {finished ? (
+          <div className="rounded-lg border border-border-token bg-surface-2/60 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <Lock size={16} className="text-zinc-400 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-white">
+                  Finished{lastDay ? ` — ended ${formatEventDay(lastDay)}` : ""}
+                </p>
+                <p className="text-xs text-zinc-400">
+                  This is set automatically from the dates, so nobody has to remember
+                  to turn it off. A finished event stays on the site to look at, but it
+                  can never take sign-ups or payments again.
+                </p>
+              </div>
+            </div>
+            <select
+              value="finished"
+              disabled
+              className={`${inputBase} border-border-token opacity-60 cursor-not-allowed`}
+            >
+              <option value="finished">Finished — set automatically</option>
+            </select>
+            <p className="text-xs text-zinc-500">
+              Wrong? Change the End Date below and this unlocks straight away.
+            </p>
+          </div>
+        ) : (
+          <Field label="Event status" required>
+            <select
+              value={form.state}
+              onChange={(e) => update("state", e.target.value as StoredEventState)}
+              className={inputCls("state")}
+            >
+              {EVENT_STATE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {selectedState && (
+              <p className="mt-1 text-xs text-zinc-500">{selectedState.help}</p>
+            )}
+          </Field>
+        )}
+
+        <StarToggle
+          label="Show on homepage"
+          hint={
+            form.state === "draft"
+              ? "A draft can't be on the homepage — it isn't public yet."
+              : "Up to 3 events at a time."
+          }
+          checked={form.is_featured}
+          disabled={form.state === "draft"}
+          onChange={(v) => update("is_featured", v)}
+        />
+      </Section>
+
+      <Divider />
+
       {/* BASIC INFO */}
       <Section title="Basic Info">
         <Field label="Tournament Title" required error={errors.title}>
@@ -288,23 +445,6 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
             onChange={(e) => update("title", e.target.value)}
             className={inputCls("title")}
             placeholder="Spring Classic 2026"
-          />
-        </Field>
-        <Field
-          label="Slug"
-          required
-          error={errors.slug}
-          hint="Used for the public URL: /events/[slug]"
-        >
-          <input
-            type="text"
-            value={form.slug}
-            onChange={(e) => {
-              setSlugTouched(true);
-              update("slug", e.target.value);
-            }}
-            className={inputCls("slug")}
-            placeholder="spring-classic-2026"
           />
         </Field>
         <Field label="Format" required error={errors.format}>
@@ -328,19 +468,6 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
             className={inputCls("description")}
             placeholder="Short description shown on /events"
           />
-        </Field>
-        <Field label="Status" required error={errors.status}>
-          <select
-            value={form.status}
-            onChange={(e) => update("status", e.target.value as TournamentStatus)}
-            className={inputCls("status")}
-          >
-            {TOURNAMENT_STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
         </Field>
       </Section>
 
@@ -407,20 +534,8 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
 
       <Divider />
 
-      {/* REGISTRATION */}
-      <Section title="Registration">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Toggle
-            label="Registration Open"
-            checked={form.registration_open}
-            onChange={(v) => update("registration_open", v)}
-          />
-          <Toggle
-            label="Payments Open"
-            checked={form.payments_open}
-            onChange={(v) => update("payments_open", v)}
-          />
-        </div>
+      {/* PRICING */}
+      <Section title="Pricing & Size">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Entry Fee (USD)">
             <input
@@ -471,26 +586,6 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
               Only the Entry Fee tier will show on /pay for this event.
             </div>
           )}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Register URL">
-            <input
-              type="text"
-              value={form.register_url}
-              onChange={(e) => update("register_url", e.target.value)}
-              className={inputCls("register_url")}
-              placeholder="/register"
-            />
-          </Field>
-          <Field label="Pay URL">
-            <input
-              type="text"
-              value={form.pay_url}
-              onChange={(e) => update("pay_url", e.target.value)}
-              className={inputCls("pay_url")}
-              placeholder="/pay"
-            />
-          </Field>
         </div>
       </Section>
 
@@ -609,22 +704,75 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
 
       <Divider />
 
-      {/* DISPLAY */}
-      <Section title="Display">
-        <Toggle
-          label="Feature on homepage (max 3 at a time)"
-          checked={form.is_featured}
-          onChange={(v) => update("is_featured", v)}
-        />
-        <Field label="Display Order" hint="Lower numbers shown first">
-          <input
-            type="number"
-            value={form.display_order}
-            onChange={(e) => update("display_order", e.target.value)}
-            className={inputCls("display_order")}
+      {/* ADVANCED — rarely touched; hidden so the everyday form stays short */}
+      <section className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          aria-expanded={advancedOpen}
+          className="flex items-center gap-2 text-xs font-mono text-zinc-400 hover:text-white uppercase tracking-wider font-semibold transition-colors"
+        >
+          <ChevronDown
+            size={14}
+            className={`transition-transform ${advancedOpen ? "" : "-rotate-90"}`}
           />
-        </Field>
-      </Section>
+          Advanced
+        </button>
+        {!advancedOpen && (
+          <p className="text-xs text-zinc-500">
+            Web address, link overrides and list order. You almost never need these.
+          </p>
+        )}
+        {advancedOpen && (
+          <div className="space-y-4 border-l-2 border-border-token/60 ml-1.5 pl-5">
+            <Field
+              label="Slug"
+              required
+              error={errors.slug}
+              hint="The web address for this event: /events/[slug]. Filled in from the title."
+            >
+              <input
+                type="text"
+                value={form.slug}
+                onChange={(e) => {
+                  setSlugTouched(true);
+                  update("slug", e.target.value);
+                }}
+                className={inputCls("slug")}
+                placeholder="spring-classic-2026"
+              />
+            </Field>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="Register URL" hint="Leave blank to use /register">
+                <input
+                  type="text"
+                  value={form.register_url}
+                  onChange={(e) => update("register_url", e.target.value)}
+                  className={inputCls("register_url")}
+                  placeholder="/register"
+                />
+              </Field>
+              <Field label="Pay URL" hint="Leave blank to use /pay">
+                <input
+                  type="text"
+                  value={form.pay_url}
+                  onChange={(e) => update("pay_url", e.target.value)}
+                  className={inputCls("pay_url")}
+                  placeholder="/pay"
+                />
+              </Field>
+            </div>
+            <Field label="Display Order" hint="Lower numbers shown first">
+              <input
+                type="number"
+                value={form.display_order}
+                onChange={(e) => update("display_order", e.target.value)}
+                className={inputCls("display_order")}
+              />
+            </Field>
+          </div>
+        )}
+      </section>
 
       <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border-token">
         <button type="submit" disabled={saving} className="btn-primary disabled:opacity-60">
@@ -678,6 +826,48 @@ function Field({
       {children}
       {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
       {!error && hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * "Show on homepage" (D1). Deliberately a star and not another switch — it is a
+ * separate idea from the event's status, and it should not read as one of the
+ * four states.
+ */
+function StarToggle({
+  label,
+  hint,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const on = checked && !disabled;
+  return (
+    <div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`flex w-full items-center gap-3 px-4 py-3 bg-surface-2 border rounded-lg transition-colors text-left ${
+          on ? "border-brand" : "border-border-token"
+        } ${disabled ? "opacity-50 cursor-not-allowed" : "hover:border-zinc-500"}`}
+      >
+        <Star
+          size={18}
+          className={on ? "text-brand fill-current" : "text-zinc-500"}
+        />
+        <span className="text-sm text-zinc-300">{label}</span>
+      </button>
+      {hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
     </div>
   );
 }
