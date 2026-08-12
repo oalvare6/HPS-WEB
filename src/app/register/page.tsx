@@ -3,7 +3,7 @@ import {
   RegistrationForm,
   type RegistrationPrefill,
 } from "@/components/register/RegistrationForm";
-import { getRegistrationOpenTournaments } from "@/lib/tournaments";
+import { getRegistrationOpenTournaments, getTeamsByTournament } from "@/lib/tournaments";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { isContactWaiverValid } from "@/lib/contacts";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
@@ -38,6 +38,10 @@ export default async function RegisterPage({
     slug: t.slug,
     format: t.format,
   }));
+
+  // Teams are picked at signup now (D3), not at payment. Fetched here for every
+  // listed event so switching the tournament dropdown doesn't cost a round-trip.
+  const teamsByTournament = await getTeamsByTournament(options.map((t) => t.id));
 
   const isWorldCupLanding = preselected === WORLD_CUP_TOURNAMENT_SLUG;
 
@@ -98,6 +102,7 @@ export default async function RegisterPage({
 
           <RegistrationForm
             tournaments={options}
+            teamsByTournament={teamsByTournament}
             preselectedSlug={preselected}
             preselectedType={preselectedType}
             prefill={prefill}

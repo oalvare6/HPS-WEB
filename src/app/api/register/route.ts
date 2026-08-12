@@ -25,6 +25,8 @@ interface RegistrationPayload {
   emergencyPhone: string;
   /** Optional during the transition; required once admin UI exposes selector. */
   tournamentId?: string | null;
+  /** Team chosen at signup (D3). Null means "Not sure yet". */
+  teamId?: string | null;
 }
 
 const VALID_REGISTRATION_TYPES = new Set<RegistrationType>(["adult", "youth"]);
@@ -93,6 +95,34 @@ async function resolveTournament(
   return null;
 }
 
+/**
+ * The team id to store, or null.
+ *
+ * Never trusts the posted id on its own: it must name a team that belongs to
+ * the tournament this registration actually resolved to. Otherwise a crafted
+ * request could park a player on another event's roster. An unrecognised id is
+ * treated as "no team" rather than an error — the player's signup and waiver
+ * matter more than their team pick, and the owner can fix the team from the
+ * roster screen in two seconds.
+ */
+async function resolveTeamId(
+  requested: string | null | undefined,
+  tournamentId: string | null
+): Promise<string | null> {
+  if (!requested || !tournamentId || !UUID_RE.test(requested)) return null;
+  const { data, error } = await supabaseAdmin
+    .from("teams")
+    .select("id")
+    .eq("id", requested)
+    .eq("tournament_id", tournamentId)
+    .maybeSingle();
+  if (error) {
+    console.warn("[register] team lookup failed:", error.message);
+    return null;
+  }
+  return data?.id ?? null;
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<RegistrationPayload>;
@@ -107,6 +137,7 @@ export async function POST(request: Request) {
       emergencyName: normalizeString(body.emergencyName),
       emergencyPhone: normalizeString(body.emergencyPhone),
       tournamentId: typeof body.tournamentId === "string" ? body.tournamentId : null,
+      teamId: typeof body.teamId === "string" ? body.teamId : null,
     };
 
     if (
@@ -148,11 +179,13 @@ export async function POST(request: Request) {
     const tournamentId = resolvedTournament?.id ?? null;
     const tournamentTitle = resolvedTournament?.title ?? null;
     const tournamentSlug = resolvedTournament?.slug ?? null;
+    const teamId = await resolveTeamId(payload.teamId, tournamentId);
 
     const { data: inserted, error } = await supabaseAdmin
       .from("registrations")
       .insert({
         tournament_id: tournamentId,
+        team_id: teamId,
         contact_id: contact.id,
         registration_type: payload.type,
         first_name: payload.firstName,

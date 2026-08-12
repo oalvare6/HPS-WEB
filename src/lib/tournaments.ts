@@ -280,6 +280,46 @@ export async function getTournamentBySlug(slug: string): Promise<Tournament | nu
   }
 }
 
+/** The team choices a player sees at signup (A2 / D3). */
+export type TeamOption = Pick<Team, "id" | "name" | "color">;
+
+/**
+ * Teams for several tournaments at once, keyed by tournament id.
+ *
+ * The registration page needs the teams for every event it lists, and there are
+ * only ever a handful open at a time — so one query up front beats a client
+ * round-trip each time the player changes the tournament dropdown.
+ *
+ * A tournament with no teams yet is simply absent from the map; the form then
+ * hides the team picker rather than showing an empty one.
+ */
+export async function getTeamsByTournament(
+  tournamentIds: string[]
+): Promise<Record<string, TeamOption[]>> {
+  if (tournamentIds.length === 0) return {};
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("teams")
+      .select("id, name, color, tournament_id")
+      .in("tournament_id", tournamentIds)
+      .order("name", { ascending: true });
+    if (error) {
+      console.error("[teams] by-tournament fetch failed:", error.message);
+      return {};
+    }
+    const byTournament: Record<string, TeamOption[]> = {};
+    for (const row of (data ?? []) as (TeamOption & { tournament_id: string })[]) {
+      const list = byTournament[row.tournament_id] ?? [];
+      list.push({ id: row.id, name: row.name, color: row.color });
+      byTournament[row.tournament_id] = list;
+    }
+    return byTournament;
+  } catch (err) {
+    console.error("[teams] by-tournament fetch failed:", err);
+    return {};
+  }
+}
+
 /** Pinned first, then newest first. Empty array if none or on error. */
 export async function getTournamentUpdates(
   tournamentId: string

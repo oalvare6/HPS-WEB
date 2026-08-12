@@ -13,8 +13,10 @@ import {
   Pencil,
   CheckCircle2,
   Info,
+  Users,
 } from "lucide-react";
 import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
+import type { TeamOption } from "@/lib/tournaments";
 
 type RegistrationOption = {
   id: string;
@@ -22,6 +24,9 @@ type RegistrationOption = {
   slug: string;
   format: string | null;
 };
+
+/** Sentinel for "Not sure yet" — distinct from "no team picker shown". */
+const NO_TEAM = "";
 
 /**
  * Personal info prefilled for a logged-in player. When present, the form
@@ -80,11 +85,14 @@ const labelClass = "block text-xs font-medium text-zinc-400 mb-1.5";
 
 export function RegistrationForm({
   tournaments,
+  teamsByTournament = {},
   preselectedSlug,
   preselectedType = null,
   prefill = null,
 }: {
   tournaments: RegistrationOption[];
+  /** Teams available per tournament id. Missing/empty hides the picker. */
+  teamsByTournament?: Record<string, TeamOption[]>;
   preselectedSlug: string | null;
   /** From `/register?type=adult|youth` (pay gate register links). */
   preselectedType?: "adult" | "youth" | null;
@@ -116,6 +124,7 @@ export function RegistrationForm({
   );
 
   const [tournamentId, setTournamentId] = useState<string>(initialId);
+  const [teamId, setTeamId] = useState<string>(NO_TEAM);
   const [registrationType, setRegistrationType] = useState<string>(
     preselectedType ?? ""
   );
@@ -156,6 +165,7 @@ export function RegistrationForm({
 
   const hasOptions = tournaments.length > 0;
   const isLoggedIn = Boolean(prefill);
+  const teams = teamsByTournament[tournamentId] ?? [];
   const selectedTournament = tournaments.find((t) => t.id === tournamentId);
   const selectedTournamentTitle = selectedTournament?.title ?? null;
   const isWorldCupSelected =
@@ -187,6 +197,7 @@ export function RegistrationForm({
 
     const payload = {
       tournamentId,
+      teamId: teamId || null,
       type: registrationType,
       firstName,
       lastName,
@@ -287,7 +298,12 @@ export function RegistrationForm({
             name="tournamentId"
             required
             value={tournamentId}
-            onChange={(e) => setTournamentId(e.target.value)}
+            onChange={(e) => {
+              setTournamentId(e.target.value);
+              // Teams belong to one event; carrying a stale pick across would
+              // be rejected server-side.
+              setTeamId(NO_TEAM);
+            }}
             className={inputClass}
           >
             {tournaments.map((t) => (
@@ -306,6 +322,39 @@ export function RegistrationForm({
       </div>
 
       {isWorldCupSelected && <WorldCupRegisterInstructions />}
+
+      {/* Team — picked here at signup (D3), not at payment */}
+      {hasOptions && teams.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-1">
+            <Users size={16} className="text-brand" />
+            <label
+              htmlFor="teamId"
+              className="block text-sm font-semibold text-zinc-200"
+            >
+              Your team
+            </label>
+          </div>
+          <select
+            id="teamId"
+            name="teamId"
+            value={teamId}
+            onChange={(e) => setTeamId(e.target.value)}
+            className={inputClass}
+          >
+            <option value={NO_TEAM}>Not sure yet — assign me later</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-zinc-500">
+            Pick your team if you know it. You can change this later — just ask
+            us at the field.
+          </p>
+        </div>
+      )}
 
       {/* Registration Type */}
       <div className="space-y-2">
@@ -417,7 +466,7 @@ export function RegistrationForm({
         {isWorldCupSelected
           ? isLoggedIn && registrationType && waiverOnFileForType
             ? "Your waiver is on file — next you'll choose team payment on the pay page (full team, your share, or captain already paid)."
-            : "After submitting, you'll sign the waiver, then choose team payment on the pay page. Team name is collected there, not on this form."
+            : "After submitting, you'll sign the waiver, then choose team payment on the pay page."
           : isLoggedIn && registrationType && waiverOnFileForType
             ? "Your waiver is already on file — we'll take you straight to payment."
             : "After submitting, you'll be directed to sign the waiver. Registration is not complete until the waiver is signed."}
@@ -458,12 +507,13 @@ function WorldCupRegisterInstructions() {
               roster size 8–12). Your team should agree on the same roster size.
             </li>
             <li>
-              Houston Premier Soccer assigns Group A/B schedules and contacts
-              captains after payment. That happens outside this form.
+              <strong className="text-zinc-200">Pick your team above</strong> if
+              it is listed. If you are not sure yet, choose &ldquo;Not sure
+              yet&rdquo; and we will sort it out with you.
             </li>
             <li>
-              Do not enter a team name here — you will provide it on the payment
-              page when paying the team fee or your share.
+              Houston Premier Soccer assigns Group A/B schedules and contacts
+              captains after payment. That happens outside this form.
             </li>
           </ul>
         </div>
