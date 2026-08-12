@@ -42,7 +42,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
 
   const update: Record<string, unknown> = {};
   const fields: (keyof TournamentInput)[] = [
-    "title", "slug", "status", "registration_open", "payments_open",
+    "title", "slug", "status", "is_draft", "registration_open", "payments_open",
     "description", "start_date", "end_date", "time_start", "time_end",
     "recurrence", "location", "format", "entry_fee", "max_teams",
     "image_url", "image_preset", "register_url", "pay_url", "display_order",
@@ -109,8 +109,14 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if ("pay_url" in update) {
     update.pay_url = sanitizeOptionalInternalPath(update.pay_url);
   }
+  if ("is_draft" in update) {
+    update.is_draft = update.is_draft === true;
+  }
   if ("is_featured" in update) {
     update.is_featured = update.is_featured === true;
+    // A draft is not public, so it cannot headline the homepage. Enforced here
+    // as well as in the form so the two can never disagree.
+    if (update.is_draft === true) update.is_featured = false;
     if (update.is_featured === true) {
       const capError = await ensureFeaturedCapNotExceeded(id);
       if (capError) return capError;

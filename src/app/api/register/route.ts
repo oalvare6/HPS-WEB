@@ -64,7 +64,7 @@ async function resolveTournament(
     const { data } = await supabaseAdmin
       .from("tournaments")
       .select(
-        "id, title, slug, registration_open, payments_open, status, start_date, end_date"
+        "id, title, slug, registration_open, payments_open, is_draft, status, start_date, end_date"
       )
       .eq("id", requested)
       .maybeSingle();
@@ -76,7 +76,7 @@ async function resolveTournament(
   const { data: candidates } = await supabaseAdmin
     .from("tournaments")
     .select(
-      "id, title, slug, registration_open, payments_open, status, start_date, end_date"
+      "id, title, slug, registration_open, payments_open, is_draft, status, start_date, end_date"
     )
     .eq("registration_open", true);
 

@@ -58,6 +58,7 @@ export async function getPublicTournaments(): Promise<PublicTournamentsResult> {
     const { data, error } = await supabaseAdmin
       .from("tournaments")
       .select("*")
+      .eq("is_draft", false)
       .neq("status", "cancelled")
       .order("display_order", { ascending: true })
       .order("start_date", { ascending: true });
@@ -84,6 +85,7 @@ export async function getRegistrationOpenTournaments(): Promise<PublicTournament
       .from("tournaments")
       .select("*")
       .eq("registration_open", true)
+      .eq("is_draft", false)
       .neq("status", "cancelled")
       .order("display_order", { ascending: true })
       .order("start_date", { ascending: true });
@@ -110,6 +112,7 @@ export async function getPaymentsOpenTournaments(): Promise<PublicTournamentsRes
       .from("tournaments")
       .select("*")
       .eq("payments_open", true)
+      .eq("is_draft", false)
       .neq("status", "cancelled")
       .order("display_order", { ascending: true })
       .order("start_date", { ascending: true });
@@ -162,6 +165,7 @@ export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResul
       .from("tournaments")
       .select("*")
       .eq("is_featured", true)
+      .eq("is_draft", false)
       .neq("status", "cancelled")
       .order("display_order", { ascending: true })
       .order("start_date", { ascending: true })
@@ -182,6 +186,7 @@ export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResul
     const { data: fallback, error: fallbackErr } = await supabaseAdmin
       .from("tournaments")
       .select("*")
+      .eq("is_draft", false)
       .in("status", ["upcoming", "ongoing"])
       .order("start_date", { ascending: true });
 
@@ -222,6 +227,7 @@ export type PayableTournament = {
   entry_fee_cents: number | null;
   drop_in_fee_cents: number;
   payments_open: boolean;
+  is_draft: boolean;
   status: TournamentStatus;
 };
 
@@ -233,7 +239,7 @@ export async function getPayableTournamentBySlug(
     const { data, error } = await supabaseAdmin
       .from("tournaments")
       .select(
-        "id, title, slug, format, recurrence, time_start, time_end, location, entry_fee_cents, drop_in_fee_cents, payments_open, registration_open, status, start_date, end_date"
+        "id, title, slug, format, recurrence, time_start, time_end, location, entry_fee_cents, drop_in_fee_cents, payments_open, registration_open, is_draft, status, start_date, end_date"
       )
       .eq("slug", slug)
       .maybeSingle();
@@ -250,13 +256,18 @@ export async function getPayableTournamentBySlug(
   }
 }
 
-/** Single tournament by slug for the public detail page. Returns null on miss. */
+/**
+ * Single tournament by slug for the public detail page. Returns null on miss,
+ * and null for a draft — a draft is not public, so its URL must 404 rather than
+ * quietly render for anyone who guessed or kept the link.
+ */
 export async function getTournamentBySlug(slug: string): Promise<Tournament | null> {
   try {
     const { data, error } = await supabaseAdmin
       .from("tournaments")
       .select("*")
       .eq("slug", slug)
+      .eq("is_draft", false)
       .maybeSingle();
     if (error) {
       console.error("[tournaments] slug fetch failed:", error.message, error);
@@ -303,6 +314,7 @@ export async function getRecentEvents(limit = 3): Promise<RecentEventsResult> {
     const { data, error } = await supabaseAdmin
       .from("tournaments")
       .select("*")
+      .eq("is_draft", false)
       .neq("status", "cancelled")
       .order("start_date", { ascending: false });
     if (error) {

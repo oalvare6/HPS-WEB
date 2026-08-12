@@ -63,7 +63,7 @@ async function resolveTournamentCheckout(
   const { data: t, error } = await supabaseAdmin
     .from("tournaments")
     .select(
-      "id, title, slug, entry_fee_cents, drop_in_fee_cents, stripe_price_id, payments_open, registration_open, status, start_date, end_date"
+      "id, title, slug, entry_fee_cents, drop_in_fee_cents, stripe_price_id, payments_open, registration_open, is_draft, status, start_date, end_date"
     )
     .eq("id", tournamentId)
     .maybeSingle();
@@ -197,7 +197,7 @@ async function resolveDropInCheckout(
   const { data, error } = await supabaseAdmin
     .from("drop_ins")
     .select(
-      "id, amount_cents, payment_status, tournament_id, tournaments ( id, title, payments_open, registration_open, status, start_date, end_date )"
+      "id, amount_cents, payment_status, tournament_id, tournaments ( id, title, payments_open, registration_open, is_draft, status, start_date, end_date )"
     )
     .eq("id", dropInId)
     .maybeSingle();

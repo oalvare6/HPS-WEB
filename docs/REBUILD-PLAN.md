@@ -187,12 +187,12 @@ works; Track A uses it. The big migration is Track B, when there is no live dead
 
 ## Track A — before 2026-08-21
 
-### A1. Finish "one switch" (D1)
-Phase 1a already shipped (see §7). Remaining: the admin dropdown replacing Status /
-Registration Open / Payments Open, with slug, Register URL, Pay URL and Display Order moved
-behind an "Advanced" disclosure.
-**Done when:** the owner can set an event's state from one control and cannot produce a
-contradictory combination.
+### A1. Finish "one switch" (D1) — ✅ code complete, migration not yet applied
+Phase 1a already shipped (see §7). Phase 1b is now written too — see §7.
+
+⚠ **The migration `20260812190000_add_tournaments_is_draft.sql` must be applied to production
+before this code deploys.** Six queries select `is_draft`; without the column they return a
+PostgREST 42703 and the public site and pay flow break.
 
 ### A2. Teams for Community Cup, and team-at-signup (D3)
 - Owner creates the Community Cup teams in admin.
@@ -315,6 +315,42 @@ the 10pm-on-game-night edge case. Typecheck and `npm run build` both pass.
 > ⚠ **Phase 1a is committed but was not deployed at the time of writing.** Production is safe
 > only because Phase 0 fixed the data by hand. The protection does not exist live until
 > deployed.
+
+**Phase 1b — 2026-08-12, code + one migration.** A1 done. The tournament form now has a single
+**Event status** dropdown — Draft / Open / Closed / Cancelled — and the owner cannot build a
+contradictory combination, because `status`, `registration_open` and `payments_open` are
+derived from that one choice in exactly one place and are no longer separately editable.
+
+- **Finished is never offered and never stored.** When the dates say the event is over the
+  section renders a locked "Finished — ended <date>" card, recomputed from the dates *in the
+  form* so correcting a wrong end date unlocks it without saving. Saving a finished event
+  omits all four state columns from the payload, so editing a past event cannot write
+  "finished" into the database by accident.
+- **`status` is derived from the dates** (`deriveStoredStatus`), and never returns
+  `'completed'` — that value is `finished`, which `displayStatus` derives for the public.
+- **Draft is real**, backed by the one new column `tournaments.is_draft`. Nothing in the schema
+  could hide an event before this: `getPublicTournaments` returned everything except
+  `status = 'cancelled'`. Drafts are now excluded from every public listing, 404 on their own
+  slug, cannot be featured, and take no money. The migration also narrows the public RLS read
+  policy from `using (true)` to `using (is_draft = false)`.
+- **Cancelled stays** as a fourth choice. It exists today, reads differently to the public than
+  Draft, and `tournament-state.ts` already handled it.
+- Slug, Register URL, Pay URL and Display Order moved behind an **Advanced** disclosure that
+  force-opens if one of them fails validation. "Show on homepage" is a star beside the
+  dropdown, disabled while Draft (enforced in the API too).
+- The admin list and detail page now show **one derived state badge** via
+  `EventStateBadge`, replacing the Status / Reg / Pay trio that could disagree with each other
+  and with the calendar at the same time.
+
+`is_draft` is a *required* field on `StatefulTournament` deliberately: the compiler then
+located all six money and signup paths whose explicit `.select()` lists needed it, instead of
+letting them silently fail open.
+
+Tests: `npx tsx scripts/test-tournament-state.ts` — now 16 cases (draft precedence, a draft in
+the past, cancelled outranking draft, and five for `deriveStoredStatus`). Typecheck, lint and
+`npm run build` all pass.
+
+> ⚠ **Apply the migration before deploying this.** See A1 above.
 
 ---
 

@@ -21,7 +21,8 @@ import {
 } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
-import type { Tournament, TournamentStatus } from "@/lib/types";
+import type { Tournament } from "@/lib/types";
+import { EventStateBadge } from "@/components/admin/EventStateBadge";
 import {
   fetchTournamentById,
   fetchTournamentStats,
@@ -40,13 +41,6 @@ type RosterTab = "registrants" | "teams";
 function isRosterTab(value: string): value is RosterTab {
   return value === "registrants" || value === "teams";
 }
-
-const STATUS_STYLES: Record<TournamentStatus, string> = {
-  upcoming: "bg-brand/20 text-brand",
-  ongoing: "bg-green-500/20 text-green-400",
-  completed: "bg-zinc-500/20 text-zinc-400",
-  cancelled: "bg-red-500/20 text-red-400",
-};
 
 export default function AdminTournamentViewPage({
   params,
@@ -290,13 +284,7 @@ function RosterTabs({
 function StatusPills({ tournament }: { tournament: Tournament }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${STATUS_STYLES[tournament.status]}`}
-      >
-        {tournament.status}
-      </span>
-      <Pill on={tournament.registration_open} label="Registration" />
-      <Pill on={tournament.payments_open} label="Payments" />
+      <EventStateBadge tournament={tournament} />
       <span
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
           tournament.is_featured
@@ -311,23 +299,6 @@ function StatusPills({ tournament }: { tournament: Tournament }) {
         {tournament.is_featured ? "Featured" : "Not featured"}
       </span>
     </div>
-  );
-}
-
-function Pill({ on, label }: { on: boolean; label: string }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
-        on
-          ? "bg-green-500/15 text-green-400"
-          : "bg-surface-2 text-zinc-400 border border-border-token"
-      }`}
-    >
-      <span
-        className={`w-2 h-2 rounded-full ${on ? "bg-green-400" : "bg-zinc-600"}`}
-      />
-      {label} {on ? "open" : "closed"}
-    </span>
   );
 }
 

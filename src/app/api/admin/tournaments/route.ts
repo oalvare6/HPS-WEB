@@ -75,7 +75,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid display order." }, { status: 400 });
   }
 
-  const isFeatured = body.is_featured === true;
+  const isDraft = body.is_draft === true;
+  // A draft is not public, so it cannot headline the homepage.
+  const isFeatured = body.is_featured === true && !isDraft;
   if (isFeatured) {
     const capError = await ensureFeaturedCapNotExceeded(null);
     if (capError) return capError;
@@ -85,6 +87,7 @@ export async function POST(request: Request) {
     title: body.title,
     slug,
     status,
+    is_draft: isDraft,
     registration_open: body.registration_open ?? false,
     payments_open: body.payments_open ?? false,
     description: body.description ?? null,

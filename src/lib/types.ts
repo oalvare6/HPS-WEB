@@ -29,6 +29,13 @@ export type Tournament = {
   title: string;
   slug: string;
   status: TournamentStatus;
+  /**
+   * Still being set up: hidden from every public listing and page, and takes no
+   * money. The storage behind the "Draft" option of the one Event Status
+   * control (D1). `finished` deliberately has no equivalent column — it is
+   * derived from the dates in `tournament-state.ts`.
+   */
+  is_draft: boolean;
   registration_open: boolean;
   payments_open: boolean;
   description: string | null;

@@ -13,15 +13,11 @@ import {
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  TOURNAMENT_FORMATS,
-  type Tournament,
-  type TournamentStatus,
-} from "@/lib/types";
+import { TOURNAMENT_FORMATS, type Tournament } from "@/lib/types";
 import { TOURNAMENT_IMAGE_PRESETS, getPresetUrl } from "@/lib/tournament-image-presets";
 import { slugify } from "@/lib/slug";
 import { dateInputToIsoPreservingCalendarDay } from "@/lib/date-input";
-import { isPastEvent } from "@/lib/tournament-state";
+import { deriveStoredStatus, isPastEvent } from "@/lib/tournament-state";
 
 const DEFAULT_LOCATION = "14062 Ambrose St, Houston TX";
 
@@ -69,8 +65,10 @@ const EVENT_STATE_OPTIONS: {
  * separately, not selected, so the operator's underlying choice stays intact.
  */
 function storedStateFrom(t: Tournament | null): StoredEventState {
+  // A brand-new event starts hidden. The owner publishes it deliberately.
   if (!t) return "draft";
   if (t.status === "cancelled") return "cancelled";
+  if (t.is_draft) return "draft";
   if (t.registration_open || t.payments_open) return "open";
   return "closed";
 }
@@ -91,17 +89,19 @@ type FormState = {
   slug: string;
   format: string;
   description: string;
-  /** The one switch (D1). Replaces status + registration_open + payments_open. */
+  /**
+   * The one switch (D1). The only in-form representation of what used to be
+   * three separate fields — status, registration_open and payments_open. They
+   * are derived from this on save and never held separately, so the form has no
+   * way to represent a contradiction.
+   */
   state: StoredEventState;
-  status: TournamentStatus;
   start_date: string;
   end_date: string;
   recurrence: string;
   time_start: string;
   time_end: string;
   location: string;
-  registration_open: boolean;
-  payments_open: boolean;
   entry_fee: string;
   /**
    * Whether the public /pay page should offer the "Guest / Single-round" tier
@@ -141,15 +141,12 @@ function fromInitial(t: Tournament | null): FormState {
     format: t?.format ?? "Adult 7v7",
     description: t?.description ?? "",
     state: storedStateFrom(t),
-    status: (t?.status ?? "upcoming") as TournamentStatus,
     start_date: toDateInput(t?.start_date ?? null),
     end_date: toDateInput(t?.end_date ?? null),
     recurrence: t?.recurrence ?? "",
     time_start: t?.time_start ?? "",
     time_end: t?.time_end ?? "",
     location: t?.location ?? DEFAULT_LOCATION,
-    registration_open: t?.registration_open ?? false,
-    payments_open: t?.payments_open ?? false,
     entry_fee: t?.entry_fee != null ? String(t.entry_fee) : "",
     offer_drop_in_tier: offerDropInTier,
     drop_in_fee: dropInDollars,
@@ -310,16 +307,40 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
     const dropInFeeCents = form.offer_drop_in_tier
       ? Math.max(0, Math.round(Number(form.drop_in_fee) * 100))
       : 0;
-    // TODO(A1): `form.state` is not written yet — this still round-trips the
-    // event's existing status / registration_open / payments_open untouched, so
-    // showing the new control cannot change any live event. Wiring lands once
-    // the storage question for `draft` is settled.
+
+    const dates = {
+      start_date: form.start_date || null,
+      end_date: form.end_date || null,
+    };
+    /**
+     * The one dropdown expanded into the columns that still back it. Every
+     * combination is produced here and nowhere else, so the contradictory
+     * states the owner used to be able to build by hand — "completed but
+     * payments open", "registration open, payments closed" — are simply not
+     * reachable any more.
+     *
+     * A finished event contributes NOTHING: its four state columns are left out
+     * of the payload entirely, so saving an edit to a past event (fixing a
+     * typo, adding a photo) can never write "finished" into the database. That
+     * is D1's rule that finished is derived and never stored.
+     */
+    const stateFields = finished
+      ? {}
+      : {
+          is_draft: form.state === "draft",
+          registration_open: form.state === "open",
+          payments_open: form.state === "open",
+          status:
+            form.state === "cancelled"
+              ? ("cancelled" as const)
+              : deriveStoredStatus(dates),
+        };
     const payload = {
+      ...stateFields,
       title: form.title.trim(),
       slug: form.slug.trim(),
       format: form.format,
       description: form.description.trim() || null,
-      status: form.status,
       start_date: form.start_date
         ? dateInputToIsoPreservingCalendarDay(form.start_date) ?? new Date(form.start_date).toISOString()
         : null,
@@ -330,8 +351,6 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       time_start: form.time_start.trim(),
       time_end: form.time_end.trim(),
       location: form.location.trim() || null,
-      registration_open: form.registration_open,
-      payments_open: form.payments_open,
       entry_fee: form.entry_fee.trim() ? Number(form.entry_fee) : null,
       drop_in_fee_cents: dropInFeeCents,
       max_teams: form.max_teams.trim() ? Number(form.max_teams) : null,
@@ -340,7 +359,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       image_url: form.image_url,
       image_preset: form.image_preset,
       display_order: form.display_order.trim() ? Number(form.display_order) : 0,
-      is_featured: form.is_featured,
+      is_featured: form.state === "draft" ? false : form.is_featured,
     };
     try {
       const url = initial

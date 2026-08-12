@@ -7,7 +7,7 @@ export async function GET() {
     const { data, error } = await supabaseAdmin
       .from("tournaments")
       .select(
-        "id, title, slug, format, recurrence, time_start, time_end, location, entry_fee_cents, drop_in_fee_cents, payments_open, registration_open, status, start_date, end_date"
+        "id, title, slug, format, recurrence, time_start, time_end, location, entry_fee_cents, drop_in_fee_cents, payments_open, registration_open, is_draft, status, start_date, end_date"
       )
       .eq("payments_open", true)
       .neq("status", "cancelled")

@@ -3,7 +3,7 @@ import type { Tournament, TournamentStatus } from "@/lib/types";
 /**
  * The four states an event can be in, as the operator thinks about them.
  *
- *   draft    — not shown publicly (reserved; storage lands in Phase 1b)
+ *   draft    — not shown publicly; stored as `tournaments.is_draft`
  *   open     — public, accepting signups and money
  *   closed   — public, not accepting money (sign-ups closed or not yet open)
  *   finished — the event has happened; archive only, never sells anything
@@ -68,6 +68,7 @@ export function isPastEvent(t: DatedTournament, now: Date = new Date()): boolean
 
 type StatefulTournament = DatedTournament & {
   status: TournamentStatus;
+  is_draft: boolean;
   registration_open: boolean;
   payments_open: boolean;
 };
@@ -75,15 +76,50 @@ type StatefulTournament = DatedTournament & {
 /**
  * The effective state of an event, combining what the operator stored with what
  * the calendar says. The calendar wins for "is it over".
+ *
+ * Draft is checked before the date backstop on purpose: a draft that happens to
+ * be in the past was never public, so it belongs nowhere — not on the site, and
+ * not in the "Recent Events" archive either. Draft is stricter than finished in
+ * every direction, so nothing is loosened by putting it first.
  */
 export function resolveEventState(
   t: StatefulTournament,
   now: Date = new Date()
 ): EventState {
   if (t.status === "cancelled") return "cancelled";
+  if (t.is_draft) return "draft";
   if (t.status === "completed" || isPastEvent(t, now)) return "finished";
   if (t.registration_open || t.payments_open) return "open";
   return "closed";
+}
+
+/**
+ * Whether this event may be shown to the public at all. Everything except a
+ * draft is visible — finished events stay browsable, which is the point of the
+ * archive.
+ */
+export function isPubliclyVisible(t: StatefulTournament): boolean {
+  return !t.is_draft;
+}
+
+/**
+ * The `status` value to store for an event, derived from its dates.
+ *
+ * Nothing writes `'completed'`: that is `finished`, and D1 says finished is
+ * never stored. `displayStatus` derives it for the public instead.
+ */
+export function deriveStoredStatus(
+  t: DatedTournament,
+  now: Date = new Date()
+): Exclude<TournamentStatus, "completed" | "cancelled"> {
+  if (!t.start_date) return "upcoming";
+  const startDay = eventDay(t.start_date);
+  if (!startDay) return "upcoming";
+  const today = todayInHouston(now);
+  if (startDay > today) return "upcoming";
+  // Started on or before today, and not past its last day (isPastEvent keeps an
+  // event live for the whole of its final day).
+  return isPastEvent(t, now) ? "upcoming" : "ongoing";
 }
 
 /**

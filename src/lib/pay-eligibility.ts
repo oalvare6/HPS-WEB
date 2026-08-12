@@ -326,7 +326,7 @@ export async function runPayEligibilityCheck(
 
   const { data: tournament, error: tournamentErr } = await supabaseAdmin
     .from("tournaments")
-    .select("id, payments_open, registration_open, status, start_date, end_date")
+    .select("id, payments_open, registration_open, is_draft, status, start_date, end_date")
     .eq("id", input.tournamentId)
     .maybeSingle();
 

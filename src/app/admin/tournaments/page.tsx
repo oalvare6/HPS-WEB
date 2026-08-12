@@ -17,20 +17,10 @@ import { TableSkeleton } from "@/components/shared/skeleton";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { toast } from "sonner";
 import { Section } from "@/components/shared/section";
-import {
-  MAX_FEATURED_TOURNAMENTS,
-  type Tournament,
-  type TournamentStatus,
-} from "@/lib/types";
+import { MAX_FEATURED_TOURNAMENTS, type Tournament } from "@/lib/types";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { useScrollRestoration } from "@/lib/use-scroll-restoration";
-
-const STATUS_STYLES: Record<TournamentStatus, string> = {
-  upcoming: "bg-brand/20 text-brand",
-  ongoing: "bg-green-500/20 text-green-400",
-  completed: "bg-zinc-500/20 text-zinc-400",
-  cancelled: "bg-red-500/20 text-red-400",
-};
+import { EventStateBadge } from "@/components/admin/EventStateBadge";
 
 function formatDateRange(start: string | null, end: string | null): string {
   if (!start) return "—";
@@ -200,8 +190,6 @@ function AdminTournamentsContent() {
                       <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">Format</th>
                       <th className="px-4 py-3 text-zinc-400 font-medium hidden lg:table-cell">Dates</th>
                       <th className="px-4 py-3 text-zinc-400 font-medium">Status</th>
-                      <th className="px-4 py-3 text-zinc-400 font-medium hidden sm:table-cell">Reg</th>
-                      <th className="px-4 py-3 text-zinc-400 font-medium hidden sm:table-cell">Pay</th>
                       <th className="px-4 py-3 text-zinc-400 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
@@ -251,17 +239,7 @@ function AdminTournamentsContent() {
                             {formatDateRange(t.start_date, t.end_date)}
                           </td>
                           <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${STATUS_STYLES[t.status]}`}
-                            >
-                              {t.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 hidden sm:table-cell">
-                            <Dot on={t.registration_open} />
-                          </td>
-                          <td className="px-4 py-3 hidden sm:table-cell">
-                            <Dot on={t.payments_open} />
+                            <EventStateBadge tournament={t} />
                           </td>
                           <td
                             className="px-4 py-3"
