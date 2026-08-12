@@ -222,10 +222,30 @@ PostgREST 42703 and the public site and pay flow break.
 emergency_phone, so a walk-in is written with placeholders (`@walk-in.hps.local`,
 `1900-01-01`, empty strings) and the row is marked "Needs details". B3 removes the need.
 
-### A4. In-person waiver signing (D8)
-From a Roster row: **"Sign waiver now"** opens the signing flow on the owner's laptop for the
-player standing in front of them. Captures a real document, not an override.
-**Done when:** a walk-in with no waiver can sign at the field and immediately show ✓.
+### A4. In-person waiver signing (D8) — ✅ code complete, needs one live run
+**"Sign now"** on any Roster row whose waiver is not a real document — both missing waivers
+and the amber Override rows, since replacing a ticked box with a signature is the whole point.
+Opens DocuSeal embedded in a modal (with an "open in a new tab" escape hatch, because
+embedding can be refused and the owner must never be stuck), `send_email: false`.
+
+**"Done — check" asks DocuSeal directly rather than waiting for the webhook.** At the field
+the ✓ has to appear while the player is still standing there; a webhook that is delayed,
+blocked or misconfigured would leave the owner staring at a red ✗ next to someone who just
+signed.
+
+**Root cause of the missing documents, fixed.** §2 records 104 registrations with a DocuSeal
+submission, 97 marked signed, and `waiver_document_url` NULL for every one. The reason is in
+the code: `/api/admin/sync-waivers` **never wrote the column at all**. There were three copies
+of "record a signed waiver" (webhook, sync-waivers, register) and they had drifted. All three
+now go through `recordSignedWaiver` in `src/lib/waiver-capture.ts`, which writes the document
+link in the same statement as the signed flag. A waiver you cannot produce is not a waiver.
+
+**Still to verify:** no DocuSeal call has ever been made by this code. All four `DOCUSEAL_*`
+vars are empty in `.env.local`, so nothing DocuSeal-dependent is reachable locally. Missing
+config degrades to a clean 503 and the modal shows it rather than breaking. **Also confirm
+`DOCUSEAL_WEBHOOK_SECRET` is set in production** — if it is not, the webhook has been
+returning 503 to every callback, which would be the second half of why no documents were ever
+captured.
 
 ### A5. Legal pages (D10)
 `/privacy`, `/terms`, `/refunds`, cookie notice, footer links, and **remove the public

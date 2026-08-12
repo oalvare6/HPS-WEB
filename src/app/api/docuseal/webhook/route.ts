@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyDocusealWebhookSignature } from "@/lib/app-signing";
-import { getWaiverExpiryIso } from "@/lib/contacts";
+import { recordSignedWaiver } from "@/lib/waiver-capture";
 
 interface DocuSealWebhookPayload {
   event_type: string;
@@ -77,54 +77,18 @@ export async function POST(request: NextRequest) {
       payload.data.documents?.[0]?.url ??
       null;
 
-    const signedAt = payload.data.completed_at ?? new Date().toISOString();
-    const expiresAt = getWaiverExpiryIso(signedAt);
+    const result = await recordSignedWaiver({
+      registrationId: registration.id,
+      contactId: registration.contact_id,
+      waiverType: registration.waiver_type,
+      submissionId,
+      completedAt: payload.data.completed_at,
+      documentUrl,
+    });
 
-    const updateFields: Record<string, unknown> = {
-      waiver_signed: true,
-      waiver_signed_at: signedAt,
-      docuseal_status: "signed",
-    };
-
-    const { error: updateErr } = await supabaseAdmin
-      .from("registrations")
-      .update(updateFields)
-      .eq("id", registration.id);
-
-    if (updateErr) {
-      console.error("DocuSeal webhook: failed to update registration", updateErr);
+    if (!result.ok) {
+      console.error("DocuSeal webhook: failed to update registration", result.error);
       return NextResponse.json({ error: "Failed to update registration" }, { status: 500 });
-    }
-
-    if (documentUrl) {
-      await supabaseAdmin
-        .from("registrations")
-        .update({ waiver_document_url: documentUrl })
-        .eq("id", registration.id)
-        .then(({ error }) => {
-          if (error)
-            console.warn(
-              "DocuSeal webhook: waiver_document_url column may not exist yet, skipping",
-              error.code
-            );
-        });
-    }
-
-    if (registration.contact_id) {
-      const { error: contactErr } = await supabaseAdmin
-        .from("contacts")
-        .update({
-          waiver_type: registration.waiver_type,
-          waiver_signed_at: signedAt,
-          waiver_expires_at: expiresAt,
-          waiver_document_url: documentUrl,
-          waiver_submission_id: submissionId,
-          waiver_source: "docuseal",
-        })
-        .eq("id", registration.contact_id);
-      if (contactErr) {
-        console.warn("DocuSeal webhook: failed to update contact waiver state", contactErr.message);
-      }
     }
 
     return NextResponse.json({ ok: true });

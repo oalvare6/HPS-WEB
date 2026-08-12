@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
-import { getWaiverExpiryIso } from "@/lib/contacts";
+import { fetchSubmissionSnapshot, recordSignedWaiver } from "@/lib/waiver-capture";
 
 export async function POST() {
   const unauthorized = await verifyAdmin();
@@ -32,77 +32,68 @@ export async function POST() {
     }
 
     let synced = 0;
-    const results: Array<{ name: string; status: string; updated: boolean }> = [];
+    let withDocument = 0;
+    const results: Array<{
+      name: string;
+      status: string;
+      updated: boolean;
+      document: boolean;
+    }> = [];
 
     for (const reg of pending) {
+      const name = `${reg.first_name} ${reg.last_name}`;
       try {
-        const dsRes = await fetch(
-          `https://api.docuseal.com/submissions/${reg.docuseal_submission_id}`,
-          { headers: { "X-Auth-Token": apiKey } }
+        const snapshot = await fetchSubmissionSnapshot(
+          reg.docuseal_submission_id,
+          apiKey
         );
 
-        if (!dsRes.ok) {
-          results.push({ name: `${reg.first_name} ${reg.last_name}`, status: `api-error-${dsRes.status}`, updated: false });
+        if (!snapshot) {
+          results.push({ name, status: "api-error", updated: false, document: false });
+          continue;
+        }
+        if (!snapshot.completed) {
+          results.push({ name, status: "pending", updated: false, document: false });
           continue;
         }
 
-        const dsData = await dsRes.json();
-        const submitters = dsData.submitters ?? [];
-        const completed = submitters.some(
-          (s: { status?: string }) => s.status === "completed"
-        );
+        // Goes through the shared writer, which stores waiver_document_url.
+        // This route used to omit it, which is why production has 97 signed
+        // waivers and zero document links.
+        const result = await recordSignedWaiver({
+          registrationId: reg.id,
+          contactId: reg.contact_id,
+          waiverType: reg.waiver_type,
+          submissionId: reg.docuseal_submission_id,
+          completedAt: snapshot.completedAt,
+          documentUrl: snapshot.documentUrl,
+        });
 
-        if (completed) {
-          const completedAt = submitters.find(
-            (s: { status?: string }) => s.status === "completed"
-          )?.completed_at ?? new Date().toISOString();
-          const expiresAt = getWaiverExpiryIso(completedAt);
-
-          const { error: updateErr } = await supabaseAdmin
-            .from("registrations")
-            .update({
-              waiver_signed: true,
-              waiver_signed_at: completedAt,
-              docuseal_status: "signed",
-            })
-            .eq("id", reg.id);
-
-          if (!updateErr) {
-            if (reg.contact_id) {
-              const { error: contactErr } = await supabaseAdmin
-                .from("contacts")
-                .update({
-                  waiver_type: reg.waiver_type,
-                  waiver_signed_at: completedAt,
-                  waiver_expires_at: expiresAt,
-                  waiver_submission_id: reg.docuseal_submission_id,
-                  waiver_source: "docuseal",
-                })
-                .eq("id", reg.contact_id);
-              if (contactErr) {
-                console.warn(
-                  "Sync: contact canonical waiver update failed",
-                  reg.contact_id,
-                  contactErr.message
-                );
-              }
-            }
-            synced++;
-            results.push({ name: `${reg.first_name} ${reg.last_name}`, status: "signed", updated: true });
-          } else {
-            console.error("Sync: update failed for", reg.id, updateErr);
-            results.push({ name: `${reg.first_name} ${reg.last_name}`, status: "update-failed", updated: false });
-          }
+        if (result.ok) {
+          synced++;
+          if (result.documentUrl) withDocument++;
+          results.push({
+            name,
+            status: "signed",
+            updated: true,
+            document: Boolean(result.documentUrl),
+          });
         } else {
-          results.push({ name: `${reg.first_name} ${reg.last_name}`, status: dsData.status ?? "pending", updated: false });
+          console.error("Sync: update failed for", reg.id, result.error);
+          results.push({ name, status: "update-failed", updated: false, document: false });
         }
       } catch (err) {
         console.error("Sync: error checking submission", reg.docuseal_submission_id, err);
-        results.push({ name: `${reg.first_name} ${reg.last_name}`, status: "error", updated: false });
+        results.push({ name, status: "error", updated: false, document: false });
       }
     }
 
-    return NextResponse.json({ synced, total: pending.length, results });
+    return NextResponse.json({
+      synced,
+      withDocument,
+      total: pending.length,
+      results,
+    });
   } catch (err) {
     console.error("Sync waivers error:", err);
     return NextResponse.json({ error: "Sync failed." }, { status: 500 });

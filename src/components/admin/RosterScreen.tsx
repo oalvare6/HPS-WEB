@@ -11,6 +11,8 @@ import {
   AlertTriangle,
   ShieldAlert,
   RefreshCw,
+  PenLine,
+  ExternalLink,
 } from "lucide-react";
 import {
   rosterFullName,
@@ -43,6 +45,7 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
   const [filter, setFilter] = useState<Filter>("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [signing, setSigning] = useState<RosterRow | null>(null);
 
   const load = useCallback(
     async (opts: { quiet?: boolean } = {}) => {
@@ -231,6 +234,17 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
             busyId={busyId}
             onTogglePaid={togglePaid}
             onChangeTeam={changeTeam}
+            onSignWaiver={setSigning}
+          />
+        )}
+
+        {signing && (
+          <SignWaiverModal
+            row={signing}
+            onClose={async (changed) => {
+              setSigning(null);
+              if (changed) await load({ quiet: true });
+            }}
           />
         )}
 
@@ -290,12 +304,14 @@ function RosterTable({
   busyId,
   onTogglePaid,
   onChangeTeam,
+  onSignWaiver,
 }: {
   rows: RosterRow[];
   teams: RosterTeam[];
   busyId: string | null;
   onTogglePaid: (r: RosterRow) => void;
   onChangeTeam: (r: RosterRow, teamId: string) => void;
+  onSignWaiver: (r: RosterRow) => void;
 }) {
   return (
     <div className="overflow-x-auto -mx-4 px-4">
@@ -370,7 +386,24 @@ function RosterTable({
               </td>
 
               <td className="py-2.5 px-3">
-                <WaiverCell row={r} />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <WaiverCell row={r} />
+                  {r.role === "player" && r.waiverEvidence !== "document" && (
+                    <button
+                      type="button"
+                      onClick={() => onSignWaiver(r)}
+                      title={
+                        r.waiverOk
+                          ? "Replace this with a real signed document"
+                          : "Sign the waiver here, now, on this laptop"
+                      }
+                      className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/10 transition-colors"
+                    >
+                      <PenLine size={11} />
+                      Sign now
+                    </button>
+                  )}
+                </div>
               </td>
 
               <td className="py-2.5 pl-3 text-right">
@@ -438,6 +471,213 @@ function WaiverCell({ row }: { row: RosterRow }) {
       <Check size={12} />
       {expires ? `to ${expires}` : "On file"}
     </span>
+  );
+}
+
+/**
+ * In-person waiver signing (A4 / D8). The player is standing at the field, so
+ * the signature happens on this laptop rather than in an email they'll open
+ * next week.
+ *
+ * Two deliberate choices:
+ *  - the DocuSeal page is embedded, with an "open in a new tab" escape hatch,
+ *    because embedding can be refused and the owner must never be stuck;
+ *  - "Done — check" asks DocuSeal directly instead of waiting for the webhook,
+ *    so the ✓ appears while the player is still standing there.
+ */
+function SignWaiverModal({
+  row,
+  onClose,
+}: {
+  row: RosterRow;
+  onClose: (changed: boolean) => void | Promise<void>;
+}) {
+  const [waiverType, setWaiverType] = useState<"adult" | "youth">("adult");
+  const [session, setSession] = useState<{
+    signUrl: string;
+    embedSrc: string | null;
+  } | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [signed, setSigned] = useState(false);
+  const [error, setError] = useState("");
+
+  const start = async () => {
+    setStarting(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `/api/admin/registrations/${row.id}/sign-waiver`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ waiverType }),
+        }
+      );
+      const body = (await res.json()) as {
+        signUrl?: string;
+        embedSrc?: string | null;
+        error?: string;
+      };
+      if (!res.ok || !body.signUrl) {
+        setError(body.error ?? "Could not start the waiver.");
+        return;
+      }
+      setSession({ signUrl: body.signUrl, embedSrc: body.embedSrc ?? body.signUrl });
+    } catch {
+      setError("Could not start the waiver.");
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const check = async () => {
+    setChecking(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/registrations/${row.id}/sign-waiver`);
+      const body = (await res.json()) as {
+        signed?: boolean;
+        reason?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(body.error ?? "Could not check with DocuSeal.");
+        return;
+      }
+      if (body.signed) {
+        setSigned(true);
+        toast.success(`${rosterFullName(row)}'s waiver is on file.`);
+        return;
+      }
+      setError(
+        body.reason === "not-finished"
+          ? "Not signed yet — finish the form, then check again."
+          : "No waiver has been started for this player yet."
+      );
+    } catch {
+      setError("Could not check with DocuSeal.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Sign waiver for ${rosterFullName(row)}`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+    >
+      <div className="w-full max-w-3xl max-h-[90vh] overflow-auto dashboard-card p-5 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">
+              Waiver for {rosterFullName(row) || "this player"}
+            </h3>
+            <p className="text-xs text-zinc-400">
+              {row.waiverOk
+                ? "This player is marked as covered, but there is no signed document on file. Signing here replaces the tick with a real one."
+                : "Hand them the laptop. They sign here and it counts immediately."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void onClose(signed)}
+            className="text-zinc-400 hover:text-white transition-colors"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {signed ? (
+          <div className="rounded-lg border border-green-500/40 bg-green-500/10 p-4 space-y-3">
+            <p className="inline-flex items-center gap-2 text-sm text-green-400">
+              <Check size={16} />
+              Signed. The document is on file and good for a year.
+            </p>
+            <button
+              type="button"
+              onClick={() => void onClose(true)}
+              className="btn-primary"
+            >
+              Back to the roster
+            </button>
+          </div>
+        ) : !session ? (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm text-zinc-300 mb-1">
+                Which waiver?
+              </label>
+              <select
+                value={waiverType}
+                onChange={(e) =>
+                  setWaiverType(e.target.value as "adult" | "youth")
+                }
+                className="px-3 py-2 bg-surface-2 border border-border-token text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/50"
+              >
+                <option value="adult">Adult (18+)</option>
+                <option value="youth">Youth (parent or guardian signs)</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => void start()}
+              disabled={starting}
+              className="btn-primary disabled:opacity-60"
+            >
+              {starting ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <PenLine size={15} />
+              )}
+              {starting ? "Opening…" : "Start signing"}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void check()}
+                disabled={checking}
+                className="btn-primary disabled:opacity-60"
+              >
+                {checking ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Check size={15} />
+                )}
+                {checking ? "Checking…" : "Done — check"}
+              </button>
+              <a
+                href={session.signUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors"
+              >
+                <ExternalLink size={14} />
+                Open in a new tab
+              </a>
+            </div>
+            <iframe
+              src={session.embedSrc ?? session.signUrl}
+              title="Waiver"
+              className="w-full h-[60vh] rounded-lg border border-border-token bg-white"
+            />
+            <p className="text-xs text-zinc-500">
+              If the form doesn&apos;t load above, use &ldquo;Open in a new
+              tab&rdquo; — then come back here and press &ldquo;Done —
+              check&rdquo;.
+            </p>
+          </div>
+        )}
+
+        {error && <p className="text-sm text-red-400">{error}</p>}
+      </div>
+    </div>
   );
 }
 
