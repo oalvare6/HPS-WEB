@@ -185,7 +185,22 @@ works; Track A uses it. The big migration is Track B, when there is no live dead
 
 ---
 
-## Track A — before 2026-08-21
+## Track A — before 2026-08-21 — ✅ ALL FIVE SHIPPED AND DEPLOYED
+
+**Deployed to https://www.houstonpremiersoccer.com on 2026-08-12** (`main` @ `aaab13c`).
+The `is_draft` migration was applied to production *before* the code shipped, in that order,
+because six queries select the column and would have 42703'd otherwise.
+
+Verified live on the domain: all ten public routes 200; the team picker on `/register` shows
+3rd Ward FC; all four legal pages render with the address and contact email pulled from site
+settings; no `/admin` link anywhere on a public page; no console errors; `/events` still lists
+Community Cup as upcoming and the two finished events in the archive.
+
+The new admin routes return 401 to an unauthenticated request and a nonexistent admin route
+returns 404, which is how we know they deployed and are guarded. **The admin UI itself has not
+been exercised against production** — a locally-signed admin cookie is correctly rejected by
+production, so only the owner can log in and click through. See §9.
+
 
 ### A1. Finish "one switch" (D1) — ✅ code complete, migration not yet applied
 Phase 1a already shipped (see §7). Phase 1b is now written too — see §7.
@@ -445,7 +460,24 @@ new discovery.
 
 ---
 
-## 9. Open questions
+## 9. What the operator still has to do
+
+Track A is deployed, but four things need a human with production access:
+
+1. **Sign one waiver in person, end to end.** A4 has never made a single DocuSeal call — the
+   local `DOCUSEAL_*` vars are empty strings. Open the Roster, press "Sign now" on a Community
+   Cup player, sign it, press "Done — check". If the ✓ appears and `waiver_document_url` fills
+   in, A4 is real. Do this before the 21st, not at the field on the 21st.
+2. **Confirm `DOCUSEAL_WEBHOOK_SECRET` is set in Vercel.** If it is missing the webhook
+   returns 503 and silently processes nothing, which together with the sync-waivers bug fixed
+   in A4 fully explains 97 signed waivers and zero stored documents.
+3. **Create the remaining Community Cup teams.** Only 3rd Ward FC exists, so every signup
+   currently picks it or "Not sure yet".
+4. **Get the legal pages reviewed.** They are published and live. The defaults chosen are
+   listed under A5 — retention, governing law, liability cap, refund windows, and the absence
+   of a registered entity name.
+
+## 10. Open questions
 
 - Exact guest and door prices for Community Cup (owner to set).
 - Whether Apple Sign In is still correctly configured — its client secret is a JWT that
