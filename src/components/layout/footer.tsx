@@ -116,23 +116,30 @@ export async function Footer() {
         </div>
 
         {/* Bottom Bar */}
+        {/* No public link to /admin here. It advertised the staff dashboard to
+            every visitor for no benefit — staff know the URL. */}
         <div className="border-t border-border-token mt-10 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-zinc-500 text-sm">
             &copy; 2026 Houston Premier Soccer. All rights reserved.
           </p>
-          <div className="flex gap-6">
-            <Link href="/contact" className="text-zinc-500 hover:text-white text-sm transition-colors">
-              Contact Us
-            </Link>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
             <Link href="/about" className="text-zinc-500 hover:text-white text-sm transition-colors">
               About
             </Link>
-            <Link
-              href="/admin"
-              className="text-zinc-600 hover:text-zinc-300 text-sm transition-colors"
-              title="Staff dashboard (login required)"
-            >
-              Admin
+            <Link href="/contact" className="text-zinc-500 hover:text-white text-sm transition-colors">
+              Contact Us
+            </Link>
+            <Link href="/privacy" className="text-zinc-500 hover:text-white text-sm transition-colors">
+              Privacy
+            </Link>
+            <Link href="/terms" className="text-zinc-500 hover:text-white text-sm transition-colors">
+              Terms
+            </Link>
+            <Link href="/refunds" className="text-zinc-500 hover:text-white text-sm transition-colors">
+              Refunds
+            </Link>
+            <Link href="/cookies" className="text-zinc-500 hover:text-white text-sm transition-colors">
+              Cookies
             </Link>
           </div>
         </div>

@@ -247,11 +247,29 @@ config degrades to a clean 503 and the modal shows it rather than breaking. **Al
 returning 503 to every callback, which would be the second half of why no documents were ever
 captured.
 
-### A5. Legal pages (D10)
-`/privacy`, `/terms`, `/refunds`, cookie notice, footer links, and **remove the public
-`/admin` link from the footer**. Needed regardless — it unblocks Google OAuth verification
-and Stripe compliance.
-**Done when:** the pages exist, are linked, and the operator has reviewed them.
+### A5. Legal pages (D10) — ✅ written and linked, ⚠ NOT yet reviewed
+`/privacy`, `/terms`, `/refunds`, `/cookies`, all four linked from the footer, and the public
+`/admin` link removed from it.
+
+Written from what the code actually does, not from a template: the data list matches the
+registration form field for field, the processor list is the four services really in use
+(Supabase, Stripe, DocuSeal, Vercel), and the cookie notice is short because the site sets
+only `sb-*` and `admin_token` and loads no third-party tracking scripts at all — there is
+genuinely nothing else to disclose.
+
+**Operator decisions baked in as defaults — change these if they are wrong:**
+
+| Where | Value chosen |
+|---|---|
+| Privacy → retention | Payments kept 7 years; waivers kept while a claim is possible |
+| Terms → governing law | Texas; venue Harris County |
+| Terms → liability cap | Amount paid for that event |
+| Refunds → player cancels | Full refund >7 days before the first match; credit inside 7 days; none once started |
+| Refunds → team withdrawal | Not refundable once the schedule is published |
+| All pages | Trading name "Houston Premier Soccer" — no registered legal entity name is used anywhere |
+
+**Done when the operator has had them reviewed.** They are published as real pages, not
+drafts, so a lawyer's pass is the remaining step — this is not legal advice.
 
 ---
 
