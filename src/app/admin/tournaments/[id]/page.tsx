@@ -31,15 +31,16 @@ import {
   type TournamentStats,
 } from "@/lib/admin-tournaments";
 import RegistrationsList from "@/components/admin/RegistrationsList";
+import RosterScreen from "@/components/admin/RosterScreen";
 import TournamentTeamsPanel from "@/components/admin/TournamentTeamsPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { useQueryParam } from "@/lib/admin-url-state";
 import { TournamentDetailSkeleton } from "@/components/shared/skeleton";
 
-type RosterTab = "registrants" | "teams";
+type RosterTab = "roster" | "registrants" | "teams";
 
 function isRosterTab(value: string): value is RosterTab {
-  return value === "registrants" || value === "teams";
+  return value === "roster" || value === "registrants" || value === "teams";
 }
 
 export default function AdminTournamentViewPage({
@@ -60,12 +61,12 @@ function ViewContent({ id }: { id: string }) {
   const [stats, setStats] = useState<TournamentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [rosterParam, setRosterParam] = useQueryParam("roster", "registrants");
-  const rosterTab: RosterTab = isRosterTab(rosterParam)
-    ? rosterParam
-    : "registrants";
+  // The Roster screen (A3) is the default view — it is what the owner opens
+  // this page for. "Registrants" keeps the older detailed list available.
+  const [rosterParam, setRosterParam] = useQueryParam("roster", "roster");
+  const rosterTab: RosterTab = isRosterTab(rosterParam) ? rosterParam : "roster";
   const setRosterTab = (next: RosterTab) => {
-    setRosterParam(next === "registrants" ? null : next);
+    setRosterParam(next === "roster" ? null : next);
   };
 
   useEffect(() => {
@@ -218,6 +219,10 @@ function ViewContent({ id }: { id: string }) {
                   <RosterTabs value={rosterTab} onChange={setRosterTab} />
                 </div>
 
+                {rosterTab === "roster" && (
+                  <RosterScreen tournamentId={tournament.id} />
+                )}
+
                 {/* Keep Registrants mounted to preserve internal filter/sort
                     state when toggling tabs; matches the pattern used on the
                     Overview page (Phase 2). */}
@@ -248,7 +253,8 @@ function RosterTabs({
   onChange: (next: RosterTab) => void;
 }) {
   const tabs: { id: RosterTab; label: string; icon: React.ReactNode }[] = [
-    { id: "registrants", label: "Registrants", icon: <Users size={14} /> },
+    { id: "roster", label: "Roster", icon: <Users size={14} /> },
+    { id: "registrants", label: "Details", icon: <ReceiptText size={14} /> },
     { id: "teams", label: "Teams", icon: <UsersRound size={14} /> },
   ];
   return (

@@ -202,14 +202,25 @@ PostgREST 42703 and the public site and pay flow break.
 - Write `registrations.team_id` at signup.
 **Done when:** a new signup lands on a team without anyone touching admin.
 
-### A3. The Roster screen (the owner's daily driver)
-One screen per event. Every player as a row: **name · team · waiver ✓/✗ · paid ✓/✗**.
-- Search and sort; filter to unpaid or waiver-missing
-- Change someone's team from a dropdown in the row
-- Add a walk-in in about five seconds (name + phone)
-- Totals at the top: signed up / paid / waiver on file
-**Done when:** the owner can answer "who is playing Friday and who still owes me money"
-without opening a spreadsheet or a second page.
+### A3. The Roster screen (the owner's daily driver) — ✅ shipped
+`src/components/admin/RosterScreen.tsx`, backed by
+`GET/POST /api/admin/tournaments/[id]/roster`. It is the default tab on
+`/admin/tournaments/[id]`; the old detailed list is still there as "Details".
+
+- Season players (`registrations`) and one-night guests (`drop_ins`) merged into one
+  list — the `roster_entries` shape from §4, assembled in the API until B3 makes it real.
+- Totals: signed up / paid / still owes / waiver on file / no team.
+- Filters: everyone, still owes money, no waiver, no team. Search over name, phone, team.
+- Team change and paid/unpaid toggle inline on the row, optimistic so tapping through
+  a queue of people at the field doesn't stall.
+- Walk-in add takes a name and a phone and nothing else (D8). Identity is the phone
+  (D4): an existing contact with that number is reused, not duplicated.
+- Waiver shows **Override** in amber when the ✓ is only an admin tick with no document
+  behind it. 39 of 57 contact waivers are that today (§2) and a plain ✓ would hide it.
+
+**Known gap:** `registrations` still has NOT NULL on email, dob, emergency_name and
+emergency_phone, so a walk-in is written with placeholders (`@walk-in.hps.local`,
+`1900-01-01`, empty strings) and the row is marked "Needs details". B3 removes the need.
 
 ### A4. In-person waiver signing (D8)
 From a Roster row: **"Sign waiver now"** opens the signing flow on the owner's laptop for the
