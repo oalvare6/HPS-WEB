@@ -9,6 +9,7 @@ import {
   upsertContactByEmail,
 } from "@/lib/contacts";
 import { linkRegistrationToContact } from "@/lib/registration-contact-linking";
+import { acceptsRegistrations } from "@/lib/tournament-state";
 import { buildPayResumeUrl } from "@/lib/pay-resume-url";
 
 type RegistrationType = "adult" | "youth";
@@ -62,21 +63,26 @@ async function resolveTournament(
   if (requested && UUID_RE.test(requested)) {
     const { data } = await supabaseAdmin
       .from("tournaments")
-      .select("id, title, slug, registration_open")
+      .select(
+        "id, title, slug, registration_open, payments_open, status, start_date, end_date"
+      )
       .eq("id", requested)
       .maybeSingle();
-    if (data?.id && data.registration_open && data.slug) {
+    if (data?.id && data.slug && acceptsRegistrations(data)) {
       return { id: data.id, title: data.title, slug: data.slug };
     }
   }
 
-  const { data: openOnes } = await supabaseAdmin
+  const { data: candidates } = await supabaseAdmin
     .from("tournaments")
-    .select("id, title, slug")
-    .eq("registration_open", true)
-    .limit(2);
+    .select(
+      "id, title, slug, registration_open, payments_open, status, start_date, end_date"
+    )
+    .eq("registration_open", true);
 
-  if (openOnes && openOnes.length === 1 && openOnes[0].slug) {
+  const openOnes = (candidates ?? []).filter((t) => acceptsRegistrations(t));
+
+  if (openOnes.length === 1 && openOnes[0].slug) {
     return {
       id: openOnes[0].id,
       title: openOnes[0].title,

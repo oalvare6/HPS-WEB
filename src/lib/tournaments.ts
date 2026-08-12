@@ -1,4 +1,10 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import {
+  acceptsPayments,
+  acceptsRegistrations,
+  isPastEvent,
+  resolveEventState,
+} from "@/lib/tournament-state";
 import type {
   MatchScorer,
   MatchWithDetails,
@@ -86,7 +92,8 @@ export async function getRegistrationOpenTournaments(): Promise<PublicTournament
       console.error("[tournaments] open fetch failed:", error.message, error);
       return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
-    return { tournaments: (data ?? []) as Tournament[], loadError: null };
+    const open = ((data ?? []) as Tournament[]).filter((t) => acceptsRegistrations(t));
+    return { tournaments: open, loadError: null };
   } catch (err) {
     console.error("[tournaments] open fetch failed:", err);
     return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
@@ -111,7 +118,8 @@ export async function getPaymentsOpenTournaments(): Promise<PublicTournamentsRes
       console.error("[tournaments] payments-open fetch failed:", error.message, error);
       return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
-    return { tournaments: (data ?? []) as Tournament[], loadError: null };
+    const payable = ((data ?? []) as Tournament[]).filter((t) => acceptsPayments(t));
+    return { tournaments: payable, loadError: null };
   } catch (err) {
     console.error("[tournaments] payments-open fetch failed:", err);
     return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
@@ -164,16 +172,18 @@ export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResul
       return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
 
-    if (pinned && pinned.length > 0) {
-      return { tournaments: pinned as Tournament[], loadError: null };
+    // A pinned event that has already happened must not headline the homepage,
+    // however long it stays flagged as featured.
+    const livePinned = ((pinned ?? []) as Tournament[]).filter((t) => !isPastEvent(t));
+    if (livePinned.length > 0) {
+      return { tournaments: livePinned, loadError: null };
     }
 
     const { data: fallback, error: fallbackErr } = await supabaseAdmin
       .from("tournaments")
       .select("*")
       .in("status", ["upcoming", "ongoing"])
-      .order("start_date", { ascending: true })
-      .limit(1);
+      .order("start_date", { ascending: true });
 
     if (fallbackErr) {
       console.error(
@@ -183,7 +193,10 @@ export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResul
       );
       return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
-    return { tournaments: (fallback ?? []) as Tournament[], loadError: null };
+    const nextUp = ((fallback ?? []) as Tournament[])
+      .filter((t) => !isPastEvent(t))
+      .slice(0, 1);
+    return { tournaments: nextUp, loadError: null };
   } catch (err) {
     console.error("[tournaments] featured fetch failed:", err);
     return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
@@ -220,7 +233,7 @@ export async function getPayableTournamentBySlug(
     const { data, error } = await supabaseAdmin
       .from("tournaments")
       .select(
-        "id, title, slug, format, recurrence, time_start, time_end, location, entry_fee_cents, drop_in_fee_cents, payments_open, status"
+        "id, title, slug, format, recurrence, time_start, time_end, location, entry_fee_cents, drop_in_fee_cents, payments_open, registration_open, status, start_date, end_date"
       )
       .eq("slug", slug)
       .maybeSingle();
@@ -229,8 +242,7 @@ export async function getPayableTournamentBySlug(
       return null;
     }
     if (!data) return null;
-    if (data.status === "cancelled") return null;
-    if (!data.payments_open) return null;
+    if (!acceptsPayments(data)) return null;
     return data as PayableTournament;
   } catch (err) {
     console.error("[tournaments] payable-by-slug failed:", err);
@@ -285,17 +297,22 @@ export async function getTournamentUpdates(
  */
 export async function getRecentEvents(limit = 3): Promise<RecentEventsResult> {
   try {
+    // Deliberately NOT `.eq("status", "completed")`: an event whose last day has
+    // passed belongs in the archive whether or not anyone marked it completed.
+    // The date is the authority, so the archive fills itself.
     const { data, error } = await supabaseAdmin
       .from("tournaments")
       .select("*")
-      .eq("status", "completed")
-      .order("start_date", { ascending: false })
-      .limit(limit);
+      .neq("status", "cancelled")
+      .order("start_date", { ascending: false });
     if (error) {
       console.error("[tournaments] recent fetch failed:", error.message, error);
       return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
-    return { tournaments: (data ?? []) as Tournament[], loadError: null };
+    const finished = ((data ?? []) as Tournament[])
+      .filter((t) => resolveEventState(t) === "finished")
+      .slice(0, limit);
+    return { tournaments: finished, loadError: null };
   } catch (err) {
     console.error("[tournaments] recent fetch failed:", err);
     return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };

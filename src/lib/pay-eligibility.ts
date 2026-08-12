@@ -6,6 +6,7 @@ import {
   normalizeEmail,
 } from "@/lib/contacts";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { acceptsPayments } from "@/lib/tournament-state";
 import type {
   PayEligibilityStatus,
   PayEligibilitySuccessBody,
@@ -325,7 +326,7 @@ export async function runPayEligibilityCheck(
 
   const { data: tournament, error: tournamentErr } = await supabaseAdmin
     .from("tournaments")
-    .select("id, payments_open, status")
+    .select("id, payments_open, registration_open, status, start_date, end_date")
     .eq("id", input.tournamentId)
     .maybeSingle();
 
@@ -342,7 +343,7 @@ export async function runPayEligibilityCheck(
     return { ok: false, httpStatus: 404, error: "Tournament not found." };
   }
 
-  if (!tournament.payments_open || tournament.status === "cancelled") {
+  if (!acceptsPayments(tournament)) {
     return {
       ok: false,
       httpStatus: 400,

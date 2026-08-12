@@ -3,6 +3,7 @@ import { getStripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { upsertContactByEmail, normalizeEmail } from "@/lib/contacts";
 import { verifyPayResumeToken } from "@/lib/app-signing";
+import { acceptsPayments } from "@/lib/tournament-state";
 import {
   isWorldCupTournamentSlug,
   parseCheckoutPayKind,
@@ -62,7 +63,7 @@ async function resolveTournamentCheckout(
   const { data: t, error } = await supabaseAdmin
     .from("tournaments")
     .select(
-      "id, title, slug, entry_fee_cents, drop_in_fee_cents, stripe_price_id, payments_open, status"
+      "id, title, slug, entry_fee_cents, drop_in_fee_cents, stripe_price_id, payments_open, registration_open, status, start_date, end_date"
     )
     .eq("id", tournamentId)
     .maybeSingle();
@@ -71,7 +72,8 @@ async function resolveTournamentCheckout(
     return { error: "Tournament not found.", status: 404 };
   }
 
-  if (!t.payments_open) {
+  // Calendar-aware: refuses a past event even if `payments_open` was left on.
+  if (!acceptsPayments(t)) {
     return { error: "This tournament is not currently accepting payments.", status: 400 };
   }
 
@@ -195,7 +197,7 @@ async function resolveDropInCheckout(
   const { data, error } = await supabaseAdmin
     .from("drop_ins")
     .select(
-      "id, amount_cents, payment_status, tournament_id, tournaments ( id, title, payments_open )"
+      "id, amount_cents, payment_status, tournament_id, tournaments ( id, title, payments_open, registration_open, status, start_date, end_date )"
     )
     .eq("id", dropInId)
     .maybeSingle();
@@ -214,7 +216,7 @@ async function resolveDropInCheckout(
 
   const tour = Array.isArray(data.tournaments) ? data.tournaments[0] : data.tournaments;
 
-  if (tour && !tour.payments_open) {
+  if (tour && !acceptsPayments(tour)) {
     return { error: "This tournament is not currently accepting payments.", status: 400 };
   }
 
