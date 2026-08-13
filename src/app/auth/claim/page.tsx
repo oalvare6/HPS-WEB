@@ -62,8 +62,8 @@ export default async function AuthClaimPage() {
                 You&apos;re signed in
               </h2>
               <p className="text-sm text-zinc-400 mt-1">
-                Next time you visit, you can sign in with a magic link, your
-                password, or Google / Apple — whichever you prefer.
+                Next time you visit, sign in with Google or Apple using this
+                same email address and you&apos;ll land right back here.
               </p>
             </div>
           </div>
@@ -88,10 +88,10 @@ export default async function AuthClaimPage() {
               body="Re-register in one click for any future tournament — we'll skip the waiver if it's still valid."
             />
             <ClaimCallout
-              href="/me/security"
-              icon={<ShieldCheck size={18} />}
-              title="Set a password"
-              body="Optional — add a password if you want a second way back into your account."
+              href="/register"
+              icon={<Trophy size={18} />}
+              title="Sign up for the next one"
+              body="Pick your team and pay — we already have your details and your waiver."
             />
           </div>
 

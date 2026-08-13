@@ -133,19 +133,18 @@ export const getCurrentPlayer = cache(async (): Promise<CurrentPlayer | null> =>
 });
 
 /**
- * Does the given email already have an `auth.users` row? Used by the
- * post-checkout claim flow to decide between offering a "Claim your
- * account" magic-link card vs. nudging the player to sign in.
+ * Does the given email already have an `auth.users` row? Used by `/pay/success`
+ * to decide whether to offer a signed-out payer the "set up your account"
+ * Google/Apple card, or stay quiet because they already have one.
  *
  * Implementation note: GoTrue's admin API doesn't expose a typed
  * `getUserByEmail` in supabase-js. We page through `listUsers` (capped at
- * 1000 per page) and filter in JS. For HPS launch scale this is a single
- * round-trip; revisit when the user count climbs.
+ * 1000 per page) and filter in JS. For HPS scale this is a single round-trip;
+ * revisit when the user count climbs.
  *
- * Failures (missing service-role key, network blip, GoTrue downtime)
- * return `false`. The downstream UX of showing the claim card to a user
- * who actually has an account is harmless: `signInWithOtp` on an existing
- * user simply sends a normal magic link.
+ * Failures (missing service-role key, network blip, GoTrue downtime) return
+ * `false`. Showing the card to someone who already has an account is harmless —
+ * signing in with Google links to the existing row rather than making a new one.
  */
 export async function hasAuthUserForEmail(email: string): Promise<boolean> {
   const normalized = normalizeEmail(email);

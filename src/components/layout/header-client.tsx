@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { LogOut, Menu, ShieldCheck, Trophy, User, X } from "lucide-react";
+import { LogOut, Menu, Trophy, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusIndicatorCompact } from "@/components/shared/status-indicator";
 import { AccountMenu } from "@/components/layout/AccountMenu";
@@ -181,14 +181,6 @@ function MobileAccountSection({
         >
           <Trophy size={16} />
           My registrations
-        </Link>
-        <Link
-          href="/me/security"
-          onClick={onNavigate}
-          className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
-        >
-          <ShieldCheck size={16} />
-          Security
         </Link>
         <form action="/auth/signout" method="post" onSubmit={onNavigate}>
           <button

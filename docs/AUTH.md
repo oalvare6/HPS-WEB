@@ -4,13 +4,21 @@ This document describes the two authentication systems that coexist in the HPS
 web app, as they ship after Phase 15. The split is deliberate — do not unify
 them without an explicit approved phase.
 
+> ⚠ **Superseded in part by REBUILD-PLAN §A8 (2026-08-12).** Player sign-in is now
+> **Google and Apple only** (D5). Magic link, password, forgot/reset password,
+> `/me/security` and the post-checkout magic-link claim have all been removed. The
+> sections below that describe them are kept only as a record of what used to exist —
+> the code is gone. Admin auth is unchanged and still accurate.
+
 ## TL;DR
 
 - **Admin** is one shared identity in env vars, gated by an HMAC cookie.
   Unchanged since the project began.
-- **Players** authenticate against Supabase Auth via four entry points: magic
-  link, password, Google OAuth, and Apple OAuth. A fifth path — claim-an-
-  account-after-checkout — wraps magic link with post-payment copy.
+- **Players** authenticate against Supabase Auth via **Google or Apple OAuth**. Nothing
+  else. Both providers are still pending configuration in the Supabase dashboard — as of
+  2026-08-12 production has 28 auth users, all provider `email`, zero OAuth.
+- **Signing in is optional.** Registration and payment both work signed-out; sign-in gates
+  only `/me` and the one-tap returning-player path on `/register`.
 - The two systems share no code, no cookies, and no users. A logged-in player
   who is also the admin must log in twice (once per surface).
 

@@ -134,6 +134,11 @@ export type EnrollContactInTournamentInput = {
   contact: Contact;
   tournamentId: string;
   waiverType: PayEligibilityWaiverType;
+  /**
+   * Team picked at signup (D3). Callers must have already checked the team
+   * belongs to this event — see `resolveTeamIdForTournament`.
+   */
+  teamId?: string | null;
 };
 
 export type EnrollContactInTournamentResult =
@@ -170,6 +175,7 @@ export async function enrollContactInTournament(
     .from("registrations")
     .insert({
       tournament_id: tournamentId,
+      team_id: input.teamId ?? null,
       contact_id: contact.id,
       registration_type: waiverType,
       first_name: contact.first_name,

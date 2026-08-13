@@ -101,3 +101,26 @@ Format:
 - [rebuild] Track A deployed to https://www.houstonpremiersoccer.com 2026-08-12, `main` @ `aaab13c` (six commits fast-forwarded). Migration order held: `is_draft` was already applied to production before the code shipped. Verified live: 10/10 public routes 200, `/register` shows the 3rd Ward FC picker, four legal pages render with address + contact email from site settings, no `/admin` link on any public page, no console errors, `/events` unaffected by the new draft filtering — discovered 2026-08-12
 - [rebuild] **A locally-signed admin cookie is rejected by production** (different `APP_SIGNING_SECRET`), so the admin UI could not be exercised against the live site from here. Route deployment was confirmed indirectly instead: the new roster and sign-waiver routes return 401 while `/api/admin/nonexistent-route` returns 404. The Roster screen, Event status dropdown and in-person signing have therefore never been clicked on production — the owner has to do that pass — discovered 2026-08-12
 - [rebuild] Note for future sessions: `NEXT_PUBLIC_SITE_URL` in `.env.local` is `http://localhost:3000`, and the apex domain 307s to `www.`. Use `https://www.houstonpremiersoccer.com` when hitting production directly or every request costs an extra redirect hop — discovered 2026-08-12
+
+## 2026-08-12 — one front door, in-app waivers, Google/Apple-only sign-in
+
+- **Google/Apple providers are not configured in Supabase.** Production has 28 auth
+  users, all provider `email`, zero `google`/`apple` — the OAuth buttons have never
+  succeeded. Sign-in is now Google/Apple only, so until the dashboard config is finished
+  nobody can sign in at all. Not player-blocking (register and pay both work signed-out),
+  but it is the top item in REBUILD-PLAN §9.
+- **The waiver text has not been reviewed.** `src/lib/waiver-text.ts` is what players
+  legally sign. Same standing as the A5 legal pages — written from what the business does,
+  not reviewed by anyone qualified. Bump `WAIVER_TEXT_VERSION` on any clause change.
+- **In-app signatures are typed-name, not drawn.** Enough to produce a dated record with
+  IP and waiver version, which is strictly more than the 39 `admin_override` ticks it
+  replaces, but weaker than a countersigned PDF. Revisit when the PDF service returns.
+- **`/waiver/<id>` is capability-secured** — unguessable UUID, noindex, no auth. Same
+  posture as a DocuSeal document link. It shows the signer's own IP.
+- **Old `type=recovery` auth links now land on `/me`** instead of a reset page. Harmless
+  (they still carry a valid session) but the wording in any old email is now wrong.
+- **`registrations` still has NOT NULL on email/dob/emergency fields**, so the walk-in
+  placeholder workaround from A3 is unchanged. B3 removes the need.
+- **Youth quick-join is never offered.** A contact's waiver has one type; an adult waiver
+  on file does not satisfy a youth signup, so those players get the full form. Correct,
+  but worth knowing before someone reports it as a bug.

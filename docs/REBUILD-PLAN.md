@@ -286,6 +286,80 @@ genuinely nothing else to disclose.
 **Done when the operator has had them reviewed.** They are published as real pages, not
 drafts, so a lawyer's pass is the remaining step — this is not legal advice.
 
+### A6. One front door for signing up — ✅ shipped 2026-08-12
+
+**The problem, precisely.** Community Cup has `payments_open = true`. That made
+`tournamentPrimaryCta` return **"Pay & Play" → `/pay`**, so the button on the live
+event page opened a bare email box titled "Join this event" — no name, no team, no
+waiver step. Anyone it did not recognise was told *"Sign your facility waiver first"* and
+sent to `/register`, a different screen with a tournament dropdown and a team picker.
+**One event, two front doors, and a loop between them.**
+
+- `tournamentPrimaryCta` now returns the **sign-up** link whenever sign-ups are open,
+  whatever the payment flag says. `/pay` is only offered when sign-ups are closed and the
+  only people it can serve are those already on the roster.
+- `/pay?tournament=<slug>` **redirects to `/register?tournament=<slug>`** when the event
+  takes sign-ups. Links already texted out that carry `registrationId` + `payToken` skip
+  the redirect and still land on PayForm — that is what the token is for.
+- `/register` is now **one screen with five states**, resolved by
+  `src/lib/signup-state.ts`: closed · already_paid · owes_payment · needs_waiver ·
+  quick_join · full_signup. It never shows a form to someone we already know.
+- **The D5 flow is real:** signed in + valid waiver → "waiver good through *date*" → team
+  dropdown → **Join and pay** (`POST /api/register/join`). No form, no re-signing.
+  **56 contacts qualify for this today.**
+- The tournament dropdown is gone when the event is already known, and a lone open event
+  is auto-selected. Nobody picks from a list of one again.
+
+Tests: `npx tsx scripts/test-signup-state.ts` — 13 cases covering the whole branch table,
+including "valid waiver but the registration row hasn't caught up" (pay, don't re-sign)
+and "adult waiver on file, signing up a youth" (still needs the youth waiver).
+
+### A7. In-app waiver signing — ✅ shipped 2026-08-12, migration applied
+
+The placeholder while the PDF service is sorted out. **All four `DOCUSEAL_*` vars are
+empty**, and the old `/api/register` posted to DocuSeal regardless — so every signup ended
+on *"Registration saved but waiver could not be created."* A player who cannot sign cannot
+play, so there is now a fallback rather than a dead end.
+
+- `isDocuSealConfigured()` decides per request. DocuSeal is used when configured;
+  otherwise the player lands on `/register/waiver/[id]` — read the waiver, type your full
+  name, tick the box, sign. Same fallback on the admin Roster's **"Sign now"** (D8), which
+  used to return a 503 the person at the field could do nothing with.
+- Signatures go to **`waiver_signatures`** (name, timestamp, IP, user-agent, waiver
+  version) and `waiver_document_url` points at **`/waiver/<id>`** — a printable record page
+  rendering the exact clauses that were on screen, looked up by the *stored* version.
+- **`waiver_document_url` is populated.** §2 records that column NULL for all 104 rows.
+  Verified end to end: registration and contact both carry the link.
+- The waiver text lives in `src/lib/waiver-text.ts` behind `WAIVER_TEXT_VERSION`.
+  **Bump the version whenever a clause changes** — old rows must keep pointing at the
+  wording their signer actually agreed to.
+- Authorization is the existing HMAC pay-resume token, so the waiver link is exactly as
+  hard to forge as the pay link and there is no second token scheme. Verified: a forged
+  token 403s, a mismatched name 400s (adults only — a youth waiver is signed by a parent),
+  and signing twice is idempotent rather than a second row.
+
+⚠ **Migration `20260812210000_create_waiver_signatures.sql` was applied to production on
+2026-08-12.** It creates `waiver_signatures` and **widens `contacts_waiver_source_check`**
+to allow `'in_app'` — without that second half every signature would 23514 at the contact
+promotion step, silently leaving another waiver with no document behind it.
+
+### A8. Google/Apple-only sign-in (D5) — ✅ shipped 2026-08-12
+
+Magic link and password sign-in are gone, along with `/login/forgot-password`,
+`/auth/reset`, `/me/security`, `PasswordForm`, `MagicLinkForm`, `LoginTabs` and
+`ClaimAccountForm`. The Stripe webhook no longer emails a Supabase invite — that invite
+minted an email-identity account whose only key was the emailed link, so under
+Google/Apple-only it would have produced accounts nobody could open twice.
+`/pay/success` offers Google/Apple directly instead.
+
+**The thing to hold on to before touching this:** signing in is **not required to
+register or pay**. Both work signed-out. Sign-in only gates `/me` and the one-tap
+returning-player path, which is what makes two buttons a safe answer.
+
+⚠ **This is live-blocked on operator config.** Production has **28 auth users, every one
+provider `email`, zero `google`, zero `apple`** — the OAuth buttons have never once
+succeeded, because the providers were never finished in the Supabase dashboard. See §9.
+
 ---
 
 ## Track B — after the season is running
@@ -462,18 +536,36 @@ new discovery.
 
 ## 9. What the operator still has to do
 
-Track A is deployed, but four things need a human with production access:
+**#1 is now the blocker.** Sign-in is Google/Apple only, and neither provider has ever
+worked in production.
 
-1. **Sign one waiver in person, end to end.** A4 has never made a single DocuSeal call — the
-   local `DOCUSEAL_*` vars are empty strings. Open the Roster, press "Sign now" on a Community
-   Cup player, sign it, press "Done — check". If the ✓ appears and `waiver_document_url` fills
-   in, A4 is real. Do this before the 21st, not at the field on the 21st.
-2. **Confirm `DOCUSEAL_WEBHOOK_SECRET` is set in Vercel.** If it is missing the webhook
-   returns 503 and silently processes nothing, which together with the sync-waivers bug fixed
-   in A4 fully explains 97 signed waivers and zero stored documents.
-3. **Create the remaining Community Cup teams.** Only 3rd Ward FC exists, so every signup
-   currently picks it or "Not sure yet".
-4. **Get the legal pages reviewed.** They are published and live. The defaults chosen are
+1. **Finish the Google provider, then Apple, in the Supabase dashboard.**
+   Full steps are in [`docs/AUTH-CONFIG.md`](./AUTH-CONFIG.md) §8 and §9. The short
+   version for Google: create a Web-application OAuth client in Google Cloud Console with
+   redirect URI `https://jqkiswwunrnyqjgroqtn.supabase.co/auth/v1/callback`, paste the
+   Client ID and Secret into Supabase → Authentication → Providers → Google, and save.
+   Google's consent screen wants a privacy-policy URL — that is
+   `https://www.houstonpremiersoccer.com/privacy`, which A5 shipped, so the thing that
+   used to block verification no longer does.
+   **Leave Email → "Confirm email" enabled**; that is what merges the 28 existing
+   `email` accounts onto the same person when they sign in with Google
+   ([`docs/AUTH-CONFIG.md`](./AUTH-CONFIG.md) §7).
+   Apple additionally needs a $99/yr developer account and a client secret that is a JWT
+   expiring every ~6 months. **Ship Google first; it is the one that unblocks players.**
+   *Nobody is locked out of Community Cup while this is pending — registration and payment
+   both work signed-out. What is lost until then is the one-tap returning-player path.*
+2. **Sign one waiver end to end.** In-app signing (A7) is verified, so this now works
+   without DocuSeal. Open the Roster, press "Sign now" on a Community Cup player, sign it.
+   The ✓ should appear and `waiver_document_url` should fill in with a `/waiver/<id>` link.
+3. **Read the waiver text before the 21st** — `src/lib/waiver-text.ts`. It is written from
+   what this business actually does, but it is the document players will legally sign, and
+   nobody has reviewed it. Same standing as the A5 legal pages: not legal advice.
+4. **Confirm `DOCUSEAL_WEBHOOK_SECRET` is set in Vercel** *if and when* DocuSeal is
+   reconnected. While the `DOCUSEAL_*` vars are empty the app uses in-app signing and never
+   calls DocuSeal at all.
+5. **Create the remaining Community Cup teams.** 3rd Ward FC and Heights FC exist now;
+   every signup picks one of those or "Not sure yet".
+6. **Get the legal pages reviewed.** They are published and live. The defaults chosen are
    listed under A5 — retention, governing law, liability cap, refund windows, and the absence
    of a registered entity name.
 

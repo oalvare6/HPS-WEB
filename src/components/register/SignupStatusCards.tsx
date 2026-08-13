@@ -1,0 +1,161 @@
+import Link from "next/link";
+import { CheckCircle2, CreditCard, PenLine } from "lucide-react";
+import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
+
+/**
+ * The "we already know where you stand" states of the signup screen.
+ *
+ * These exist so a player who is already on the roster never sees a sign-up
+ * form again. Before this, the only way to find out you were already registered
+ * was to fill the whole form a second time, or to type your email into a
+ * separate `/pay` screen that spoke a different language about the same event.
+ *
+ * Server components on purpose — every link here is minted server-side with a
+ * signed token, so there is nothing for the client to compute.
+ */
+
+const cardClass = "dashboard-card p-6 md:p-8 space-y-5";
+
+export function AlreadyPaidCard({ tournamentTitle }: { tournamentTitle: string }) {
+  return (
+    <div className={cardClass}>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+          <CheckCircle2 size={20} />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-white">You&apos;re all set</h2>
+          <p className="text-sm text-zinc-400">
+            You&apos;re on the roster for{" "}
+            <span className="text-zinc-200">{tournamentTitle}</span> and paid up.
+            See you on the field.
+          </p>
+        </div>
+      </div>
+      <div className="border-t border-border-token pt-5 space-y-3">
+        <p className="text-sm text-zinc-400">
+          Schedules and last-minute changes go out on WhatsApp.
+        </p>
+        <WhatsAppCommunityLinkFromSite variant="button" />
+        <p className="text-xs text-zinc-500 text-center">
+          <Link href="/me" className="underline underline-offset-2">
+            View my registrations
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function OwesPaymentCard({
+  tournamentTitle,
+  payHref,
+  entryFeeLabel,
+  teamName,
+}: {
+  tournamentTitle: string;
+  payHref: string;
+  entryFeeLabel: string | null;
+  teamName: string | null;
+}) {
+  return (
+    <div className={cardClass}>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-brand/15 text-brand flex items-center justify-center shrink-0">
+          <CheckCircle2 size={20} />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-white">
+            You&apos;re signed up for {tournamentTitle}
+          </h2>
+          <p className="text-sm text-zinc-400">
+            {teamName ? (
+              <>
+                Playing for <span className="text-zinc-200">{teamName}</span>. One
+                thing left — the entry fee.
+              </>
+            ) : (
+              <>Your waiver is done. One thing left — the entry fee.</>
+            )}
+          </p>
+        </div>
+      </div>
+      <div className="border-t border-border-token pt-5 space-y-3">
+        <Link
+          href={payHref}
+          className="btn-primary w-full h-12 inline-flex items-center justify-center gap-2"
+        >
+          <CreditCard size={16} />
+          Pay {entryFeeLabel ?? "entry fee"}
+        </Link>
+        <p className="text-xs text-zinc-500 text-center">
+          Paying at the field instead? Tell us there and we&apos;ll mark you paid.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function NeedsWaiverCard({
+  tournamentTitle,
+  waiverHref,
+}: {
+  tournamentTitle: string;
+  waiverHref: string;
+}) {
+  return (
+    <div className={cardClass}>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
+          <PenLine size={20} />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold text-white">
+            One thing left — your waiver
+          </h2>
+          <p className="text-sm text-zinc-400">
+            You&apos;re on the roster for{" "}
+            <span className="text-zinc-200">{tournamentTitle}</span>, but we
+            don&apos;t have your signed waiver yet. It takes about a minute, and
+            it covers you for the next 365 days.
+          </p>
+        </div>
+      </div>
+      <div className="border-t border-border-token pt-5 space-y-3">
+        <Link
+          href={waiverHref}
+          className="btn-primary w-full h-12 inline-flex items-center justify-center gap-2"
+        >
+          <PenLine size={16} />
+          Sign my waiver
+        </Link>
+        <p className="text-xs text-zinc-500 text-center">
+          You can&apos;t play without it — no exceptions, for everyone&apos;s sake.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function ClosedCard({ tournamentTitle }: { tournamentTitle: string | null }) {
+  return (
+    <div className={cardClass}>
+      <h2 className="text-lg font-semibold text-white">
+        Sign-ups aren&apos;t open right now
+      </h2>
+      <p className="text-sm text-zinc-400">
+        {tournamentTitle
+          ? `${tournamentTitle} isn't taking sign-ups at the moment.`
+          : "Nothing is open for sign-ups at the moment."}{" "}
+        New events go up regularly — check the events page or join WhatsApp and
+        we&apos;ll tell you when the next one opens.
+      </p>
+      <div className="flex flex-col gap-3 pt-2">
+        <Link href="/events" className="btn-primary w-full justify-center">
+          See all events
+        </Link>
+        <WhatsAppCommunityLinkFromSite variant="button" />
+      </div>
+    </div>
+  );
+}

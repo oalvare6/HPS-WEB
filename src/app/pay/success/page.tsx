@@ -7,7 +7,7 @@ import {
   Home,
   Trophy,
 } from "lucide-react";
-import { ClaimAccountForm } from "@/components/pay/ClaimAccountForm";
+import { ClaimAccountPrompt } from "@/components/pay/ClaimAccountPrompt";
 import { normalizeEmail } from "@/lib/contacts";
 import {
   getCurrentPlayer,
@@ -155,7 +155,7 @@ export default async function PaySuccessPage({
               </Link>
             </div>
           ) : claimEligible && verifiedEmail ? (
-            <ClaimAccountForm email={verifiedEmail} />
+            <ClaimAccountPrompt email={verifiedEmail} />
           ) : null}
         </div>
       </section>

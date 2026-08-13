@@ -31,12 +31,13 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   // Player-facing routes that REQUIRE a session. Everything else under
-  // /auth/* (callback, reset, claim, signout), /login, /pay/*, and
-  // /api/me/* is intentionally NOT gated here — those pages read the
-  // session themselves and surface route-specific error states
-  // (e.g. `/auth/reset` shows `recovery_expired` rather than a generic
-  // `/login?next=/auth/reset` bounce). Do not add `/auth/*` here without
-  // changing those pages' error UX first.
+  // /auth/* (callback, claim, signout), /login, /register/*, /pay/* and
+  // /api/me/* is intentionally NOT gated here — those pages read the session
+  // themselves and decide what to show.
+  //
+  // `/register` and `/pay` in particular must stay open to anonymous visitors:
+  // signing up and paying do not require an account, and gating them would put
+  // a sign-in wall in front of the only thing the business needs to happen.
   const isProtected = pathname === "/me" || pathname.startsWith("/me/");
 
   if (isProtected && !user) {

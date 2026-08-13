@@ -80,6 +80,12 @@ export type RecordSignedWaiverInput = {
   /** When DocuSeal says it was signed. Defaults to now. */
   completedAt?: string | null;
   documentUrl?: string | null;
+  /**
+   * How we learned about the signature. Must be one of the values allowed by
+   * `contacts_waiver_source_check` — see
+   * supabase/migrations/20260812210000_create_waiver_signatures.sql.
+   */
+  source?: "docuseal" | "in_app";
 };
 
 export type RecordSignedWaiverResult = {
@@ -133,7 +139,7 @@ export async function recordSignedWaiver(
     const contactPatch: Record<string, unknown> = {
       waiver_signed_at: signedAt,
       waiver_expires_at: expiresAt,
-      waiver_source: "docuseal",
+      waiver_source: input.source ?? "docuseal",
     };
     if (input.waiverType) contactPatch.waiver_type = input.waiverType;
     if (documentUrl) contactPatch.waiver_document_url = documentUrl;
@@ -155,6 +161,103 @@ export async function recordSignedWaiver(
   }
 
   return { ok: true, signedAt, expiresAt, documentUrl };
+}
+
+/**
+ * Is DocuSeal actually usable right now? All four vars are empty strings in
+ * `.env.local` (REBUILD-PLAN §A4), so every DocuSeal path is unreachable
+ * locally. Rather than failing at the field, callers use this to fall back to
+ * in-app signing — the placeholder that keeps players able to sign at all.
+ */
+export function isDocuSealConfigured(waiverType: string): boolean {
+  const key = process.env.DOCUSEAL_API_KEY?.trim();
+  return Boolean(key) && templateIdFor(waiverType) !== null;
+}
+
+export type RecordInAppSignatureInput = {
+  registrationId: string;
+  contactId: string | null;
+  waiverType: "adult" | "youth";
+  /** Exactly what the signer typed. Stored verbatim. */
+  signedName: string;
+  signerRelationship?: string | null;
+  ip?: string | null;
+  userAgent?: string | null;
+  waiverVersion: string;
+  /** Absolute site origin, so the stored document URL is a real link. */
+  siteOrigin: string;
+};
+
+export type RecordInAppSignatureResult =
+  | { ok: true; signatureId: string; signedAt: string; expiresAt: string | null; documentUrl: string }
+  | { ok: false; error: string };
+
+/**
+ * Write down an in-app waiver signature, then reuse `recordSignedWaiver` for the
+ * registration + contact side so in-app and DocuSeal converge on one code path.
+ *
+ * The signature row is inserted *first* and deliberately: if the registration
+ * update then fails, we are left with a recorded signature and an unmarked
+ * registration, which an operator can see and fix. The reverse order would give
+ * us a registration claiming a waiver that no row backs up — the exact state
+ * production is already in for 104 rows, and not one we are going to recreate.
+ */
+export async function recordInAppSignature(
+  input: RecordInAppSignatureInput
+): Promise<RecordInAppSignatureResult> {
+  const signedAt = new Date().toISOString();
+
+  const { data: signature, error: sigErr } = await supabaseAdmin
+    .from("waiver_signatures")
+    .insert({
+      registration_id: input.registrationId,
+      contact_id: input.contactId,
+      waiver_type: input.waiverType,
+      signed_name: input.signedName,
+      signed_at: signedAt,
+      signer_relationship: input.signerRelationship ?? null,
+      ip: input.ip ?? null,
+      user_agent: input.userAgent ?? null,
+      waiver_version: input.waiverVersion,
+    })
+    .select("id")
+    .single();
+
+  if (sigErr || !signature) {
+    console.error("[waiver-capture] signature insert failed:", sigErr?.message);
+    return {
+      ok: false,
+      error:
+        "We couldn't record your signature. Please try again, or ask us to sign you in at the field.",
+    };
+  }
+
+  const documentUrl = `${input.siteOrigin.replace(/\/$/, "")}/waiver/${signature.id}`;
+
+  const recorded = await recordSignedWaiver({
+    registrationId: input.registrationId,
+    contactId: input.contactId,
+    waiverType: input.waiverType,
+    submissionId: null,
+    completedAt: signedAt,
+    documentUrl,
+    source: "in_app",
+  });
+
+  if (!recorded.ok) {
+    return {
+      ok: false,
+      error: "We recorded your signature but couldn't finish your registration. Please contact us.",
+    };
+  }
+
+  return {
+    ok: true,
+    signatureId: signature.id,
+    signedAt: recorded.signedAt,
+    expiresAt: recorded.expiresAt,
+    documentUrl,
+  };
 }
 
 /** Template id for a waiver type, from env. */
