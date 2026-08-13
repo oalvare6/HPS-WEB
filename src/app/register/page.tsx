@@ -1,116 +1,369 @@
-import { Section, SectionHeader } from "@/components/shared/section";
+import Link from "next/link";
+import { CalendarDays, MapPin, Trophy } from "lucide-react";
+import { Section } from "@/components/shared/section";
 import {
   RegistrationForm,
   type RegistrationPrefill,
 } from "@/components/register/RegistrationForm";
-import { getRegistrationOpenTournaments, getTeamsByTournament } from "@/lib/tournaments";
+import { QuickJoinCard } from "@/components/register/QuickJoinCard";
+import {
+  AlreadyPaidCard,
+  ClosedCard,
+  NeedsWaiverCard,
+  OwesPaymentCard,
+} from "@/components/register/SignupStatusCards";
+import { OAuthButtons } from "@/components/auth/OAuthButtons";
+import {
+  getRegistrationOpenTournaments,
+  getTeamsByTournament,
+  getTournamentBySlug,
+} from "@/lib/tournaments";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { isContactWaiverValid } from "@/lib/contacts";
+import { supabaseAdmin } from "@/lib/supabase-admin";
+import { createPayResumeToken } from "@/lib/app-signing";
+import { buildPayResumePath, buildWaiverSignPath } from "@/lib/pay-resume-url";
+import { acceptsPayments, acceptsRegistrations } from "@/lib/tournament-state";
+import {
+  defaultWaiverTypeFor,
+  resolveSignupState,
+  type SignupRegistrationSnapshot,
+} from "@/lib/signup-state";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
-import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
+import type { Tournament } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ tournament?: string; type?: string }>;
 
-function parsePreselectedType(
-  raw: string | undefined
-): "adult" | "youth" | null {
-  if (raw === "adult" || raw === "youth") return raw;
-  return null;
-}
-
+/**
+ * The one front door for signing up to anything.
+ *
+ * There used to be two. A tournament page with `payments_open` sent every
+ * visitor to `/pay`, which asked for an email and — for anyone it did not
+ * recognise — told them to sign a waiver and bounced them here, to a different
+ * screen with a different vocabulary. Same event, two screens, and a loop
+ * between them. REBUILD-PLAN §6 describes one flow per person; this is it.
+ *
+ * The screen reads who you are and shows exactly one of five things. What it
+ * never does is ask a returning player to fill in a form we already hold.
+ */
 export default async function RegisterPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const { tournament: preselected = null, type: typeParam } = await searchParams;
-  const preselectedType = parsePreselectedType(typeParam);
-  const [{ tournaments, loadError }, player] = await Promise.all([
+  const { tournament: slug = null, type: typeParam } = await searchParams;
+
+  const [{ tournaments: openTournaments }, player] = await Promise.all([
     getRegistrationOpenTournaments(),
     getCurrentPlayer(),
   ]);
 
-  const options = tournaments.map((t) => ({
-    id: t.id,
-    title: t.title,
-    slug: t.slug,
-    format: t.format,
-  }));
+  const contact = player?.contact ?? null;
+  const waiverType = defaultWaiverTypeFor(contact, typeParam);
 
-  // Teams are picked at signup now (D3), not at payment. Fetched here for every
-  // listed event so switching the tournament dropdown doesn't cost a round-trip.
-  const teamsByTournament = await getTeamsByTournament(options.map((t) => t.id));
+  // Which event are we talking about? An explicit slug wins. Failing that, if
+  // exactly one event is open there is nothing to choose — presenting a
+  // one-item dropdown was part of what made this screen feel like paperwork.
+  const requested = slug ? await getTournamentBySlug(slug) : null;
+  const event: Tournament | null =
+    requested ?? (openTournaments.length === 1 ? openTournaments[0] : null);
 
-  const isWorldCupLanding = preselected === WORLD_CUP_TOURNAMENT_SLUG;
+  if (!event) {
+    return (
+      <SignupShell
+        title="Sign up to play"
+        subtitle="Pick an event and we'll take it from there."
+      >
+        <EventPicker tournaments={openTournaments} />
+      </SignupShell>
+    );
+  }
 
-  const prefill: RegistrationPrefill | null = player
-    ? {
-        email: player.email,
-        firstName: player.contact.first_name ?? "",
-        lastName: player.contact.last_name ?? "",
-        phone: player.contact.phone ?? "",
-        dob: player.contact.dob ?? "",
-        emergencyName: player.contact.emergency_name ?? "",
-        emergencyPhone: player.contact.emergency_phone ?? "",
-        hasAdultWaiverOnFile: isContactWaiverValid(player.contact, "adult"),
-        hasYouthWaiverOnFile: isContactWaiverValid(player.contact, "youth"),
-      }
+  const canRegister = acceptsRegistrations(event);
+  const canPay = acceptsPayments(event);
+
+  const registration = contact
+    ? await findRegistration(event.id, contact.id)
     : null;
 
+  const state = resolveSignupState({
+    contact,
+    registration,
+    waiverType,
+    canRegister,
+    canPay,
+  });
+
+  const teams = canRegister ? (await getTeamsByTournament([event.id]))[event.id] ?? [] : [];
+  const entryFeeLabel = formatFee(event.entry_fee_cents, event.entry_fee);
+
+  return (
+    <SignupShell
+      title={state.kind === "closed" ? event.title : `Sign up — ${event.title}`}
+      subtitle={eventSubtitle(event)}
+      event={event}
+    >
+      {state.kind === "closed" && <ClosedCard tournamentTitle={event.title} />}
+
+      {state.kind === "already_paid" && (
+        <AlreadyPaidCard tournamentTitle={event.title} />
+      )}
+
+      {state.kind === "needs_waiver" && (
+        <NeedsWaiverCard
+          tournamentTitle={event.title}
+          waiverHref={buildWaiverSignPath({
+            registrationId: state.registrationId,
+            payToken: createPayResumeToken(state.registrationId),
+            tournamentSlug: event.slug,
+          })}
+        />
+      )}
+
+      {state.kind === "owes_payment" && (
+        <OwesPaymentCard
+          tournamentTitle={event.title}
+          entryFeeLabel={entryFeeLabel}
+          teamName={await teamNameFor(state.teamId)}
+          payHref={buildPayResumePath({
+            registrationId: state.registrationId,
+            payToken: createPayResumeToken(state.registrationId),
+            tournamentSlug: event.slug,
+          })}
+        />
+      )}
+
+      {state.kind === "quick_join" && (
+        <QuickJoinCard
+          tournamentId={event.id}
+          tournamentTitle={event.title}
+          teams={teams}
+          playerName={displayName(contact)}
+          waiverExpiresAt={contact?.waiver_expires_at ?? null}
+          entryFeeLabel={entryFeeLabel}
+        />
+      )}
+
+      {state.kind === "full_signup" && (
+        <div className="space-y-8">
+          {!player && <SignedInFasterPrompt slug={event.slug} />}
+          <RegistrationForm
+            tournaments={[
+              {
+                id: event.id,
+                title: event.title,
+                slug: event.slug,
+                format: event.format,
+              },
+            ]}
+            teamsByTournament={{ [event.id]: teams }}
+            preselectedSlug={event.slug}
+            preselectedType={typeParam === "youth" ? "youth" : typeParam === "adult" ? "adult" : null}
+            prefill={buildPrefill(player)}
+            lockedToEvent
+          />
+        </div>
+      )}
+
+      <p className="mt-8 text-center text-xs text-zinc-500">
+        Questions?{" "}
+        <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false} />
+      </p>
+    </SignupShell>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+async function findRegistration(
+  tournamentId: string,
+  contactId: string
+): Promise<SignupRegistrationSnapshot | null> {
+  const { data, error } = await supabaseAdmin
+    .from("registrations")
+    .select("id, payment_status, waiver_signed, team_id")
+    .eq("tournament_id", tournamentId)
+    .eq("contact_id", contactId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    // A lookup failure must not hide the signup form — falling through to the
+    // full form is always safe, and the API rejects a duplicate anyway.
+    console.error("[register] registration lookup failed:", error.message);
+    return null;
+  }
+  return (data as SignupRegistrationSnapshot) ?? null;
+}
+
+async function teamNameFor(teamId: string | null): Promise<string | null> {
+  if (!teamId) return null;
+  const { data } = await supabaseAdmin
+    .from("teams")
+    .select("name")
+    .eq("id", teamId)
+    .maybeSingle();
+  return data?.name ?? null;
+}
+
+function displayName(
+  contact: { first_name?: string | null; last_name?: string | null } | null
+): string {
+  if (!contact) return "";
+  return `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim();
+}
+
+function buildPrefill(
+  player: Awaited<ReturnType<typeof getCurrentPlayer>>
+): RegistrationPrefill | null {
+  if (!player) return null;
+  const c = player.contact;
+  return {
+    email: player.email,
+    firstName: c.first_name ?? "",
+    lastName: c.last_name ?? "",
+    phone: c.phone ?? "",
+    dob: c.dob ?? "",
+    emergencyName: c.emergency_name ?? "",
+    emergencyPhone: c.emergency_phone ?? "",
+    hasAdultWaiverOnFile: isContactWaiverValid(c, "adult"),
+    hasYouthWaiverOnFile: isContactWaiverValid(c, "youth"),
+  };
+}
+
+function formatFee(cents: number | null, fallback: number | null): string | null {
+  const value = cents != null ? cents / 100 : fallback;
+  if (value == null) return null;
+  return `$${value.toFixed(2)}`;
+}
+
+function eventSubtitle(event: Tournament): string {
+  const bits: string[] = [];
+  if (event.format) bits.push(event.format);
+  if (event.recurrence) bits.push(event.recurrence);
+  else if (event.start_date) bits.push(formatEventDate(event.start_date));
+  if (event.location) bits.push(event.location);
+  return bits.join(" · ");
+}
+
+function formatEventDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/* ------------------------------------------------------------------ */
+
+function SignupShell({
+  title,
+  subtitle,
+  event,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  event?: Tournament;
+  children: React.ReactNode;
+}) {
   return (
     <>
-      <section className="bg-base text-white py-16 md:py-24 bg-tactical-grid">
+      <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
-            {isWorldCupLanding
-              ? "World Cup 7v7 Registration"
-              : "Register for 7v7 Tournament"}
-          </h1>
-          <p className="text-xl text-zinc-400 max-w-2xl">
-            {isWorldCupLanding
-              ? "Each player completes their own registration and waiver. Team payment and team name come next on the pay page."
-              : "Sign up for upcoming 7v7 leagues and tournaments at Houston Premier Soccer."}
-          </p>
-          <p className="mt-4 text-sm text-zinc-500">
-            Questions?{" "}
-            <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false} />
-          </p>
+          <div className="flex items-center gap-3 mb-3">
+            <Trophy size={26} className="text-brand flex-shrink-0" />
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+              {title}
+            </h1>
+          </div>
+          {subtitle && <p className="text-lg text-zinc-400 max-w-2xl">{subtitle}</p>}
+          {event && (
+            <Link
+              href={`/events/${event.slug}`}
+              className="mt-4 inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors underline underline-offset-2"
+            >
+              Event details
+            </Link>
+          )}
         </div>
       </section>
 
       <Section dark className="bg-surface">
-        <div className="max-w-2xl mx-auto">
-          <SectionHeader
-            title="Player Registration"
-            subtitle={
-              isWorldCupLanding
-                ? prefill
-                  ? "World Cup: one registration per player. We've pre-filled your details below."
-                  : "World Cup: one registration per player. You'll sign the waiver next, then pay on the team payment page."
-                : prefill
-                  ? "We've pre-filled your details. Edit them if anything has changed."
-                  : "Fill out the form below to register. You'll sign the waiver on the next page."
-            }
-            dark
-          />
-
-          {loadError && (
-            <p className="text-sm text-red-400 mb-6">{loadError}</p>
-          )}
-
-          <RegistrationForm
-            tournaments={options}
-            teamsByTournament={teamsByTournament}
-            preselectedSlug={preselected}
-            preselectedType={preselectedType}
-            prefill={prefill}
-          />
-        </div>
+        <div className="max-w-2xl mx-auto">{children}</div>
       </Section>
 
       <div className="h-20 md:hidden bg-surface" />
     </>
+  );
+}
+
+/**
+ * Signed-out players are offered sign-in, not required to use it. Requiring an
+ * account before you can sign up would be a new wall in front of the one thing
+ * the business needs to happen — REBUILD-PLAN §2 records 28 accounts against 90
+ * people, so most players have never had one and do not need one to play.
+ */
+function SignedInFasterPrompt({ slug }: { slug: string }) {
+  return (
+    <div className="dashboard-card p-5 space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-white">
+          Played with us before?
+        </h2>
+        <p className="text-xs text-zinc-400 mt-1">
+          Sign in and we&apos;ll skip straight to your team and payment — no form,
+          and no waiver if yours is still valid.
+        </p>
+      </div>
+      <OAuthButtons nextPath={`/register?tournament=${encodeURIComponent(slug)}`} />
+      <p className="text-xs text-zinc-500 text-center">
+        New here? Just fill in the form below — no account needed.
+      </p>
+    </div>
+  );
+}
+
+function EventPicker({ tournaments }: { tournaments: Tournament[] }) {
+  if (tournaments.length === 0) {
+    return <ClosedCard tournamentTitle={null} />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {tournaments.map((t) => (
+        <Link
+          key={t.id}
+          href={`/register?tournament=${encodeURIComponent(t.slug)}`}
+          className="dashboard-card p-5 flex items-start gap-4 hover:border-brand/50 transition-colors"
+        >
+          <div className="w-10 h-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center flex-shrink-0">
+            <Trophy size={18} className="text-brand" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold text-white">{t.title}</p>
+            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
+              {(t.recurrence || t.start_date) && (
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays size={12} className="text-brand" />
+                  {t.recurrence ?? formatEventDate(t.start_date!)}
+                </span>
+              )}
+              {t.location && (
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin size={12} className="text-brand" />
+                  {t.location}
+                </span>
+              )}
+            </div>
+          </div>
+        </Link>
+      ))}
+    </div>
   );
 }

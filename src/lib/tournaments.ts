@@ -229,6 +229,14 @@ export type PayableTournament = {
   payments_open: boolean;
   is_draft: boolean;
   status: TournamentStatus;
+  /**
+   * The query has always fetched these; they were just missing from the type.
+   * `/pay` needs them to answer "are sign-ups open?" before it decides whether
+   * to hand the visitor over to `/register`.
+   */
+  registration_open: boolean;
+  start_date: string | null;
+  end_date: string | null;
 };
 
 export async function getPayableTournamentBySlug(
@@ -319,6 +327,40 @@ export async function getTeamsByTournament(
     return {};
   }
 }
+
+/**
+ * The team id to store for a signup, or null.
+ *
+ * Never trusts the posted id on its own: it must name a team that belongs to
+ * the event this signup is actually for. Otherwise a crafted request could park
+ * a player on another event's roster. An unrecognised id is treated as "no team"
+ * rather than an error — the player's signup and waiver matter more than their
+ * team pick, and the owner can fix the team from the Roster screen in two
+ * seconds.
+ *
+ * Shared by `/api/register` and `/api/register/join` so the two signup paths
+ * cannot drift apart on validation, which is how the site ended up with three
+ * ways to express team membership in the first place (REBUILD-PLAN §2).
+ */
+export async function resolveTeamIdForTournament(
+  requested: string | null | undefined,
+  tournamentId: string | null
+): Promise<string | null> {
+  if (!requested || !tournamentId || !UUID_RE.test(requested)) return null;
+  const { data, error } = await supabaseAdmin
+    .from("teams")
+    .select("id")
+    .eq("id", requested)
+    .eq("tournament_id", tournamentId)
+    .maybeSingle();
+  if (error) {
+    console.warn("[teams] signup team lookup failed:", error.message);
+    return null;
+  }
+  return data?.id ?? null;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Pinned first, then newest first. Empty array if none or on error. */
 export async function getTournamentUpdates(

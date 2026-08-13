@@ -14,6 +14,7 @@ import {
   WORLD_CUP_TOURNAMENT_SLUG,
 } from "@/lib/world-cup-pricing";
 import { runPayEligibilityCheck } from "@/lib/pay-eligibility";
+import { acceptsRegistrations } from "@/lib/tournament-state";
 import { buildPayResumePath } from "@/lib/pay-resume-url";
 import type {
   PayEligibilitySuccessBody,
@@ -69,6 +70,18 @@ export default async function PayPage({
   const requestedTournament = tournamentSlug
     ? await getPayableTournamentBySlug(tournamentSlug)
     : null;
+
+  // One front door. Without a resume token this page can only ask "who are
+  // you?", which is the same question `/register` answers better — and its old
+  // answer for anyone unrecognised was to send them to `/register` anyway, so
+  // the visitor did two screens to reach the one that could help. If sign-ups
+  // are open for this event, go straight there.
+  //
+  // Links already texted out that carry `registrationId` + `payToken` skip this
+  // entirely and still land on PayForm, which is the whole point of the token.
+  if (!skipGate && requestedTournament && acceptsRegistrations(requestedTournament)) {
+    redirect(`/register?tournament=${encodeURIComponent(requestedTournament.slug)}`);
+  }
 
   const [player, whatsappUrl] = await Promise.all([
     getCurrentPlayer(),

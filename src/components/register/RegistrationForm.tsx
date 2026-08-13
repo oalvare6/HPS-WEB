@@ -89,6 +89,7 @@ export function RegistrationForm({
   preselectedSlug,
   preselectedType = null,
   prefill = null,
+  lockedToEvent = false,
 }: {
   tournaments: RegistrationOption[];
   /** Teams available per tournament id. Missing/empty hides the picker. */
@@ -97,6 +98,12 @@ export function RegistrationForm({
   /** From `/register?type=adult|youth` (pay gate register links). */
   preselectedType?: "adult" | "youth" | null;
   prefill?: RegistrationPrefill | null;
+  /**
+   * The event is already decided (the page was reached from that event), so the
+   * dropdown becomes a statement rather than a question. A one-option select
+   * that looks editable is a small lie about how much choice the player has.
+   */
+  lockedToEvent?: boolean;
 }) {
   const initialId = useMemo(() => {
     if (preselectedSlug) {
@@ -281,7 +288,10 @@ export function RegistrationForm({
         </div>
       )}
 
-      {/* Tournament selector */}
+      {/* Tournament selector — hidden entirely when the event is already known */}
+      {lockedToEvent ? (
+        <input type="hidden" name="tournamentId" value={tournamentId} />
+      ) : (
       <div className="space-y-2">
         <div className="flex items-center gap-2 mb-1">
           <Trophy size={16} className="text-brand" />
@@ -320,6 +330,7 @@ export function RegistrationForm({
           </p>
         )}
       </div>
+      )}
 
       {isWorldCupSelected && <WorldCupRegisterInstructions />}
 
@@ -391,8 +402,7 @@ export function RegistrationForm({
         {isLoggedIn && registrationType && waiverOnFileForType && (
           <p className="inline-flex items-center gap-1.5 text-xs text-brand mt-1">
             <ShieldCheck size={12} />
-            Your {registrationType} waiver is on file — no DocuSeal step
-            needed.
+            Your {registrationType} waiver is on file — nothing to sign.
           </p>
         )}
       </div>
@@ -495,8 +505,8 @@ function WorldCupRegisterInstructions() {
             </li>
             <li>
               A signed waiver is required before you play. Choose adult or youth
-              below; you will complete DocuSeal after submitting unless your
-              waiver is already on file.
+              below; you will sign it after submitting unless your waiver is
+              already on file.
             </li>
             <li>
               <strong className="text-zinc-200">Team fee is paid later</strong> on

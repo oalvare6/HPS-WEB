@@ -4,9 +4,12 @@ import { verifyAdmin } from "@/lib/admin-auth";
 import {
   createInPersonSubmission,
   fetchSubmissionSnapshot,
+  isDocuSealConfigured,
   recordSignedWaiver,
   templateIdFor,
 } from "@/lib/waiver-capture";
+import { createPayResumeToken } from "@/lib/app-signing";
+import { buildWaiverSignPath } from "@/lib/pay-resume-url";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -16,7 +19,7 @@ async function loadRegistration(id: string) {
   return supabaseAdmin
     .from("registrations")
     .select(
-      "id, contact_id, waiver_type, docuseal_submission_id, docuseal_status, first_name, last_name, email"
+      "id, contact_id, waiver_type, waiver_signed, waiver_signed_at, waiver_document_url, docuseal_submission_id, docuseal_status, first_name, last_name, email"
     )
     .eq("id", id)
     .maybeSingle();
@@ -45,14 +48,6 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   }
 
-  const apiKey = process.env.DOCUSEAL_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "DocuSeal is not configured on this server." },
-      { status: 503 }
-    );
-  }
-
   let waiverType: "adult" | "youth" | null = null;
   try {
     const body = (await req.json()) as { waiverType?: unknown };
@@ -73,6 +68,45 @@ export async function POST(req: NextRequest, { params }: Ctx) {
 
   const type =
     waiverType ?? (registration.waiver_type === "youth" ? "youth" : "adult");
+
+  // No DocuSeal → hand back the in-app signing screen instead of a 503. This is
+  // the walk-in path (D8): the owner has a player standing in front of them at
+  // the field, and "DocuSeal is not configured on this server" is not something
+  // that person can do anything with. Same screen the player would get online.
+  if (!isDocuSealConfigured(type)) {
+    let payToken: string;
+    try {
+      payToken = createPayResumeToken(registration.id);
+    } catch (e) {
+      console.error("[sign-waiver] pay token signing failed:", e);
+      return NextResponse.json(
+        { error: "Server signing is misconfigured; cannot open a waiver." },
+        { status: 500 }
+      );
+    }
+
+    if (registration.waiver_type !== type) {
+      await supabaseAdmin
+        .from("registrations")
+        .update({ waiver_type: type })
+        .eq("id", registration.id);
+    }
+
+    const signUrl = buildWaiverSignPath({
+      registrationId: registration.id,
+      payToken,
+    });
+
+    return NextResponse.json({
+      submissionId: null,
+      signUrl,
+      embedSrc: signUrl,
+      waiverType: type,
+      mode: "in_app",
+    });
+  }
+
+  const apiKey = process.env.DOCUSEAL_API_KEY!;
   const templateId = templateIdFor(type);
   if (!templateId) {
     return NextResponse.json(
@@ -152,14 +186,6 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "Invalid id." }, { status: 400 });
   }
 
-  const apiKey = process.env.DOCUSEAL_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "DocuSeal is not configured on this server." },
-      { status: 503 }
-    );
-  }
-
   const { data: registration, error: regErr } = await loadRegistration(id);
   if (regErr) {
     return NextResponse.json({ error: regErr.message }, { status: 500 });
@@ -167,6 +193,23 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   if (!registration) {
     return NextResponse.json({ error: "Registration not found." }, { status: 404 });
   }
+
+  // In-app signature: it is already written down locally, so "Done — check"
+  // just reads our own row. Nothing to ask DocuSeal about.
+  if (registration.waiver_signed) {
+    return NextResponse.json({
+      signed: true,
+      signedAt: registration.waiver_signed_at,
+      expiresAt: null,
+      documentUrl: registration.waiver_document_url,
+    });
+  }
+
+  const apiKey = process.env.DOCUSEAL_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ signed: false, reason: "not-finished" });
+  }
+
   if (!registration.docuseal_submission_id) {
     return NextResponse.json({ signed: false, reason: "no-submission" });
   }

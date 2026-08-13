@@ -10,7 +10,9 @@ import {
 } from "@/lib/contacts";
 import { linkRegistrationToContact } from "@/lib/registration-contact-linking";
 import { acceptsRegistrations } from "@/lib/tournament-state";
-import { buildPayResumeUrl } from "@/lib/pay-resume-url";
+import { resolveTeamIdForTournament } from "@/lib/tournaments";
+import { buildPayResumeUrl, buildWaiverSignPath } from "@/lib/pay-resume-url";
+import { isDocuSealConfigured } from "@/lib/waiver-capture";
 
 type RegistrationType = "adult" | "youth";
 
@@ -95,34 +97,6 @@ async function resolveTournament(
   return null;
 }
 
-/**
- * The team id to store, or null.
- *
- * Never trusts the posted id on its own: it must name a team that belongs to
- * the tournament this registration actually resolved to. Otherwise a crafted
- * request could park a player on another event's roster. An unrecognised id is
- * treated as "no team" rather than an error — the player's signup and waiver
- * matter more than their team pick, and the owner can fix the team from the
- * roster screen in two seconds.
- */
-async function resolveTeamId(
-  requested: string | null | undefined,
-  tournamentId: string | null
-): Promise<string | null> {
-  if (!requested || !tournamentId || !UUID_RE.test(requested)) return null;
-  const { data, error } = await supabaseAdmin
-    .from("teams")
-    .select("id")
-    .eq("id", requested)
-    .eq("tournament_id", tournamentId)
-    .maybeSingle();
-  if (error) {
-    console.warn("[register] team lookup failed:", error.message);
-    return null;
-  }
-  return data?.id ?? null;
-}
-
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<RegistrationPayload>;
@@ -179,7 +153,7 @@ export async function POST(request: Request) {
     const tournamentId = resolvedTournament?.id ?? null;
     const tournamentTitle = resolvedTournament?.title ?? null;
     const tournamentSlug = resolvedTournament?.slug ?? null;
-    const teamId = await resolveTeamId(payload.teamId, tournamentId);
+    const teamId = await resolveTeamIdForTournament(payload.teamId, tournamentId);
 
     const { data: inserted, error } = await supabaseAdmin
       .from("registrations")
@@ -299,6 +273,34 @@ export async function POST(request: Request) {
         waiverSkipped: true,
         waiverSignedAt: canonicalSignedAt,
         tournamentTitle,
+      });
+    }
+
+    // No DocuSeal configuration → sign in the app instead of dead-ending.
+    // All four DOCUSEAL_* vars are empty locally (REBUILD-PLAN §A4) and the old
+    // code posted to DocuSeal regardless, so every signup ended on "Registration
+    // saved but waiver could not be created." A player who cannot sign cannot
+    // play, so the fallback is the signing screen, not an error.
+    if (!isDocuSealConfigured(waiverType)) {
+      const { error: markPendingErr } = await supabaseAdmin
+        .from("registrations")
+        .update({ docuseal_status: "sent" })
+        .eq("id", inserted.id);
+      if (markPendingErr) {
+        console.warn(
+          "[register] could not flag in-app waiver as sent:",
+          markPendingErr.message
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        signUrl: buildWaiverSignPath({
+          registrationId: inserted.id,
+          payToken,
+          tournamentSlug,
+        }),
+        waiverMode: "in_app",
       });
     }
 

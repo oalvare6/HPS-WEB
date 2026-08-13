@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
-import { ChevronDown, LogOut, ShieldCheck, Trophy, User } from "lucide-react";
+import { ChevronDown, LogOut, Trophy, User } from "lucide-react";
 
 /**
  * Header account dropdown for signed-in players.
@@ -87,13 +87,6 @@ export function AccountMenu({ displayName }: { displayName: string }) {
             label="My registrations"
             onSelect={closeOnNavigate}
           />
-          <MenuItem
-            href="/me/security"
-            icon={<ShieldCheck size={14} />}
-            label="Security"
-            onSelect={closeOnNavigate}
-          />
-
           <div className="h-px bg-border-token" aria-hidden="true" />
 
           <form

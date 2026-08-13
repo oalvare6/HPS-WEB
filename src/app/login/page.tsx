@@ -1,10 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Section, SectionHeader } from "@/components/shared/section";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { LoginTabs } from "./LoginTabs";
-import { MagicLinkForm } from "./MagicLinkForm";
-import { OAuthButtons } from "./OAuthButtons";
-import { PasswordForm } from "./PasswordForm";
+import { OAuthButtons } from "@/components/auth/OAuthButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -12,16 +10,12 @@ type SearchParams = Promise<{
   next?: string;
   error?: string;
   error_description?: string;
-  tab?: string;
 }>;
 
 const ERROR_MESSAGES: Record<string, string> = {
   missing_code:
-    "That sign-in link was missing its verification code. Request a new link below.",
-  exchange_failed:
-    "That sign-in link is no longer valid. Please request a new one below.",
-  recovery_expired:
-    "That password-reset link has expired or was already used. Request a fresh one below.",
+    "That sign-in didn't complete — it was missing its verification code. Please try again.",
+  exchange_failed: "That sign-in link is no longer valid. Please try again.",
   oauth_failed:
     "We couldn't finish signing you in with that provider. Please try again.",
 };
@@ -29,8 +23,20 @@ const ERROR_MESSAGES: Record<string, string> = {
 const SAFE_DESCRIPTION_MAX = 200;
 
 /**
- * Player passwordless sign-in. Sends a magic link via Supabase Auth. Admin
- * login is a separate flow at `/admin` and is unaffected.
+ * Player sign-in: Google and Apple only (D5).
+ *
+ * Magic link and password sign-in were removed here. They served two active
+ * users between them (REBUILD-PLAN §2: 28 accounts, 5 ever signed in, 2 within
+ * 60 days) while costing four pages, an SMTP dependency and a password-reset
+ * flow to keep working.
+ *
+ * The thing to understand before touching this page: **signing in is not
+ * required to play.** Registration and payment both work signed-out, so a
+ * player who cannot use Google or Apple is never blocked from an event — they
+ * just don't get the one-tap returning-player path. That is what makes it safe
+ * for this page to offer exactly two buttons.
+ *
+ * Admin login is a separate flow at `/admin` and is unaffected.
  */
 export default async function LoginPage({
   searchParams,
@@ -41,8 +47,8 @@ export default async function LoginPage({
     next,
     error: errorCode,
     error_description: errorDescriptionRaw,
-    tab,
   } = await searchParams;
+
   const nextPath = sanitizeNextPath(next);
   const baseMessage = errorCode ? ERROR_MESSAGES[errorCode] ?? null : null;
   const safeDescription = sanitizeDescription(errorDescriptionRaw);
@@ -50,7 +56,6 @@ export default async function LoginPage({
     baseMessage && safeDescription
       ? `${baseMessage} (${safeDescription})`
       : baseMessage;
-  const defaultTab: "magic" | "password" = tab === "password" ? "password" : "magic";
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -68,8 +73,7 @@ export default async function LoginPage({
             Sign in
           </h1>
           <p className="text-xl text-zinc-400 max-w-2xl">
-            Enter your email and we&apos;ll send you a one-tap sign-in link. No
-            password to remember.
+            One tap with Google or Apple. No password to remember.
           </p>
         </div>
       </section>
@@ -78,7 +82,7 @@ export default async function LoginPage({
         <div className="max-w-md mx-auto">
           <SectionHeader
             title="Player sign-in"
-            subtitle="Use the same email you registered with so we can find your profile and waiver."
+            subtitle="Use the same email you registered with and we'll find your profile and waiver automatically."
             dark
           />
           {errorMessage && (
@@ -89,32 +93,23 @@ export default async function LoginPage({
               {errorMessage}
             </div>
           )}
+
           <OAuthButtons nextPath={nextPath} />
 
-          <div
-            className="my-6 flex items-center gap-3 text-xs text-zinc-500"
-            aria-hidden="true"
-          >
-            <div className="h-px bg-border-token flex-1" />
-            <span className="uppercase tracking-wider">
-              or continue with email
-            </span>
-            <div className="h-px bg-border-token flex-1" />
+          <div className="mt-8 space-y-4 text-sm text-zinc-500">
+            <p>
+              <span className="text-zinc-300">You don&apos;t need an account to play.</span>{" "}
+              Signing in just saves you filling in the form —{" "}
+              <Link href="/register" className="text-brand hover:underline">
+                sign up for an event
+              </Link>{" "}
+              without one any time.
+            </p>
+            <p>
+              Signed in with a link or password before? Use Google or Apple with
+              that same email address and you&apos;ll land in the same account.
+            </p>
           </div>
-
-          <LoginTabs
-            defaultTab={defaultTab}
-            magicLink={<MagicLinkForm nextPath={nextPath} />}
-            password={<PasswordForm nextPath={nextPath} />}
-          />
-          <p className="mt-8 text-sm text-zinc-500 text-center">
-            New here?{" "}
-            <a href="/register" className="text-brand hover:underline">
-              Register for a tournament
-            </a>{" "}
-            and your account will be created automatically the first time you
-            sign in.
-          </p>
         </div>
       </Section>
 
@@ -124,8 +119,8 @@ export default async function LoginPage({
 }
 
 /**
- * Allow only relative same-origin paths to flow into the magic-link
- * redirect. Blocks open-redirect bait like `?next=https://evil.example/`.
+ * Allow only relative same-origin paths to flow into the OAuth redirect.
+ * Blocks open-redirect bait like `?next=https://evil.example/`.
  */
 function sanitizeNextPath(raw: string | undefined): string | null {
   if (!raw) return null;
@@ -134,11 +129,11 @@ function sanitizeNextPath(raw: string | undefined): string | null {
 }
 
 /**
- * Trim and length-cap a provider-supplied error description before showing
- * it. We trust providers to send short, human-readable messages, but we
- * never let attacker-controlled query strings exceed a reasonable length
- * or leak HTML into the UI (React already escapes; the cap is belt-and-
- * suspenders on UX, not security).
+ * Trim and length-cap a provider-supplied error description before showing it.
+ * We trust providers to send short, human-readable messages, but we never let
+ * attacker-controlled query strings exceed a reasonable length or leak HTML
+ * into the UI (React already escapes; the cap is belt-and-suspenders on UX,
+ * not security).
  */
 function sanitizeDescription(raw: string | undefined): string | null {
   if (!raw) return null;

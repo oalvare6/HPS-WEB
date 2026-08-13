@@ -34,23 +34,34 @@ export type TournamentPrimaryCta =
   | { kind: "none" };
 
 /**
- * Single CTA per tournament. The pay page itself handles "no waiver yet" by
- * routing the user to `/register`, so when payments are open we always prefer
- * the pay link — it short-circuits to PayForm for already-enrolled players.
+ * Single CTA per tournament — and it is the **sign-up** link whenever sign-ups
+ * are open, whatever the payment flag says.
+ *
+ * This used to prefer `/pay` the moment `payments_open` was true, on the theory
+ * that the pay page would route people onward. In practice that made the button
+ * on every live event page open a bare email box titled "Join this event",
+ * which told anyone it did not recognise to go and sign a waiver — on
+ * `/register`, a different screen with a different vocabulary for the same act.
+ * One event, two front doors, and a loop between them.
+ *
+ * `/register` now handles every case, including the already-registered player
+ * it sends straight to payment, so there is one door and this returns it.
  */
 export function tournamentPrimaryCta(tournament: TournamentCtaFields): TournamentPrimaryCta {
-  if (tournament.payments_open) {
-    return {
-      kind: "pay",
-      href: tournamentPayHref(tournament),
-      label: "Pay & Play",
-    };
-  }
   if (tournament.registration_open) {
     return {
       kind: "register",
       href: tournamentRegisterHref(tournament),
-      label: "Sign up",
+      label: "Sign up to play",
+    };
+  }
+  // Sign-ups closed but money still open: the only people this can serve are
+  // those already on the roster, and paying is genuinely all that is left.
+  if (tournament.payments_open) {
+    return {
+      kind: "pay",
+      href: tournamentPayHref(tournament),
+      label: "Pay entry fee",
     };
   }
   return { kind: "none" };

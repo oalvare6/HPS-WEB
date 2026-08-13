@@ -106,12 +106,6 @@ export default async function MePage() {
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">
                 Account &amp; sign-in
               </h2>
-              <Link
-                href="/me/security"
-                className="inline-flex items-center gap-1 text-xs text-brand hover:underline"
-              >
-                Manage password <ArrowRight size={12} />
-              </Link>
             </div>
             <SignInMethodsCard methods={signInMethods} />
           </section>
@@ -408,53 +402,22 @@ function EmptyState({
 }
 
 /**
- * Render the player's connected sign-in methods, derived from the Supabase
- * Auth user surface:
+ * Render the player's connected sign-in methods from `user.identities[]`.
  *
- *   - `identities[]` lists every linked provider (email, google, apple, ...).
- *   - `user_metadata.has_password` (set by Phase 11's password-write
- *     surfaces) tells us whether the email identity is "Email + password"
- *     or "Magic link only".
- *
- * If `user` is null (defensive — `/me` is gated server-side, so this
- * shouldn't happen in practice) we fall back to a single "Magic link"
- * row so the UI never goes empty.
+ * Sign-in is Google and Apple only now (D5). An account created before that —
+ * every one of the 28 in production, all provider `email` — still shows its
+ * email identity here, because it is genuinely still attached to the account
+ * and is what Supabase matches on when the same person signs in with Google.
+ * The description says so rather than offering a way to use it, since there no
+ * longer is one.
  */
 function describeSignInMethods(
   user: Awaited<ReturnType<typeof getCurrentAuthUser>>
 ): SignInMethod[] {
-  if (!user) {
-    return [
-      {
-        key: "magic",
-        label: "Magic link only",
-        description: "Sign in by clicking a link emailed to you.",
-      },
-    ];
-  }
-
-  const identities = Array.isArray(user.identities) ? user.identities : [];
-  const meta = (user.user_metadata ?? {}) as { has_password?: boolean };
-  const hasPassword = Boolean(meta.has_password);
+  const identities =
+    user && Array.isArray(user.identities) ? user.identities : [];
 
   const methods: SignInMethod[] = [];
-
-  if (identities.some((i) => i.provider === "email")) {
-    methods.push(
-      hasPassword
-        ? {
-            key: "email-password",
-            label: "Email + password",
-            description: "Sign in with your email address and password.",
-          }
-        : {
-            key: "magic",
-            label: "Magic link only",
-            description:
-              "Sign in by clicking a one-tap link emailed to you. Set a password from Security to add a second option.",
-          }
-    );
-  }
 
   if (identities.some((i) => i.provider === "google")) {
     methods.push({
@@ -472,11 +435,20 @@ function describeSignInMethods(
     });
   }
 
+  if (identities.some((i) => i.provider === "email")) {
+    methods.push({
+      key: "email-password",
+      label: `Email (${user?.email ?? "on file"})`,
+      description:
+        "Your account is linked to this address. Sign in with Google or Apple using the same address to reach it.",
+    });
+  }
+
   if (methods.length === 0) {
     methods.push({
-      key: "magic",
-      label: "Magic link only",
-      description: "Sign in by clicking a one-tap link emailed to you.",
+      key: "google",
+      label: "Google or Apple",
+      description: "Sign in with Google or Apple to connect a provider.",
     });
   }
 

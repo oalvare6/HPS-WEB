@@ -29,8 +29,17 @@ Supabase; admin = HMAC cookie.
 ```bash
 npx tsc --noEmit
 npx tsx scripts/test-tournament-state.ts
+npx tsx scripts/test-signup-state.ts
 npm run build
 ```
+
+**Two rules that are easy to break:**
+
+- **`/register` is the only front door to signing up.** `/pay` without a signed resume
+  token redirects there. Do not add a second entry point — that was the bug (plan §A6).
+- **Signing in is not required to register or pay.** Sign-in is Google/Apple only and both
+  are still pending in the Supabase dashboard; gating signup on it would take the site
+  offline for players (§A8, §9).
 
 | Doc | What |
 |---|---|
