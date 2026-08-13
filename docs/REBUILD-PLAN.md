@@ -539,6 +539,12 @@ new discovery.
 **#1 is now the blocker.** Sign-in is Google/Apple only, and neither provider has ever
 worked in production.
 
+> ✅ **Google is DONE as of 2026-08-13.** The operator configured the OAuth client and
+> Supabase provider, and the first Google sign-in succeeded at 23:44 UTC. It landed on the
+> *existing* `omaralvarezz01@gmail.com` row, which now carries both `email` and `google`
+> identities — the "Confirm email" merge worked, no duplicate. **Apple is still not
+> configured.** See [`docs/SESSION-LOG-2026-08-13.md`](./SESSION-LOG-2026-08-13.md) §5.
+
 1. **Finish the Google provider, then Apple, in the Supabase dashboard.**
    Full steps are in [`docs/AUTH-CONFIG.md`](./AUTH-CONFIG.md) §8 and §9. The short
    version for Google: create a Web-application OAuth client in Google Cloud Console with
