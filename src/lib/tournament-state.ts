@@ -66,6 +66,28 @@ export function isPastEvent(t: DatedTournament, now: Date = new Date()): boolean
   return lastDay < todayInHouston(now);
 }
 
+/**
+ * True when the event's first day is today in Houston.
+ *
+ * Exported so a surface can mark the urgent card — on `/me` two open events look
+ * alike at 375px until you read the titles, and one of them may be starting in
+ * two hours.
+ *
+ * Shares `eventDay`/`todayInHouston` with `isPastEvent` so "today" cannot mean
+ * one thing here and another there. A naive UTC comparison would flip at 7pm
+ * Houston in August — during an open play night itself.
+ */
+export function isHappeningToday(
+  t: DatedTournament,
+  now: Date = new Date()
+): boolean {
+  const first = t.start_date ?? t.end_date;
+  if (!first) return false;
+  const day = eventDay(first);
+  if (!day) return false;
+  return day === todayInHouston(now);
+}
+
 type StatefulTournament = DatedTournament & {
   status: TournamentStatus;
   is_draft: boolean;

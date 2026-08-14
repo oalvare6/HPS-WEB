@@ -29,7 +29,7 @@ import {
   viewerEventCta,
   type ViewerEventCta,
 } from "@/lib/tournament-public-links";
-import { resolveEventState } from "@/lib/tournament-state";
+import { isHappeningToday, resolveEventState } from "@/lib/tournament-state";
 import { isOpenPlay } from "@/lib/event-kind";
 import type { Tournament } from "@/lib/types";
 
@@ -67,8 +67,17 @@ export default async function MePage() {
     so this adds two cheap lookups per open event and no third-party round trip.
   */
   const { tournaments: openEvents } = await getRegistrationOpenTournaments();
+  /*
+    The loader orders by `display_order` — the operator's billboard order, with
+    Community Cup pinned to lead the homepage. On this page that is backwards:
+    it put a tournament seven days out above the open play starting tonight.
+    Copy before sorting; never sort a loader's return in place.
+  */
+  const nextUp = [...openEvents].sort(
+    (a, b) => whatsNextRank(a) - whatsNextRank(b)
+  );
   const nextSteps = await Promise.all(
-    openEvents.map(async (event) => {
+    nextUp.map(async (event) => {
       const { state, teamName, entryFeeLabel } = await loadEventStanding({
         event,
         contact,
@@ -479,6 +488,28 @@ function PaymentStatusBadge({ status }: { status: string }) {
   );
 }
 
+/**
+ * Where an event sits in the answer to "what do I do next".
+ *
+ *   0                  happening today
+ *   <start timestamp>  upcoming, soonest first
+ *   MAX-1              already under way — a ten-week league is a background
+ *                      commitment, not a next step
+ *   MAX                undated; nothing to compare, so last
+ *
+ * The third tier is not hypothetical: Community Cup runs 2026-08-21 → 10-23, so
+ * from 22 Aug a plain start_date sort would rank it above every Friday open play
+ * for two months. Presentation order only — it lives here rather than in the
+ * loader, which also feeds /register's picker and the registration API.
+ */
+function whatsNextRank(t: Tournament, now: Date = new Date()): number {
+  if (isHappeningToday(t, now)) return 0;
+  const start = t.start_date ? Date.parse(t.start_date) : NaN;
+  if (!Number.isFinite(start)) return Number.MAX_SAFE_INTEGER;
+  if (start < now.getTime()) return Number.MAX_SAFE_INTEGER - 1;
+  return start;
+}
+
 /** "Every Friday, starting August 21st · 7:00 PM – 9:00 PM", or null. */
 function eventWhenLine(event: Tournament): string | null {
   const day =
@@ -521,6 +552,9 @@ function NextStepCard({
     player wants to know before tapping.
   */
   const subtitle = cta.note ?? eventWhenLine(event) ?? cta.heading;
+  // "Today", not "Tonight" — this is a calendar-day test, and a 9am Saturday
+  // event badged "Tonight" would be the site stating something false.
+  const today = isHappeningToday(event);
   return (
     <div
       className={`dashboard-card p-5 space-y-3 ${
@@ -544,6 +578,11 @@ function NextStepCard({
           )}
         </div>
         <div className="min-w-0 space-y-1">
+          {today && (
+            <p className="inline-block rounded-full bg-brand/15 text-brand text-[11px] font-bold uppercase tracking-wider px-2 py-0.5">
+              Today
+            </p>
+          )}
           <p className="text-base font-semibold text-white">{event.title}</p>
           <p className="text-sm text-zinc-400">{subtitle}</p>
         </div>
