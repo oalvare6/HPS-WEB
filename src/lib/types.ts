@@ -86,6 +86,20 @@ export type Tournament = {
   entry_fee_cents: number | null;
   /** Default drop-in (guest play) fee in cents. Default 2000 ($20). */
   drop_in_fee_cents: number;
+  /**
+   * Open play only (D7). Tournaments whose live, team-assigned players get into
+   * *this* night free. Chosen by the organiser per event — never inherited from
+   * a previous night, never automatic, because a new tournament must not
+   * silently start comping people.
+   *
+   * Optional for the same reason as `kind`: the column arrives in
+   * `20260815030000_add_open_play_free_entry_config.sql`, and a required field
+   * would turn a deploy-before-migrate into a PostgREST 42703 across every
+   * `.select()` that names it. Never read it directly — go through
+   * `parseFreeEntryTournamentIds()`, which treats anything unrecognised as an
+   * empty list, i.e. "everybody pays".
+   */
+  free_entry_tournament_ids?: string[] | null;
   /** Reserved for future Stripe Products/Prices sync. */
   stripe_product_id: string | null;
   stripe_price_id: string | null;
@@ -342,6 +356,16 @@ export type Registration = {
   payment_status: RegistrationPaymentStatus;
   payment_method: string | null;
   payment_amount: number | null;
+  /**
+   * Open play only (D7). Which tournament bought this person free entry, as it
+   * stood when they confirmed. Written alongside `payment_status = 'waived'`.
+   *
+   * Recorded rather than recomputed: the free-entry config on the open-play
+   * event can be edited afterwards, and when somebody argues about a comp at
+   * the field the answer has to be what was true at signup, not what the rule
+   * says now. NULL on every tournament registration and on anyone who paid.
+   */
+  free_entry_tournament_id?: string | null;
   notes: string | null;
   docuseal_submission_id: number | null;
   docuseal_sign_url: string | null;

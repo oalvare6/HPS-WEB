@@ -23,7 +23,7 @@ export async function GET(
   const { data, error } = await supabaseAdmin
     .from("registrations")
     .select(
-      "email, first_name, payment_status, tournament_id, tournament:tournaments ( id, slug, title, entry_fee_cents, drop_in_fee_cents )"
+      "email, first_name, payment_status, tournament_id, tournament:tournaments!registrations_tournament_id_fkey ( id, slug, title, entry_fee_cents, drop_in_fee_cents )"
     )
     .eq("id", id)
     .maybeSingle();

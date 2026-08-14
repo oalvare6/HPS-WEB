@@ -97,7 +97,11 @@ export function QuickJoinCard({
           paymentMethod: method,
         }),
       });
-      const data = (await res.json()) as { error?: string; payUrl?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        payUrl?: string;
+        settledFree?: boolean;
+      };
 
       if (!res.ok || !data.payUrl) {
         setError(data.error || "We couldn't add you to this roster. Please try again.");
@@ -105,12 +109,20 @@ export function QuickJoinCard({
         return;
       }
 
-      if (method === "card") {
+      /*
+        D7: a comped open-play spot never reaches checkout, whatever the player
+        picked. The server decides this — not `method`, and not anything else on
+        this screen — because the entitlement is derived from their roster, not
+        from what the browser claims. Sending them to `payUrl` here would ask a
+        free player for $15, and Stripe rejects sub-$0.50 amounts anyway, so
+        there is no "$0 session" fallback to take instead.
+      */
+      if (method === "card" && !data.settledFree) {
         window.location.href = data.payUrl;
         return;
       }
 
-      // Cash, or a free event. Reload rather than render a confirmation here:
+      // Cash, a free event, or free entry. Reload rather than render a confirmation here:
       // this screen resolves state from the server on every load, so the reload
       // lands on the real "you're on the roster" card — which now also carries
       // the way back off it — without this component reimplementing any of it.

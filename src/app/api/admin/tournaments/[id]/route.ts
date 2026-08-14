@@ -10,6 +10,7 @@ import {
   ensureFeaturedCapNotExceeded,
   parseOptionalMoney,
   parseOptionalNonNegInt,
+  resolveFreeEntryTournamentIds,
 } from "@/lib/tournament-api-validation";
 import { parseEventKind } from "@/lib/event-kind";
 import type { TournamentInput } from "@/lib/types";
@@ -47,7 +48,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
     "description", "start_date", "end_date", "time_start", "time_end",
     "recurrence", "location", "format", "kind", "entry_fee", "max_teams",
     "image_url", "image_preset", "register_url", "pay_url", "display_order",
-    "is_featured", "drop_in_fee_cents",
+    "is_featured", "drop_in_fee_cents", "free_entry_tournament_ids",
   ];
   for (const f of fields) {
     if (f in body) update[f] = body[f];
@@ -106,6 +107,47 @@ export async function PATCH(request: Request, ctx: Ctx) {
     }
     update.kind = v;
   }
+  /*
+    Free entry is resolved against the kind the row will *end up* with, not the
+    one it had. A PATCH can carry both fields, and the two orderings disagree:
+    switching a night to 'tournament' while its list is still set would leave
+    dead config that reads like a live rule.
+
+    The list is also cleared when the kind flips away from open play even if the
+    caller said nothing about it — silently keeping it would mean a tournament
+    later flipped back to open play resurrects a comp list nobody remembers
+    writing.
+  */
+  const touchesFreeEntry =
+    "free_entry_tournament_ids" in update || "kind" in update;
+  if (touchesFreeEntry) {
+    let effectiveKind = typeof update.kind === "string" ? update.kind : null;
+    if (!effectiveKind) {
+      const { data: current } = await supabaseAdmin
+        .from("tournaments")
+        .select("kind")
+        .eq("id", id)
+        .maybeSingle();
+      effectiveKind = parseEventKind(current?.kind) ?? "tournament";
+    }
+    update.free_entry_tournament_ids = resolveFreeEntryTournamentIds(
+      "free_entry_tournament_ids" in update
+        ? update.free_entry_tournament_ids
+        : [],
+      effectiveKind,
+      id
+    );
+    // Nothing to say about free entry on a tournament that never had any — skip
+    // the write rather than stamping `{}` onto every unrelated edit.
+    if (
+      effectiveKind !== "open_play" &&
+      !("free_entry_tournament_ids" in body) &&
+      !("kind" in body)
+    ) {
+      delete update.free_entry_tournament_ids;
+    }
+  }
+
   if ("display_order" in update) {
     const raw = update.display_order;
     const n = typeof raw === "number" ? raw : Number(raw);

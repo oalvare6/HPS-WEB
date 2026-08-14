@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   Banknote,
+  Ticket,
   Check,
   X,
   Search,
@@ -612,6 +613,23 @@ function RosterTable({
                     >
                       <Banknote size={11} />
                       Cash
+                    </span>
+                  )}
+                  {/*
+                    D7: this person owes nothing, and the chip says why.
+
+                    The tournament title is in the tooltip rather than the label
+                    because the answer is only needed when somebody asks — but
+                    when they do ask, at the field, mid-argument, it has to be
+                    right there and not two screens away.
+                  */}
+                  {r.freeEntryVia && (
+                    <span
+                      title={`Free entry — on the roster for ${r.freeEntryVia}`}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                    >
+                      <Ticket size={11} />
+                      Free
                     </span>
                   )}
                   <button

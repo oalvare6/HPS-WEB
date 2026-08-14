@@ -149,6 +149,21 @@ export type EnrollContactInTournamentInput = {
    * `'pending'` either way.
    */
   paymentMethod?: PaymentMethodChoice | null;
+  /**
+   * Set only for an open-play night this person gets into free (D7), carrying
+   * the id of the tournament that earned it.
+   *
+   * When present the row is written settled — `payment_status = 'waived'`,
+   * `payment_amount = 0` — and **no Stripe session is created at all**: not a
+   * $0 one, not a discounted one. Stripe rejects amounts under $0.50 anyway, so
+   * a "free checkout" would be a payment path that always throws.
+   *
+   * It must never be built from a request body. The only correct source is
+   * `loadOpenPlayEntitlement()`, which derives it server-side from rows the
+   * caller does not control; a client-supplied flag here would be forgeable
+   * free entry.
+   */
+  freeEntry?: { viaTournamentId: string } | null;
 };
 
 export type EnrollContactInTournamentResult =
@@ -214,7 +229,12 @@ export async function enrollContactInTournament(
       waiver_document_url: contact.waiver_document_url,
       docuseal_status: "signed",
       docuseal_submission_id: contact.waiver_submission_id,
-      payment_status: "pending",
+      // A comped open-play spot is settled the moment it is confirmed: there is
+      // nothing to collect, so leaving it 'pending' would put the player on the
+      // owner's chase list for a fee that was never owed.
+      payment_status: input.freeEntry ? "waived" : "pending",
+      payment_amount: input.freeEntry ? 0 : null,
+      free_entry_tournament_id: input.freeEntry?.viaTournamentId ?? null,
       payment_method: input.paymentMethod ?? null,
     })
     .select("id")

@@ -9,6 +9,8 @@ import { buildPayResumePath } from "@/lib/pay-resume-url";
 import { isContactWaiverValid } from "@/lib/contacts";
 import { defaultWaiverTypeFor } from "@/lib/signup-state";
 import { isPaymentMethodChoice } from "@/lib/payment-method";
+import { isOpenPlay } from "@/lib/event-kind";
+import { loadOpenPlayEntitlement } from "@/lib/open-play-attendance";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -64,7 +66,7 @@ export async function POST(request: Request) {
     const { data: tournament, error: tErr } = await supabaseAdmin
       .from("tournaments")
       .select(
-        "id, title, slug, registration_open, payments_open, is_draft, status, start_date, end_date"
+        "id, title, slug, registration_open, payments_open, is_draft, status, start_date, end_date, kind, entry_fee_cents, drop_in_fee_cents, free_entry_tournament_ids"
       )
       .eq("id", tournamentId)
       .maybeSingle();
@@ -125,6 +127,7 @@ export async function POST(request: Request) {
     const teamId = await resolveTeamIdForTournament(requestedTeamId, tournamentId);
 
     let registrationId: string;
+    let settledFree = false;
 
     if (existing?.id) {
       registrationId = existing.id;
@@ -178,12 +181,39 @@ export async function POST(request: Request) {
         }
       }
     } else {
+      /*
+        D7: does this person walk into tonight free?
+
+        Evaluated here, from the database, and never from the request body — the
+        rule is readable in the shipped bundle, so a client-supplied "I'm free"
+        flag would be forgeable free entry.
+
+        `waiver_required` is not handled as a branch because it cannot be
+        reached: the block above already turned away anyone without a valid
+        contact-level waiver with the "continue with the full sign-up" 409. The
+        entitlement check re-derives it anyway rather than assuming, so the two
+        gates can never drift apart.
+      */
+      let freeEntry: { viaTournamentId: string } | null = null;
+      if (isOpenPlay(tournament)) {
+        const entitlement = await loadOpenPlayEntitlement({
+          contact,
+          event: tournament,
+          waiverType,
+        });
+        if (entitlement.kind === "free") {
+          freeEntry = { viaTournamentId: entitlement.viaTournamentId };
+          settledFree = true;
+        }
+      }
+
       const enrolled = await enrollContactInTournament({
         contact,
         tournamentId,
         waiverType,
         teamId,
         paymentMethod,
+        freeEntry,
       });
 
       if (!enrolled.ok) {
@@ -229,6 +259,15 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       registrationId,
+      /*
+        D7: they are in, and they owe nothing.
+
+        The client must not send them to checkout on the strength of having
+        picked "card" — there is no session to send them to, and Stripe would
+        reject the amount anyway. `payUrl` is still returned so the shape of
+        this response never changes; it is simply not the right place to go.
+      */
+      settledFree,
       // Returned alongside the URL so the caller can also declare a payment
       // method (`/api/register/payment-intent`) without having to pick the
       // token back out of a query string it just received.

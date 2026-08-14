@@ -40,7 +40,7 @@ export default async function WaiverSignPage({
   const { data: registration } = await supabaseAdmin
     .from("registrations")
     .select(
-      "id, first_name, last_name, waiver_type, waiver_signed, tournament_id, tournaments(title, slug)"
+      "id, first_name, last_name, waiver_type, waiver_signed, tournament_id, tournaments!registrations_tournament_id_fkey(title, slug)"
     )
     .eq("id", registrationId)
     .maybeSingle();

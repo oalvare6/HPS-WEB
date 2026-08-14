@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
          emergency_name, emergency_phone, waiver_type, waiver_signed, waiver_signed_at,
          waiver_submission_id, waiver_match_key, waiver_document_url, payment_status,
          docuseal_status, docuseal_submission_id, docuseal_sign_url,
-         tournament:tournaments ( id, title, slug ),
+         tournament:tournaments!registrations_tournament_id_fkey ( id, title, slug ),
          contact:contacts ( id, first_name, last_name, email, tags, waiver_type, waiver_signed_at, waiver_expires_at ),
          payments ( id, amount, currency, status, tournament_id, tournament_name, created_at )`
       )

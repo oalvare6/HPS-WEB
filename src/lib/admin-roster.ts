@@ -46,6 +46,16 @@ export type RosterRow = {
    * closed the tab three weeks ago, and those are different jobs.
    */
   paymentMethod: string | null;
+  /**
+   * Open play only (D7). The title of the tournament that got this person in
+   * free — "Community Cup - Fall 2026" — or null if they paid the door price.
+   *
+   * The owner will want this the first time somebody argues about a comp at the
+   * field, and "the system said so" is not an answer he can give standing on a
+   * touchline. Read from the registration's own FK, so it stays the reason that
+   * applied at signup even after the night's free-entry list is edited.
+   */
+  freeEntryVia?: string | null;
   /** Flagged by `linkRegistrationToContact` when email and phone disagree. */
   needsReview: boolean;
   /** True for a walk-in added from this screen with details still missing. */
