@@ -131,6 +131,7 @@ export default async function RegisterPage({
           tournamentId={event.id}
           teams={teams}
           teamId={state.teamId}
+          teamName={teamName}
           registrationId={state.registrationId}
           payToken={createPayResumeToken(state.registrationId)}
         />

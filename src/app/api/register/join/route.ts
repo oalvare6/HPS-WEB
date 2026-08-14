@@ -94,13 +94,13 @@ export async function POST(request: Request) {
     //
     // This lookup runs BEFORE the waiver check on purpose. The waiver gate
     // guards *enrolment* — it must not fire for someone already on the roster,
-    // who now reaches this route just to change their team from the signup
-    // screen. A player whose registration is signed but whose contact-level
-    // waiver has lapsed sits in exactly that state, and refusing them a team
-    // would be refusing the wrong thing.
+    // who now reaches this route just to fill in the team they never picked. A
+    // player whose registration is signed but whose contact-level waiver has
+    // lapsed sits in exactly that state, and refusing them a team would be
+    // refusing the wrong thing.
     const { data: existing } = await supabaseAdmin
       .from("registrations")
-      .select("id")
+      .select("id, team_id")
       .eq("tournament_id", tournamentId)
       .eq("contact_id", contact.id)
       // Cancelled rows are not "already on this roster". Without this filter a
@@ -128,27 +128,54 @@ export async function POST(request: Request) {
 
     if (existing?.id) {
       registrationId = existing.id;
-      // Written unconditionally, including when `teamId` resolves to null.
-      // Skipping the null case would make "Not sure yet" a no-op, so a player
-      // who picked the wrong team could never take it back — and the signup
-      // screen's team picker (SavedTeamPicker) is the only way most players
-      // will ever set this at all.
+      const currentTeamId = existing.team_id ?? null;
+
+      /*
+        A team you already have is not yours to change from here.
+
+        The picker on the signup screen fills in a blank — most of the roster
+        has `team_id = NULL` and that is the hole it exists to close. Moving
+        between teams is a different act: the owner balances the sides, and a
+        player switching themselves the night before unbalances them silently.
+        `SavedTeamPicker` locks once a team is set, so the only requests that
+        reach this line with a different team are stale tabs and hand-rolled
+        calls — both of which should be told the truth rather than quietly
+        rewriting a roster.
+
+        Admins are unaffected; they move players through /api/admin/*.
+      */
+      if (currentTeamId && currentTeamId !== teamId) {
+        return NextResponse.json(
+          {
+            error:
+              "You're already on a team for this event. Ask us at the field or on WhatsApp and we'll move you.",
+            reason: "team_locked",
+          },
+          { status: 409 }
+        );
+      }
+
+      // Only ever a first assignment now, so nothing to write when they had a
+      // team already (the request agreed with it) or when they still haven't
+      // chosen one.
       //
       // `payment_method` is deliberately NOT written here. This branch is the
       // team picker on an existing signup, and the picker sends no method — so
-      // writing one would blank the choice of anyone changing their team. A
+      // writing one would blank the choice of anyone setting their team. A
       // player already on the roster changes how they pay through
       // `PaymentChoice` → `/api/register/payment-intent`.
-      const { error: teamErr } = await supabaseAdmin
-        .from("registrations")
-        .update({ team_id: teamId })
-        .eq("id", registrationId);
-      if (teamErr) {
-        console.error("[register/join] team update failed:", teamErr.message);
-        return NextResponse.json(
-          { error: "We couldn't save your team. Please try again." },
-          { status: 500 }
-        );
+      if (!currentTeamId && teamId) {
+        const { error: teamErr } = await supabaseAdmin
+          .from("registrations")
+          .update({ team_id: teamId })
+          .eq("id", registrationId);
+        if (teamErr) {
+          console.error("[register/join] team update failed:", teamErr.message);
+          return NextResponse.json(
+            { error: "We couldn't save your team. Please try again." },
+            { status: 500 }
+          );
+        }
       }
     } else {
       const enrolled = await enrollContactInTournament({
