@@ -61,7 +61,8 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/SESSION-LOG-2026-08-13.md`](docs/SESSION-LOG-2026-08-13.md) | **Most recent session.** What shipped, what's live, what's still owed. Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) | **Most recent session.** What shipped, what's live, what's still owed. Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-13.md`](docs/SESSION-LOG-2026-08-13.md) | The session before it. |
 | [`FOLLOWUPS.md`](FOLLOWUPS.md) | Append-only log of known issues |
 | [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md) | Shipped status (pre-dates the rebuild plan) |
 | [`docs/AUTH.md`](docs/AUTH.md), [`docs/AUTH-RUNBOOK.md`](docs/AUTH-RUNBOOK.md) | Auth config + triage |

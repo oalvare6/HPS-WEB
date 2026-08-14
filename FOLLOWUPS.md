@@ -124,3 +124,37 @@ Format:
 - **Youth quick-join is never offered.** A contact's waiver has one type; an adult waiver
   on file does not satisfy a youth signup, so those players get the full form. Correct,
   but worth knowing before someone reports it as a bug.
+
+## 2026-08-14 — signed-in experience, auth URLs, one canonical host
+
+See [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) for the full account.
+Open items, most urgent first:
+
+- **Google sign-in has still never been completed end to end on the real domain.** Every
+  piece is verified independently and the config is fixed, but the round trip needs the
+  owner's Google account. Proof of success = a row in `auth.sessions` newer than 2026-07-01.
+- **The signed-in screens are unverified** — team picker on `owes_payment`/`already_paid`,
+  header waiver line, account menu. Shipped, typechecked, built; never exercised by a real
+  session, for the same reason.
+- **No database backups exist.** Free plan excludes them; Pro is $25/mo. REBUILD-PLAN Track
+  B1 is destructive and instructs "back up first" — that instruction currently cannot be
+  followed. A manual SQL dump was offered and not taken.
+- **Exposed credentials are still valid at source.** A `SUPABASE_SERVICE_ROLE_KEY`,
+  `SUPABASE_JWT_SECRET` and `POSTGRES_PASSWORD` sat behind a public preview URL from
+  2026-06-19 until today. The Vercel variables and the preview deployment are deleted, which
+  closes the exposure but does **not** revoke the keys. Rotation deliberately deferred past
+  the tournament — it is a coordinated change and every page reads the service-role key.
+- **Vercel "Needs Attention" on `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+  `DOCUSEAL_API_KEY` is only "mark these Sensitive"** — not expiry, not error. Converting
+  means re-entering a live Stripe key by hand; deferred past 2026-08-21 on purpose.
+- **Community Cup has 2 teams and all 4 signups have `team_id = NULL`.** The pickers work
+  now; there is just nothing for them to offer. Owner's job.
+- **Vercel runtime logs are capped at 1 hour on the Hobby plan.** If something breaks
+  overnight, the evidence expires before anyone reads it.
+- **~14 `SUPABASE_*` / `POSTGRES_*` env vars in Vercel are unused** — dead weight from the
+  native integration. The app reads only `SUPABASE_SERVICE_ROLE_KEY`,
+  `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Harmless, but do not
+  assume they are load-bearing when cleaning up.
+- **`APP_SIGNING_SECRET` is not set in Vercel and does not need to be** —
+  `src/lib/app-signing.ts` falls back to `ADMIN_SESSION_SECRET`, which is set. Renaming it
+  someday would silence a deprecation warning; nothing is broken.
