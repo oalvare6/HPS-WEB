@@ -1,7 +1,6 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { signAdminSessionCookieValue } from "@/lib/app-signing";
+import { setAdminSessionCookie } from "@/lib/admin-session";
 
 function digestEqual(a: string, b: string): boolean {
   const ha = createHash("sha256").update(a, "utf8").digest();
@@ -36,9 +35,9 @@ export async function POST(request: Request) {
       );
     }
 
-    let token: string;
+    const response = NextResponse.json({ success: true });
     try {
-      token = signAdminSessionCookieValue(adminUser, 60 * 60 * 8);
+      setAdminSessionCookie(response, adminUser);
     } catch (e) {
       const missingProdSecret =
         e instanceof Error && e.message.includes("APP_SIGNING_SECRET");
@@ -52,16 +51,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const cookieStore = await cookies();
-    cookieStore.set("admin_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      path: "/",
-      maxAge: 60 * 60 * 8,
-    });
-
-    return NextResponse.json({ success: true });
+    return response;
   } catch {
     return NextResponse.json({ error: "Login failed." }, { status: 500 });
   }

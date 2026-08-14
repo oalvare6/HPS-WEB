@@ -9,11 +9,22 @@ type AuthState = "checking" | "unauthed" | "authed";
 export function AdminGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>("checking");
   const [loginError, setLoginError] = useState("");
+  const [expired, setExpired] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/me")
-      .then((res) => setState(res.ok ? "authed" : "unauthed"))
+      .then(async (res) => {
+        if (res.ok) {
+          setState("authed");
+          return;
+        }
+        // "Your session ran out" and "you were never signed in" look identical
+        // on screen otherwise, and the first one is the common case.
+        const body = (await res.json().catch(() => ({}))) as { reason?: string };
+        setExpired(body.reason === "expired");
+        setState("unauthed");
+      })
       .catch(() => setState("unauthed"));
   }, []);
 
@@ -61,6 +72,11 @@ export function AdminGate({ children }: { children: ReactNode }) {
           <div className="flex flex-col items-center mb-6">
             <Lock size={32} className="text-zinc-400 mb-3" />
             <h2 className="text-xl font-semibold text-white">Admin Login</h2>
+            {expired && (
+              <p className="text-sm text-zinc-400 mt-2 text-center">
+                Your session timed out. Sign in again — this one lasts 30 days.
+              </p>
+            )}
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>

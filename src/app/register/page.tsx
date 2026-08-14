@@ -108,7 +108,12 @@ export default async function RegisterPage({
       {state.kind === "closed" && <ClosedCard tournamentTitle={event.title} />}
 
       {state.kind === "already_paid" && (
-        <AlreadyPaidCard tournamentTitle={event.title} />
+        <AlreadyPaidCard
+          tournamentTitle={event.title}
+          tournamentId={event.id}
+          teams={teams}
+          teamId={state.teamId}
+        />
       )}
 
       {state.kind === "needs_waiver" && (
@@ -125,7 +130,10 @@ export default async function RegisterPage({
       {state.kind === "owes_payment" && (
         <OwesPaymentCard
           tournamentTitle={event.title}
+          tournamentId={event.id}
           entryFeeLabel={entryFeeLabel}
+          teams={teams}
+          teamId={state.teamId}
           teamName={await teamNameFor(state.teamId)}
           payHref={buildPayResumePath({
             registrationId: state.registrationId,

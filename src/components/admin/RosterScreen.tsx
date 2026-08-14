@@ -15,11 +15,13 @@ import {
   ExternalLink,
 } from "lucide-react";
 import {
+  progressByTeam,
   rosterFullName,
   type RosterPayload,
   type RosterRow,
   type RosterTeam,
   type RosterTotals,
+  type TeamProgress,
 } from "@/lib/admin-roster";
 
 type Filter = "all" | "unpaid" | "waiver-missing" | "no-team";
@@ -46,6 +48,8 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [signing, setSigning] = useState<RosterRow | null>(null);
+  /** `undefined` = no team filter; `null` = the unassigned bucket. */
+  const [teamFilter, setTeamFilter] = useState<string | null | undefined>(undefined);
 
   const load = useCallback(
     async (opts: { quiet?: boolean } = {}) => {
@@ -77,9 +81,20 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const teams = useMemo(() => data?.teams ?? [], [data]);
 
+  const teamProgress = useMemo(
+    () => progressByTeam(rows, teams),
+    [rows, teams]
+  );
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
+      if (teamFilter !== undefined) {
+        // Guests belong to no team, so they never survive a team filter —
+        // matching how progressByTeam counts them.
+        if (r.role === "guest") return false;
+        if ((r.teamId ?? null) !== teamFilter) return false;
+      }
       if (filter === "unpaid" && r.paid) return false;
       if (filter === "waiver-missing" && r.waiverOk) return false;
       if (filter === "no-team" && (r.teamId || r.role === "guest")) return false;
@@ -91,7 +106,7 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
         (r.teamName ?? "").toLowerCase().includes(q)
       );
     });
-  }, [rows, search, filter]);
+  }, [rows, search, filter, teamFilter]);
 
   /**
    * Row edits are optimistic: at the field the owner is tapping through a queue
@@ -155,6 +170,16 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
   return (
     <div className="space-y-4">
       <TotalsBar totals={data?.totals} loading={loading} />
+
+      {!loading && teamProgress.length > 0 && (
+        <TeamProgressPanel
+          progress={teamProgress}
+          selected={teamFilter}
+          onSelect={(id) =>
+            setTeamFilter((prev) => (prev === id ? undefined : id))
+          }
+        />
+      )}
 
       <div className="dashboard-card p-4 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -250,7 +275,21 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
 
         {!loading && rows.length > 0 && (
           <p className="text-xs text-zinc-500">
-            Showing {visible.length} of {rows.length}.
+            Showing {visible.length} of {rows.length}
+            {teamFilter !== undefined && (
+              <>
+                {" "}
+                ·{" "}
+                <button
+                  type="button"
+                  onClick={() => setTeamFilter(undefined)}
+                  className="underline underline-offset-2 hover:text-zinc-300"
+                >
+                  clear team filter
+                </button>
+              </>
+            )}
+            .
           </p>
         )}
       </div>
@@ -294,6 +333,100 @@ function TotalsBar({
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Payment progress per team — the pay-later view.
+ *
+ * Players sign up now and pay over the following weeks, so the question that
+ * matters between signup and match day is "how far along is each team", not
+ * "how many people paid in total". Deliberately reports; it does not enforce.
+ * Nothing here blocks a player or a team, because being locked out on the day
+ * over a payment deadline is a worse failure than chasing someone by text.
+ */
+function TeamProgressPanel({
+  progress,
+  selected,
+  onSelect,
+}: {
+  progress: TeamProgress[];
+  selected: string | null | undefined;
+  onSelect: (teamId: string | null) => void;
+}) {
+  return (
+    <div className="dashboard-card p-4 space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-semibold text-white">By team</h3>
+        <p className="text-xs text-zinc-500">Tap a team to filter the list</p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {progress.map((p) => {
+          const isSelected = selected === p.teamId;
+          const done = p.players > 0 && p.unpaid === 0;
+          return (
+            <button
+              key={p.teamId ?? "__unassigned"}
+              type="button"
+              aria-pressed={isSelected}
+              onClick={() => onSelect(p.teamId)}
+              className={`text-left rounded-lg border p-3 transition-colors ${
+                isSelected
+                  ? "border-brand bg-brand/10"
+                  : "border-border-token bg-surface-2 hover:border-zinc-600"
+              }`}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span
+                  className={`text-sm font-medium truncate ${
+                    p.teamId === null ? "text-yellow-400" : "text-white"
+                  }`}
+                >
+                  {p.teamName}
+                </span>
+                <span
+                  className={`text-xs font-mono shrink-0 ${
+                    done ? "text-green-400" : "text-zinc-400"
+                  }`}
+                >
+                  {p.paid}/{p.players} paid
+                </span>
+              </div>
+
+              <div
+                className="mt-2 h-1.5 rounded-full bg-base overflow-hidden"
+                role="progressbar"
+                aria-valuenow={p.paidPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${p.teamName} payment progress`}
+              >
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    done ? "bg-green-500" : "bg-brand"
+                  }`}
+                  style={{ width: `${p.paidPercent}%` }}
+                />
+              </div>
+
+              <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-zinc-500">
+                <span>{p.paidPercent}%</span>
+                {p.unpaid > 0 && (
+                  <span className="text-yellow-400">{p.unpaid} still owes</span>
+                )}
+                {p.waiverMissing > 0 && (
+                  <span className="text-red-400">
+                    {p.waiverMissing} no waiver
+                  </span>
+                )}
+                {p.players === 0 && <span>nobody yet</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

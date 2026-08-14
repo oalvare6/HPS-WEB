@@ -217,5 +217,76 @@ for (const c of CASES) {
   );
 }
 
-console.log(`\n${CASES.length - failed}/${CASES.length} passed`);
+/**
+ * Both on-the-roster states must carry the team, because both cards render the
+ * team picker and it has to open on the team the player already has.
+ *
+ * `already_paid` is the one worth asserting: it did not carry `team_id` at all,
+ * so a paid player could not be shown — let alone change — their team. Every
+ * Community Cup signup sat at `team_id = NULL` while the event had teams.
+ */
+const TEAM_CARRYING: { name: string; input: SignupStateInput; teamId: string | null }[] = [
+  {
+    name: "owes_payment carries the team it was signed up with",
+    input: {
+      contact: waiverValid,
+      registration: {
+        id: "reg-8",
+        payment_status: "pending",
+        waiver_signed: true,
+        team_id: "team-9",
+      },
+      waiverType: "adult",
+      ...open,
+    },
+    teamId: "team-9",
+  },
+  {
+    name: "already_paid carries the team (paying does not settle it)",
+    input: {
+      contact: waiverValid,
+      registration: {
+        id: "reg-9",
+        payment_status: "paid",
+        waiver_signed: true,
+        team_id: "team-9",
+      },
+      waiverType: "adult",
+      ...open,
+    },
+    teamId: "team-9",
+  },
+  {
+    name: "already_paid with no team reports null, not undefined",
+    input: {
+      contact: waiverValid,
+      registration: {
+        id: "reg-10",
+        payment_status: "waived",
+        waiver_signed: true,
+        team_id: null,
+      },
+      waiverType: "adult",
+      ...open,
+    },
+    teamId: null,
+  },
+];
+
+for (const c of TEAM_CARRYING) {
+  const state = resolveSignupState(c.input);
+  const got =
+    state.kind === "owes_payment" || state.kind === "already_paid"
+      ? state.teamId
+      : `<wrong state: ${state.kind}>`;
+  const ok = got === c.teamId;
+  if (!ok) failed++;
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${c.name}\n` +
+      `        teamId=${String(got)} (expected ${String(c.teamId)})`
+  );
+}
+
+const total = CASES.length + TEAM_CARRYING.length;
+console.log(`\n${total - failed}/${total} passed`);
 process.exit(failed === 0 ? 0 : 1);

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, ShieldCheck, Users } from "lucide-react";
+import { AlertCircle, ShieldCheck } from "lucide-react";
+import { NO_TEAM, TeamSelect } from "@/components/register/TeamPicker";
 import type { TeamOption } from "@/lib/tournaments";
 
 /**
@@ -27,7 +28,7 @@ export function QuickJoinCard({
   waiverExpiresAt: string | null;
   entryFeeLabel: string | null;
 }) {
-  const [teamId, setTeamId] = useState("");
+  const [teamId, setTeamId] = useState(NO_TEAM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -86,31 +87,13 @@ export function QuickJoinCard({
         </p>
 
         {teams.length > 0 ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Users size={16} className="text-brand" />
-              <label htmlFor="quick-team" className="text-sm font-semibold text-zinc-200">
-                Your team
-              </label>
-            </div>
-            <select
-              id="quick-team"
-              value={teamId}
-              onChange={(e) => setTeamId(e.target.value)}
-              disabled={submitting}
-              className="w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand/50 transition-colors disabled:opacity-70"
-            >
-              <option value="">Not sure yet — assign me later</option>
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-zinc-500">
-              You can change this later — just ask us at the field.
-            </p>
-          </div>
+          <TeamSelect
+            id="quick-team"
+            value={teamId}
+            onChange={setTeamId}
+            teams={teams}
+            disabled={submitting}
+          />
         ) : (
           <p className="text-xs text-zinc-500">
             Teams for this event aren&apos;t set up yet. We&apos;ll place you when they are.

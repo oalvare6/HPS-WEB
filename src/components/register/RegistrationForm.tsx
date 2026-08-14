@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
+import { NO_TEAM, TeamSelect } from "@/components/register/TeamPicker";
 import type { TeamOption } from "@/lib/tournaments";
 
 type RegistrationOption = {
@@ -24,9 +25,6 @@ type RegistrationOption = {
   slug: string;
   format: string | null;
 };
-
-/** Sentinel for "Not sure yet" — distinct from "no team picker shown". */
-const NO_TEAM = "";
 
 /**
  * Personal info prefilled for a logged-in player. When present, the form
@@ -336,35 +334,14 @@ export function RegistrationForm({
 
       {/* Team — picked here at signup (D3), not at payment */}
       {hasOptions && teams.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 mb-1">
-            <Users size={16} className="text-brand" />
-            <label
-              htmlFor="teamId"
-              className="block text-sm font-semibold text-zinc-200"
-            >
-              Your team
-            </label>
-          </div>
-          <select
-            id="teamId"
-            name="teamId"
-            value={teamId}
-            onChange={(e) => setTeamId(e.target.value)}
-            className={inputClass}
-          >
-            <option value={NO_TEAM}>Not sure yet — assign me later</option>
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-zinc-500">
-            Pick your team if you know it. You can change this later — just ask
-            us at the field.
-          </p>
-        </div>
+        <TeamSelect
+          id="teamId"
+          name="teamId"
+          value={teamId}
+          onChange={setTeamId}
+          teams={teams}
+          hint="Pick your team if you know it. You can change this later — just ask us at the field."
+        />
       )}
 
       {/* Registration Type */}

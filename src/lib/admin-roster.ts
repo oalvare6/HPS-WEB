@@ -133,3 +133,76 @@ export function totalsFromRows(rows: RosterRow[]): RosterTotals {
 export function rosterFullName(r: Pick<RosterRow, "firstName" | "lastName">): string {
   return [r.firstName, r.lastName].filter(Boolean).join(" ").trim();
 }
+
+/**
+ * One team's payment standing.
+ *
+ * `teamId: null` is the Unassigned bucket — players on the roster with no team,
+ * which is the number the owner most needs before a match day and the one the
+ * old totals bar reduced to a single count with no way to see who.
+ */
+export type TeamProgress = {
+  teamId: string | null;
+  teamName: string;
+  players: number;
+  paid: number;
+  unpaid: number;
+  waiverMissing: number;
+  /** 0–100, rounded. 0 when the team has no players, never NaN. */
+  paidPercent: number;
+};
+
+/**
+ * Payment progress per team, for the pay-later model.
+ *
+ * Players sign up first and pay over the following weeks, so "who owes me
+ * money, grouped by team" is the question the owner actually asks. Derived from
+ * the roster rows the screen already holds — no extra query, no new column.
+ *
+ * Guests are excluded. A guest fills in for one night at a separate price and
+ * is not part of a team's season roster (D7), so counting them would make a
+ * team look further along than it is.
+ *
+ * Teams with nobody on them are still returned, at 0 of 0. An empty team is a
+ * real thing the owner needs to see — that is the team nobody has joined.
+ */
+export function progressByTeam(
+  rows: RosterRow[],
+  teams: RosterTeam[]
+): TeamProgress[] {
+  const blank = (teamId: string | null, teamName: string): TeamProgress => ({
+    teamId,
+    teamName,
+    players: 0,
+    paid: 0,
+    unpaid: 0,
+    waiverMissing: 0,
+    paidPercent: 0,
+  });
+
+  const byId = new Map<string | null, TeamProgress>();
+  for (const t of teams) byId.set(t.id, blank(t.id, t.name));
+
+  const unassigned = blank(null, "No team yet");
+
+  for (const r of rows) {
+    if (r.role === "guest") continue;
+    // A row can name a team that has since been deleted; bucket it as
+    // unassigned rather than dropping it and under-reporting the roster.
+    const bucket = (r.teamId && byId.get(r.teamId)) || unassigned;
+    bucket.players++;
+    if (r.paid) bucket.paid++;
+    else bucket.unpaid++;
+    if (!r.waiverOk) bucket.waiverMissing++;
+  }
+
+  const finish = (p: TeamProgress): TeamProgress => ({
+    ...p,
+    paidPercent: p.players === 0 ? 0 : Math.round((p.paid / p.players) * 100),
+  });
+
+  const result = [...byId.values()].map(finish);
+  // Unassigned last, and only when it has anyone — an empty bucket is noise.
+  if (unassigned.players > 0) result.push(finish(unassigned));
+  return result;
+}

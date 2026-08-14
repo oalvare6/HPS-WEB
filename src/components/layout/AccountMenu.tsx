@@ -2,20 +2,35 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
-import { ChevronDown, LogOut, Trophy, User } from "lucide-react";
+import { ChevronDown, Trophy, User } from "lucide-react";
+import { SignOutButton } from "@/components/auth/SignOutButton";
+import {
+  WaiverStatusLine,
+  type HeaderWaiverStatus,
+} from "@/components/layout/WaiverStatusLine";
 
 /**
  * Header account dropdown for signed-in players.
  *
- * Four items: Profile, My registrations, Security, Sign out. Sign-out is
- * a real form POST to `/auth/signout` so the server clears the Supabase
- * session cookies before the response.
+ * Opens with the player's waiver standing — "Waiver good through Jun 3, 2027"
+ * or "Waiver needed" — because that is the one fact a player wants from the
+ * header and the only thing standing between them and playing. Then Profile,
+ * My registrations, and Sign out.
+ *
+ * Sign-out is a real form POST to `/auth/signout` (see `SignOutButton`) so the
+ * server clears the httpOnly Supabase session cookies before the response.
  *
  * Keyboard accessibility: Esc closes; Tab moves naturally through the
- * focusable elements. A 4-item menu doesn't need a focus trap and the
+ * focusable elements. A short menu doesn't need a focus trap and the
  * spec explicitly says not to add one.
  */
-export function AccountMenu({ displayName }: { displayName: string }) {
+export function AccountMenu({
+  displayName,
+  waiverStatus,
+}: {
+  displayName: string;
+  waiverStatus: HeaderWaiverStatus | null;
+}) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -61,6 +76,18 @@ export function AccountMenu({ displayName }: { displayName: string }) {
       >
         <User size={14} />
         <span className="max-w-[10rem] truncate">{displayName}</span>
+        {/*
+          A dot rather than the full sentence: the header has no room for a date,
+          but "something needs your attention" has to be visible without opening
+          the menu, or the waiver line inside it never gets read.
+        */}
+        {waiverStatus?.tone === "warn" && (
+          <span
+            aria-label="Waiver needs attention"
+            title="Waiver needs attention"
+            className="w-1.5 h-1.5 rounded-full bg-yellow-400"
+          />
+        )}
         <ChevronDown
           size={14}
           aria-hidden="true"
@@ -73,8 +100,20 @@ export function AccountMenu({ displayName }: { displayName: string }) {
           id={menuId}
           role="menu"
           aria-label="Account menu"
-          className="absolute right-0 top-full mt-2 w-56 rounded-lg border border-border-token bg-base shadow-lg shadow-black/40 overflow-hidden"
+          className="absolute right-0 top-full mt-2 w-64 rounded-lg border border-border-token bg-base shadow-lg shadow-black/40 overflow-hidden"
         >
+          {waiverStatus && (
+            <>
+              <div className="px-3 py-2.5" role="none">
+                <p className="text-[11px] uppercase tracking-wider text-zinc-500">
+                  {displayName}
+                </p>
+                <WaiverStatusLine status={waiverStatus} className="mt-1" />
+              </div>
+              <div className="h-px bg-border-token" aria-hidden="true" />
+            </>
+          )}
+
           <MenuItem
             href="/me"
             icon={<User size={14} />}
@@ -89,21 +128,11 @@ export function AccountMenu({ displayName }: { displayName: string }) {
           />
           <div className="h-px bg-border-token" aria-hidden="true" />
 
-          <form
-            action="/auth/signout"
-            method="post"
-            role="none"
-            onSubmit={closeOnNavigate}
-          >
-            <button
-              type="submit"
-              role="menuitem"
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-300 hover:bg-surface-2 hover:text-white transition-colors text-left"
-            >
-              <LogOut size={14} />
-              Sign out
-            </button>
-          </form>
+          <SignOutButton
+            inMenu
+            onSubmitted={closeOnNavigate}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-zinc-300 hover:bg-surface-2 hover:text-white transition-colors text-left disabled:opacity-60"
+          />
         </div>
       )}
     </div>
