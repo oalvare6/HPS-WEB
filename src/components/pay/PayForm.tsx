@@ -166,12 +166,12 @@ export function PayForm({
       return `${base} — Captain already paid`;
     }
     if (hasRegistration) {
-      return registrationTournament?.title ?? "Tournament Entry";
+      return registrationTournament?.title ?? "Event Entry";
     }
     if (selectedPayKind === "drop_in") {
-      return `${selectedTournament?.title ?? "Tournament"} — Drop-in`;
+      return `${selectedTournament?.title ?? "Event"} — Drop-in`;
     }
-    return selectedTournament?.title ?? "Tournament Entry";
+    return selectedTournament?.title ?? "Event Entry";
   })();
 
   const requiresTeamName =
@@ -551,9 +551,9 @@ export function PayForm({
                   className={selectedPayKind === "entry" ? "text-brand" : "text-zinc-600"}
                 />
               </div>
-              <p className="text-white font-semibold mb-1">Tournament Entry</p>
+              <p className="text-white font-semibold mb-1">Event Entry</p>
               <p className="text-zinc-400 text-sm mb-3">
-                Full tournament registration payment.
+                Full event registration payment.
               </p>
               <p className="text-2xl font-bold text-white">
                 {formatUsd(selectedTournament.entry_fee_cents)}

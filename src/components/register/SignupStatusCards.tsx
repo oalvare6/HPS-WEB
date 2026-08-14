@@ -4,6 +4,8 @@ import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommu
 import { SavedTeamPicker } from "@/components/register/TeamPicker";
 import { PaymentChoice } from "@/components/register/PaymentChoice";
 import { CancelSpotButton } from "@/components/register/CancelSpotButton";
+import { copyForKind } from "@/lib/event-kind";
+import type { EventKind } from "@/lib/types";
 import type { TeamOption } from "@/lib/tournaments";
 
 /**
@@ -28,6 +30,7 @@ export function AlreadyPaidCard({
   teamName,
   registrationId,
   payToken,
+  eventKind = "tournament",
 }: {
   tournamentTitle: string;
   tournamentId: string;
@@ -36,7 +39,10 @@ export function AlreadyPaidCard({
   teamName: string | null;
   registrationId: string;
   payToken: string;
+  /** Words and panels only — a Friday night has no roster and no teams. */
+  eventKind?: EventKind;
 }) {
+  const hasTeams = copyForKind(eventKind).hasTeams;
   return (
     <div className={cardClass}>
       <div className="flex items-start gap-3">
@@ -46,9 +52,19 @@ export function AlreadyPaidCard({
         <div className="space-y-1">
           <h2 className="text-lg font-semibold text-white">You&apos;re all set</h2>
           <p className="text-sm text-zinc-400">
-            You&apos;re on the roster for{" "}
-            <span className="text-zinc-200">{tournamentTitle}</span> and paid up.
-            See you on the field.
+            {hasTeams ? (
+              <>
+                You&apos;re on the roster for{" "}
+                <span className="text-zinc-200">{tournamentTitle}</span> and paid
+                up. See you on the field.
+              </>
+            ) : (
+              <>
+                You&apos;re signed up for{" "}
+                <span className="text-zinc-200">{tournamentTitle}</span>. Nothing
+                left to do — see you on the field.
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -58,15 +74,19 @@ export function AlreadyPaidCard({
         alternative is a paid player with nowhere to be on match day — which is
         most of the roster right now. It only *asks* while the answer is unknown;
         once they have a team it states it and points switches at an admin.
+        Hidden for open play: sides are made on the night, so a team block —
+        even the "we'll sort it out" line — asks a question the event doesn't have.
       */}
-      <div className="border-t border-border-token pt-5">
-        <SavedTeamPicker
-          tournamentId={tournamentId}
-          teams={teams}
-          initialTeamId={teamId}
-          initialTeamName={teamName}
-        />
-      </div>
+      {hasTeams && (
+        <div className="border-t border-border-token pt-5">
+          <SavedTeamPicker
+            tournamentId={tournamentId}
+            teams={teams}
+            initialTeamId={teamId}
+            initialTeamName={teamName}
+          />
+        </div>
+      )}
 
       <div className="border-t border-border-token pt-5 space-y-3">
         <p className="text-sm text-zinc-400">
@@ -109,6 +129,7 @@ export function OwesPaymentCard({
   payingCash,
   registrationId,
   payToken,
+  eventKind = "tournament",
 }: {
   tournamentTitle: string;
   tournamentId: string;
@@ -121,7 +142,10 @@ export function OwesPaymentCard({
   payingCash: boolean;
   registrationId: string;
   payToken: string;
+  /** Words and panels only — a Friday night has no roster and no teams. */
+  eventKind?: EventKind;
 }) {
+  const hasTeams = copyForKind(eventKind).hasTeams;
   return (
     <div className={cardClass}>
       <div className="flex items-start gap-3">
@@ -140,7 +164,7 @@ export function OwesPaymentCard({
           */}
           <p className="text-sm text-zinc-400">
             Your spot is confirmed and your waiver is done.
-            {teamName ? "" : " Pick your team below."}
+            {hasTeams && !teamName ? " Pick your team below." : ""}
           </p>
         </div>
       </div>
@@ -149,15 +173,18 @@ export function OwesPaymentCard({
         This is the screen a returning player actually lands on, and until now it
         had no team control at all — so nobody who was already signed up was ever
         asked which team they were on, however many teams the event had.
+        Hidden for open play: sides are made on the night.
       */}
-      <div className="border-t border-border-token pt-5">
-        <SavedTeamPicker
-          tournamentId={tournamentId}
-          teams={teams}
-          initialTeamId={teamId}
-          initialTeamName={teamName}
-        />
-      </div>
+      {hasTeams && (
+        <div className="border-t border-border-token pt-5">
+          <SavedTeamPicker
+            tournamentId={tournamentId}
+            teams={teams}
+            initialTeamId={teamId}
+            initialTeamName={teamName}
+          />
+        </div>
+      )}
 
       <div className="border-t border-border-token pt-5 space-y-3">
         {/*
@@ -177,10 +204,13 @@ export function OwesPaymentCard({
           payHref={payHref}
           entryFeeLabel={entryFeeLabel}
           initialMethod={payingCash ? "cash" : null}
+          eventKind={eventKind}
         />
         <p className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 text-center">
           <Clock size={12} />
-          You can settle up from this page any time before your first match.
+          {hasTeams
+            ? "You can settle up from this page any time before your first match."
+            : "You can settle up from this page any time, or at the door."}
         </p>
       </div>
 
@@ -209,9 +239,12 @@ export function NeedsWaiverCard({
   waiverHref,
   isExternalWaiver = false,
   recheckHref,
+  eventKind = "tournament",
 }: {
   tournamentTitle: string;
   waiverHref: string;
+  /** Words only — "roster" reads wrong on a one-off open play night. */
+  eventKind?: EventKind;
   /** True when the link leaves the site for DocuSeal. */
   isExternalWaiver?: boolean;
   /**
@@ -233,7 +266,7 @@ export function NeedsWaiverCard({
             One thing left — your waiver
           </h2>
           <p className="text-sm text-zinc-400">
-            You&apos;re on the roster for{" "}
+            You&apos;re {copyForKind(eventKind).hasTeams ? "on the roster for" : "signed up for"}{" "}
             <span className="text-zinc-200">{tournamentTitle}</span>, but we
             don&apos;t have your signed waiver yet. It takes about a minute, and
             it covers you for the next 365 days.

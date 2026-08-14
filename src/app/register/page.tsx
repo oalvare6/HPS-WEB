@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, MapPin, Trophy } from "lucide-react";
+import { CalendarDays, MapPin, Trophy, Zap } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import {
   RegistrationForm,
@@ -23,7 +23,7 @@ import { isContactWaiverValid } from "@/lib/contacts";
 import { createPayResumeToken } from "@/lib/app-signing";
 import { buildPayResumePath, buildWaiverSignPath } from "@/lib/pay-resume-url";
 import { acceptsRegistrations } from "@/lib/tournament-state";
-import { eventKindCopy } from "@/lib/event-kind";
+import { eventKindCopy, isOpenPlay, resolveEventKind } from "@/lib/event-kind";
 import { reconcileIfUnsigned } from "@/lib/waiver-reconcile";
 import {
   findEventRegistration,
@@ -157,6 +157,7 @@ export default async function RegisterPage({
           teamName={teamName}
           registrationId={state.registrationId}
           payToken={createPayResumeToken(state.registrationId)}
+          eventKind={resolveEventKind(event)}
         />
       )}
 
@@ -180,6 +181,7 @@ export default async function RegisterPage({
           }
           isExternalWaiver={Boolean(resumeSignUrl)}
           recheckHref={`/register?tournament=${encodeURIComponent(event.slug)}`}
+          eventKind={resolveEventKind(event)}
         />
       )}
 
@@ -194,6 +196,7 @@ export default async function RegisterPage({
           payingCash={state.payingCash}
           registrationId={state.registrationId}
           payToken={createPayResumeToken(state.registrationId)}
+          eventKind={resolveEventKind(event)}
           payHref={buildPayResumePath({
             registrationId: state.registrationId,
             payToken: createPayResumeToken(state.registrationId),
@@ -240,6 +243,7 @@ export default async function RegisterPage({
             preselectedType={typeParam === "youth" ? "youth" : typeParam === "adult" ? "adult" : null}
             prefill={buildPrefill(player)}
             entryFeeLabel={entryFeeLabel}
+            eventKind={resolveEventKind(event)}
             lockedToEvent
           />
         </div>
@@ -345,7 +349,11 @@ function SignupShell({
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex items-center gap-3 mb-3">
-            <Trophy size={26} className="text-brand flex-shrink-0" />
+            {event && isOpenPlay(event) ? (
+              <Zap size={26} className="text-brand flex-shrink-0" />
+            ) : (
+              <Trophy size={26} className="text-brand flex-shrink-0" />
+            )}
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
               {title}
             </h1>
@@ -411,7 +419,11 @@ function EventPicker({ tournaments }: { tournaments: Tournament[] }) {
           className="dashboard-card p-5 flex items-start gap-4 hover:border-brand/50 transition-colors"
         >
           <div className="w-10 h-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center flex-shrink-0">
-            <Trophy size={18} className="text-brand" />
+            {isOpenPlay(t) ? (
+              <Zap size={18} className="text-brand" />
+            ) : (
+              <Trophy size={18} className="text-brand" />
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-base font-semibold text-white">{t.title}</p>

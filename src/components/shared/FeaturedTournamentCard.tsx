@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Calendar, Clock, CreditCard, MapPin, Trophy, Users } from "lucide-react";
+import { ArrowRight, Calendar, Clock, CreditCard, MapPin, Trophy, Users, Zap } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
+import { isOpenPlay } from "@/lib/event-kind";
 import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
@@ -62,6 +63,7 @@ export function FeaturedTournamentCard({
       : tournament.time_start || tournament.time_end;
   const cta = tournamentPrimaryCta(tournament);
   const pill = STATUS_PILL[tournament.status];
+  const openPlay = isOpenPlay(tournament);
 
   return (
     <div
@@ -117,7 +119,11 @@ export function FeaturedTournamentCard({
               </Link>
             </h2>
           </div>
-          <Trophy size={24} className="text-brand flex-shrink-0" />
+          {openPlay ? (
+            <Zap size={24} className="text-brand flex-shrink-0" />
+          ) : (
+            <Trophy size={24} className="text-brand flex-shrink-0" />
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -148,7 +154,13 @@ export function FeaturedTournamentCard({
         <div className="flex flex-col gap-2">
           {cta.kind !== "none" && (
             <Link href={cta.href} className="btn-primary w-full justify-center text-sm">
-              {cta.kind === "pay" ? <CreditCard size={14} /> : <Trophy size={14} />}
+              {cta.kind === "pay" ? (
+                <CreditCard size={14} />
+              ) : openPlay ? (
+                <Zap size={14} />
+              ) : (
+                <Trophy size={14} />
+              )}
               {cta.label}
               <ArrowRight size={14} />
             </Link>
@@ -157,7 +169,7 @@ export function FeaturedTournamentCard({
             href={`/events/${tournament.slug}`}
             className="text-xs text-zinc-400 hover:text-white text-center inline-flex items-center justify-center gap-1 transition-colors mt-1"
           >
-            View tournament details
+            {openPlay ? "View event details" : "View tournament details"}
             <ArrowRight size={12} />
           </Link>
         </div>

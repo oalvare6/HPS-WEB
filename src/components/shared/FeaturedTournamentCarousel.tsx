@@ -58,7 +58,7 @@ export function FeaturedTournamentCarousel({
       onBlur={() => setPaused(false)}
       role="region"
       aria-roledescription="carousel"
-      aria-label="Featured tournaments"
+      aria-label="Featured events"
     >
       <div key={current.id} aria-live="polite">
         <FeaturedTournamentCard tournament={current} imagePriority={index === 0} />
@@ -68,7 +68,7 @@ export function FeaturedTournamentCarousel({
         <button
           type="button"
           onClick={prev}
-          aria-label="Previous featured tournament"
+          aria-label="Previous featured event"
           className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-surface-2/80 hover:bg-surface-2 text-zinc-300 hover:text-white border border-border-token transition-colors"
         >
           <ChevronLeft size={16} />
@@ -76,7 +76,7 @@ export function FeaturedTournamentCarousel({
 
         <div
           role="tablist"
-          aria-label="Choose featured tournament"
+          aria-label="Choose featured event"
           className="flex items-center gap-2"
         >
           {tournaments.map((t, i) => {
@@ -100,7 +100,7 @@ export function FeaturedTournamentCarousel({
         <button
           type="button"
           onClick={next}
-          aria-label="Next featured tournament"
+          aria-label="Next featured event"
           className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-surface-2/80 hover:bg-surface-2 text-zinc-300 hover:text-white border border-border-token transition-colors"
         >
           <ChevronRight size={16} />

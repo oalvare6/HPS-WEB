@@ -64,7 +64,7 @@ export async function Footer() {
             <ul className="space-y-3">
               <li>
                 <Link href="/events" className="text-zinc-400 hover:text-white text-sm transition-colors">
-                  Tournaments
+                  Events
                 </Link>
               </li>
               <li>

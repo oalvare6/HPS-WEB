@@ -202,7 +202,7 @@ export default async function PayPage({
         ? skipGate
           ? `Pay for ${initialTournament.title}`
           : `Join ${initialTournament.title}`
-        : "Pay for Tournament";
+        : "Make a payment";
 
   // Server-side eligibility for logged-in players: skip the client gate
   // entirely. Either redirect to /pay with a token, or render a static result

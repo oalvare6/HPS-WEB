@@ -36,6 +36,7 @@ export function HeaderClient({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const closeMobile = () => setMobileMenuOpen(false);
   const safeDisplayName = (displayName ?? "").trim() || "Account";
+  const firstName = safeDisplayName.split(/\s+/)[0];
 
   return (
     <header className="sticky top-0 z-50 bg-base/95 backdrop-blur-md border-b border-border-token/80">
@@ -107,15 +108,41 @@ export function HeaderClient({
             </nav>
           </div>
 
-          {/* Mobile Menu Button */}
-          <button
-            className="md:hidden p-2 -mr-2 text-zinc-400 hover:text-white"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
-            aria-expanded={mobileMenuOpen}
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+          {/* Mobile: account chip + menu button */}
+          <div className="md:hidden flex items-center gap-1">
+            {/*
+              The collapsed phone header used to be byte-identical signed in or
+              out — every signed-in signal lived behind the hamburger, so signing
+              in looked like nothing happened. The chip is the proof it worked:
+              your name, a tap from /me, and the same amber waiver dot the
+              desktop AccountMenu shows.
+            */}
+            {isAuthed && (
+              <Link
+                href="/me"
+                aria-label="Your account"
+                className="inline-flex items-center gap-1.5 max-w-[9rem] px-2.5 py-1.5 rounded-full border border-border-token bg-surface-2/60 text-sm font-medium text-zinc-200 hover:text-white transition-colors"
+              >
+                <User size={14} className="text-brand shrink-0" />
+                <span className="truncate">{firstName}</span>
+                {waiverStatus?.tone === "warn" && (
+                  <span
+                    aria-label="Waiver needs attention"
+                    title="Waiver needs attention"
+                    className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0"
+                  />
+                )}
+              </Link>
+            )}
+            <button
+              className="p-2 -mr-2 text-zinc-400 hover:text-white"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Nav */}
@@ -163,7 +190,7 @@ export function HeaderClient({
                   className="bg-white text-zinc-900 px-4 py-3 text-center font-medium rounded-md hover:bg-zinc-100 transition-colors mt-2"
                   onClick={closeMobile}
                 >
-                  Register for Tournament
+                  Sign up to play
                 </Link>
               </>
             )}
