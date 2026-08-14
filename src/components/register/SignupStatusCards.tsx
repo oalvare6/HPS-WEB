@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, CreditCard, PenLine } from "lucide-react";
+import { CheckCircle2, Clock, CreditCard, PenLine, RefreshCw } from "lucide-react";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { SavedTeamPicker } from "@/components/register/TeamPicker";
 import type { TeamOption } from "@/lib/tournaments";
@@ -103,11 +103,14 @@ export function OwesPaymentCard({
           <p className="text-sm text-zinc-400">
             {teamName ? (
               <>
-                Playing for <span className="text-zinc-200">{teamName}</span>. One
-                thing left — the entry fee.
+                Your spot is confirmed and you&apos;re playing for{" "}
+                <span className="text-zinc-200">{teamName}</span>.
               </>
             ) : (
-              <>Your waiver is done. Pick your team below and pay the entry fee.</>
+              <>
+                Your spot is confirmed and your waiver is done. Pick your team
+                below.
+              </>
             )}
           </p>
         </div>
@@ -127,15 +130,24 @@ export function OwesPaymentCard({
       </div>
 
       <div className="border-t border-border-token pt-5 space-y-3">
+        {/*
+          Deliberately framed as outstanding, not as a barrier. Players sign up
+          weeks before they pay and several pay cash at the field; the roster
+          already tracks who owes what, so nothing here needs to block them.
+          What this must never do is imply their spot is contingent on paying
+          today — that misread is what sent people back through signup twice.
+        */}
         <Link
           href={payHref}
           className="btn-primary w-full h-12 inline-flex items-center justify-center gap-2"
         >
           <CreditCard size={16} />
-          Pay {entryFeeLabel ?? "entry fee"}
+          Pay {entryFeeLabel ?? "entry fee"} now
         </Link>
-        <p className="text-xs text-zinc-500 text-center">
-          Paying at the field instead? Tell us there and we&apos;ll mark you paid.
+        <p className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 text-center">
+          <Clock size={12} />
+          Or pay later — at the field, or from this page any time before your
+          first match.
         </p>
       </div>
     </div>
@@ -145,9 +157,20 @@ export function OwesPaymentCard({
 export function NeedsWaiverCard({
   tournamentTitle,
   waiverHref,
+  isExternalWaiver = false,
+  recheckHref,
 }: {
   tournamentTitle: string;
   waiverHref: string;
+  /** True when the link leaves the site for DocuSeal. */
+  isExternalWaiver?: boolean;
+  /**
+   * Somewhere to send a player who insists they already signed. The page that
+   * renders this re-checks with DocuSeal on every load, so "check again" is
+   * just this screen again — no extra endpoint, and no way for the button to
+   * disagree with the page.
+   */
+  recheckHref?: string;
 }) {
   return (
     <div className={cardClass}>
@@ -170,11 +193,31 @@ export function NeedsWaiverCard({
       <div className="border-t border-border-token pt-5 space-y-3">
         <Link
           href={waiverHref}
+          {...(isExternalWaiver
+            ? { target: "_blank", rel: "noopener noreferrer" }
+            : {})}
           className="btn-primary w-full h-12 inline-flex items-center justify-center gap-2"
         >
           <PenLine size={16} />
           Sign my waiver
         </Link>
+
+        {/*
+          The loop this breaks: sign in DocuSeal, come back, get told to sign
+          again. That happened to every player for a month because the webhook
+          that was supposed to report the signature was rejecting every
+          delivery. Reloading this page now asks DocuSeal directly.
+        */}
+        {recheckHref && (
+          <Link
+            href={recheckHref}
+            className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-lg border border-border-token text-sm text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+          >
+            <RefreshCw size={14} />
+            I already signed — check again
+          </Link>
+        )}
+
         <p className="text-xs text-zinc-500 text-center">
           You can&apos;t play without it — no exceptions, for everyone&apos;s sake.
         </p>

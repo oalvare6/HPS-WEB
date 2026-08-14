@@ -4,6 +4,7 @@ import { useState, FormEvent, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { FormFieldsSkeleton } from "@/components/shared/skeleton";
+import { EnrolledBanner, PayLaterCard } from "@/components/pay/EnrolledPanels";
 import { trackRegistrationEvent } from "@/lib/analytics";
 import {
   Trophy,
@@ -57,11 +58,33 @@ type PayFormProps = {
    * Must already be in the payments-open set.
    */
   initialTournament?: TournamentPayOption | null;
+  /**
+   * Roster standing for a player arriving on a resume link, rendered as the
+   * "you're on the roster" banner and the "pay later" exit.
+   *
+   * These live **inside** this component rather than beside it on the page.
+   * `PayForm` sits behind a Suspense boundary because it calls
+   * `useSearchParams()`, and rendering sibling content next to that boundary
+   * strands its fallback `<template>` — the Pay button then never appears at
+   * all. Reproduced on a clean production build. Passing the data in keeps the
+   * boundary's subtree self-contained, which is the arrangement that works.
+   */
+  enrolled?: EnrolledStanding | null;
+};
+
+export type EnrolledStanding = {
+  tournamentTitle: string | null;
+  teamName: string | null;
+  isPaid: boolean;
+  /** Where "I'll pay later" sends them to check their standing. */
+  statusHref: string;
+  entryFeeLabel: string | null;
 };
 
 export function PayForm({
   initialTournamentId = null,
   initialTournament = null,
+  enrolled = null,
 }: PayFormProps) {
   const searchParams = useSearchParams();
   const cancelled = searchParams.get("cancelled") === "true";
@@ -406,6 +429,14 @@ export function PayForm({
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-12 md:py-20">
+      {enrolled && (
+        <EnrolledBanner
+          tournamentTitle={enrolled.tournamentTitle}
+          teamName={enrolled.teamName}
+          isPaid={enrolled.isPaid}
+        />
+      )}
+
       {hasRegistration && (
         <div className="mb-6 flex items-start gap-3 bg-brand/10 border border-brand/30 rounded-lg px-4 py-3 text-brand text-sm">
           <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0" />
@@ -707,6 +738,13 @@ export function PayForm({
           </p>
         </form>
       </div>
+
+      {enrolled && !enrolled.isPaid && (
+        <PayLaterCard
+          statusHref={enrolled.statusHref}
+          entryFeeLabel={enrolled.entryFeeLabel}
+        />
+      )}
     </div>
   );
 }

@@ -158,3 +158,50 @@ Open items, most urgent first:
 - **`APP_SIGNING_SECRET` is not set in Vercel and does not need to be** —
   `src/lib/app-signing.ts` falls back to `ADMIN_SESSION_SECRET`, which is set. Renaming it
   someday would silence a deprecation warning; nothing is broken.
+
+## 2026-08-14 (later) — the waiver round trip, and pay-later
+
+- **Root cause of "you sign the waiver and nothing updates": `DOCUSEAL_WEBHOOK_SECRET` is
+  not set in Vercel.** `POST /api/docuseal/webhook` returns **503 to every DocuSeal
+  delivery** before it reads the payload (`route.ts` guards on the secret first). Measured
+  directly against production. Consequence: `docuseal_status` never leaves `'sent'`, so
+  `resolveSignupState` answers `needs_waiver` and asks the player to sign again — the loop
+  the operator reported. **7 registrations are stuck**, the oldest 2026-07-22, including two
+  players who have already paid. No code change caused this: there are **zero commits between
+  2026-07-10 and 2026-08-01**. It is pure configuration.
+- **The webhook's HMAC verification is correct** — checked against DocuSeal's documented
+  scheme (`X-Docuseal-Signature: <timestamp>.<hmac>` over `<timestamp>.<raw body>`, raw bytes
+  via `request.text()`). Nothing to fix there; it simply never gets to run. The secret is the
+  `whsec_…` value under the webhook's Security → HMAC tab.
+- **Waivers that flipped to signed before 2026-07-17 were almost certainly the admin "Sync
+  Waivers" button, not the webhook.** `waiver_signed_at` is written from DocuSeal's
+  `completed_at`, so those timestamps look like instant confirmations but say nothing about
+  when we learned. Do not read them as evidence the webhook ever worked.
+- **Fixed structurally: the app no longer depends on the webhook.** `src/lib/waiver-reconcile.ts`
+  asks DocuSeal directly whenever a decision is about to be made from `waiver_signed`, on both
+  `/register` and `/pay`. Same principle as A4's "Done — check". Setting the webhook secret is
+  still worth doing (instant, and covers players who close the tab) but is no longer load-bearing.
+- **`GET /api/docuseal/webhook`** is a new configuration probe — returns `ready`,
+  `webhookSecretConfigured`, `apiKeyConfigured` as booleans. Added because this failure was
+  invisible for a month behind a platform that keeps one hour of logs. Safe to leave public:
+  booleans only, and the endpoint fails closed.
+- **`needs_waiver` now resumes the player's existing DocuSeal submission** (`docuseal_sign_url`)
+  instead of minting a second one, and carries an "I already signed — check again" link. Falls
+  back to in-app signing only when the registration has no submission.
+- ⚠ **`PayForm` must be the only thing inside its Suspense boundary on `/pay`.** It calls
+  `useSearchParams()`, so it renders behind Suspense; rendering *anything* alongside that
+  boundary — sibling in the same section, its own `<section>`, server or client component —
+  strands the fallback `<template>` in the DOM and **the Pay button never appears at all**.
+  Reproduced on a clean production build, not just dev. The roster banner and pay-later exit
+  are therefore passed *into* PayForm as the `enrolled` prop. Do not compose them around it.
+- **Pay-later is UI only — no schema change.** `payment_status` already had `'pending'` and
+  `'partial'`, team is already written at signup, and the Roster already has the by-team panel.
+  What was missing was the player-facing half: signup ended on a bare Stripe form, so someone
+  not paying that day closed the tab unsure they had a spot. Their row existed the whole time.
+- **Waiver stays a hard gate on roster membership** (operator's decision, 2026-08-14). `/pay`
+  with a valid resume token now refuses to take money when the waiver is unconfirmed, which is
+  the state that produced the two paid-but-unsigned Community Cup players.
+- Tests: `npx tsx scripts/test-waiver-reconcile.ts` — 16 cases over the reconcile branch table
+  and DocuSeal's document-URL shapes. `scripts/_mint-pay-token.ts` mints a **localhost-only**
+  pay-resume link for exercising `/pay` in dev (signed with the local secret; production
+  rejects it).

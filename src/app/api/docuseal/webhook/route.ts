@@ -27,6 +27,38 @@ interface DocuSealWebhookPayload {
   };
 }
 
+/**
+ * Configuration probe. Open it in a browser to see whether this endpoint can
+ * actually accept a delivery.
+ *
+ * This exists because the failure it reports was invisible for a month:
+ * `DOCUSEAL_WEBHOOK_SECRET` was never set in Vercel, so every DocuSeal callback
+ * got a 503 before its payload was read, and the only trace was a log line on a
+ * platform that keeps one hour of logs. Seven players signed waivers that never
+ * reached the database. A misconfiguration that silent needs somewhere to say
+ * so out loud.
+ *
+ * Safe to leave public: it returns booleans, never values, and the endpoint
+ * fails closed — an unset secret rejects everything rather than accepting it.
+ */
+export async function GET() {
+  const hasSecret = Boolean(process.env.DOCUSEAL_WEBHOOK_SECRET?.trim());
+  const hasApiKey = Boolean(process.env.DOCUSEAL_API_KEY?.trim());
+
+  return NextResponse.json(
+    {
+      endpoint: "docuseal-webhook",
+      ready: hasSecret,
+      webhookSecretConfigured: hasSecret,
+      apiKeyConfigured: hasApiKey,
+      note: hasSecret
+        ? "Ready to accept DocuSeal deliveries."
+        : "DOCUSEAL_WEBHOOK_SECRET is not set — every delivery is being rejected with 503. Set it in Vercel, then redeploy.",
+    },
+    { headers: { "Cache-Control": "no-store" } }
+  );
+}
+
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const secret = process.env.DOCUSEAL_WEBHOOK_SECRET?.trim() ?? "";
