@@ -54,7 +54,15 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // Run on everything except Next.js internals and static assets. We need
   // session refresh on regular page navigations, not just on /me/*.
+  //
+  // `/auth/signout` is EXCLUDED deliberately, and removing it from this list
+  // breaks sign-out. The `getUser()` call above refreshes an expiring session
+  // and writes fresh `sb-*` cookies onto the middleware response; the sign-out
+  // route then writes cookie *deletions* onto its own. Next merges both sets of
+  // Set-Cookie headers and the refreshed pair can win, leaving the player
+  // signed in with nothing on screen to explain why. The route reads and clears
+  // the session itself and must not have it refreshed underneath.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon\\.png|apple-icon\\.png|brand/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon\\.png|apple-icon\\.png|brand/|auth/signout|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|xml)$).*)",
   ],
 };

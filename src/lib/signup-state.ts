@@ -43,8 +43,11 @@ export type SignupStateInput = {
 export type SignupState =
   /** Event is over, draft, or closed to both signups and money. */
   | { kind: "closed" }
-  /** Already on the roster and square with us. Nothing left to do. */
-  | { kind: "already_paid"; registrationId: string }
+  /**
+   * Already on the roster and square with us. Carries `teamId` because paying
+   * does not settle which team you are on — the card still offers the picker.
+   */
+  | { kind: "already_paid"; registrationId: string; teamId: string | null }
   /** On the roster, still owes the entry fee. */
   | { kind: "owes_payment"; registrationId: string; teamId: string | null }
   /** On the roster but the waiver is still outstanding. */
@@ -71,7 +74,11 @@ export function resolveSignupState(input: SignupStateInput): SignupState {
       registration.payment_status === "paid" ||
       registration.payment_status === "waived"
     ) {
-      return { kind: "already_paid", registrationId: registration.id };
+      return {
+        kind: "already_paid",
+        registrationId: registration.id,
+        teamId: registration.team_id,
+      };
     }
 
     // Waiver outstanding on the row itself. A valid contact-level waiver still

@@ -3,10 +3,15 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { LogOut, Menu, Trophy, User, X } from "lucide-react";
+import { Menu, Trophy, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusIndicatorCompact } from "@/components/shared/status-indicator";
 import { AccountMenu } from "@/components/layout/AccountMenu";
+import { SignOutButton } from "@/components/auth/SignOutButton";
+import {
+  WaiverStatusLine,
+  type HeaderWaiverStatus,
+} from "@/components/layout/WaiverStatusLine";
 import type { StatusPill } from "@/lib/site-settings";
 
 const navLinks = [
@@ -21,10 +26,12 @@ export function HeaderClient({
   statusItems,
   isAuthed,
   displayName,
+  waiverStatus,
 }: {
   statusItems: StatusPill[];
   isAuthed: boolean;
   displayName: string | null;
+  waiverStatus?: HeaderWaiverStatus | null;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const closeMobile = () => setMobileMenuOpen(false);
@@ -66,24 +73,37 @@ export function HeaderClient({
                   {link.label}
                 </Link>
               ))}
+
+              {/*
+                Signed in, the account menu IS the right-hand control. The
+                "Register" button used to render here unconditionally, so a
+                player already on a roster was told to register again — right
+                next to their own name. Signed out it stays exactly as it was:
+                Register is the front door and should be the loudest thing here.
+              */}
               {isAuthed ? (
-                <AccountMenu displayName={safeDisplayName} />
+                <AccountMenu
+                  displayName={safeDisplayName}
+                  waiverStatus={waiverStatus ?? null}
+                />
               ) : (
-                <Link
-                  href="/login"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
-                  aria-label="Sign in"
-                >
-                  <User size={14} />
-                  Sign in
-                </Link>
+                <>
+                  <Link
+                    href="/login"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
+                    aria-label="Sign in"
+                  >
+                    <User size={14} />
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="bg-white text-zinc-900 px-4 py-2 text-sm font-medium rounded-md hover:bg-zinc-100 transition-colors"
+                  >
+                    Register
+                  </Link>
+                </>
               )}
-              <Link
-                href="/register"
-                className="bg-white text-zinc-900 px-4 py-2 text-sm font-medium rounded-md hover:bg-zinc-100 transition-colors"
-              >
-                Register
-              </Link>
             </nav>
           </div>
 
@@ -125,26 +145,28 @@ export function HeaderClient({
             {isAuthed ? (
               <MobileAccountSection
                 displayName={safeDisplayName}
+                waiverStatus={waiverStatus ?? null}
                 onNavigate={closeMobile}
               />
             ) : (
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
-                onClick={closeMobile}
-              >
-                <User size={16} />
-                Sign in
-              </Link>
+              <>
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
+                  onClick={closeMobile}
+                >
+                  <User size={16} />
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  className="bg-white text-zinc-900 px-4 py-3 text-center font-medium rounded-md hover:bg-zinc-100 transition-colors mt-2"
+                  onClick={closeMobile}
+                >
+                  Register for Tournament
+                </Link>
+              </>
             )}
-
-            <Link
-              href="/register"
-              className="bg-white text-zinc-900 px-4 py-3 text-center font-medium rounded-md hover:bg-zinc-100 transition-colors mt-2"
-              onClick={closeMobile}
-            >
-              Register for Tournament
-            </Link>
           </nav>
         </div>
       </div>
@@ -154,17 +176,20 @@ export function HeaderClient({
 
 function MobileAccountSection({
   displayName,
+  waiverStatus,
   onNavigate,
 }: {
   displayName: string;
+  waiverStatus: HeaderWaiverStatus | null;
   onNavigate: () => void;
 }) {
   return (
     <div className="pt-2 border-t border-border-token mt-2">
-      <p className="text-xs uppercase tracking-wider text-zinc-500 mb-3">
+      <p className="text-xs uppercase tracking-wider text-zinc-500 mb-1">
         Signed in as{" "}
         <span className="text-zinc-300 font-medium">{displayName}</span>
       </p>
+      {waiverStatus && <WaiverStatusLine status={waiverStatus} className="mb-3" />}
       <div className="flex flex-col gap-3">
         <Link
           href="/me"
@@ -182,15 +207,11 @@ function MobileAccountSection({
           <Trophy size={16} />
           My registrations
         </Link>
-        <form action="/auth/signout" method="post" onSubmit={onNavigate}>
-          <button
-            type="submit"
-            className="w-full inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors"
-          >
-            <LogOut size={16} />
-            Sign out
-          </button>
-        </form>
+        <SignOutButton
+          iconSize={16}
+          onSubmitted={onNavigate}
+          className="w-full inline-flex items-center gap-2 text-base font-medium text-zinc-400 hover:text-white transition-colors disabled:opacity-60"
+        />
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CheckCircle2, CreditCard, PenLine } from "lucide-react";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
+import { SavedTeamPicker } from "@/components/register/TeamPicker";
+import type { TeamOption } from "@/lib/tournaments";
 
 /**
  * The "we already know where you stand" states of the signup screen.
@@ -16,7 +18,17 @@ import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommu
 
 const cardClass = "dashboard-card p-6 md:p-8 space-y-5";
 
-export function AlreadyPaidCard({ tournamentTitle }: { tournamentTitle: string }) {
+export function AlreadyPaidCard({
+  tournamentTitle,
+  tournamentId,
+  teams,
+  teamId,
+}: {
+  tournamentTitle: string;
+  tournamentId: string;
+  teams: TeamOption[];
+  teamId: string | null;
+}) {
   return (
     <div className={cardClass}>
       <div className="flex items-start gap-3">
@@ -32,6 +44,20 @@ export function AlreadyPaidCard({ tournamentTitle }: { tournamentTitle: string }
           </p>
         </div>
       </div>
+
+      {/*
+        Still offered after payment. Paying does not decide your team, and the
+        alternative is a paid player with nowhere to be on match day — which is
+        most of the roster right now.
+      */}
+      <div className="border-t border-border-token pt-5">
+        <SavedTeamPicker
+          tournamentId={tournamentId}
+          teams={teams}
+          initialTeamId={teamId}
+        />
+      </div>
+
       <div className="border-t border-border-token pt-5 space-y-3">
         <p className="text-sm text-zinc-400">
           Schedules and last-minute changes go out on WhatsApp.
@@ -49,13 +75,19 @@ export function AlreadyPaidCard({ tournamentTitle }: { tournamentTitle: string }
 
 export function OwesPaymentCard({
   tournamentTitle,
+  tournamentId,
   payHref,
   entryFeeLabel,
+  teams,
+  teamId,
   teamName,
 }: {
   tournamentTitle: string;
+  tournamentId: string;
   payHref: string;
   entryFeeLabel: string | null;
+  teams: TeamOption[];
+  teamId: string | null;
   teamName: string | null;
 }) {
   return (
@@ -75,11 +107,25 @@ export function OwesPaymentCard({
                 thing left — the entry fee.
               </>
             ) : (
-              <>Your waiver is done. One thing left — the entry fee.</>
+              <>Your waiver is done. Pick your team below and pay the entry fee.</>
             )}
           </p>
         </div>
       </div>
+
+      {/*
+        This is the screen a returning player actually lands on, and until now it
+        had no team control at all — so nobody who was already signed up was ever
+        asked which team they were on, however many teams the event had.
+      */}
+      <div className="border-t border-border-token pt-5">
+        <SavedTeamPicker
+          tournamentId={tournamentId}
+          teams={teams}
+          initialTeamId={teamId}
+        />
+      </div>
+
       <div className="border-t border-border-token pt-5 space-y-3">
         <Link
           href={payHref}

@@ -70,18 +70,15 @@ export async function POST(request: Request) {
     const contact = player.contact;
     const waiverType = defaultWaiverTypeFor(contact);
 
-    // The quick path is only quick because the waiver already exists. If it has
-    // lapsed, say so plainly rather than enrolling someone with no waiver — the
-    // screen sends them to the full signup, which collects a new signature.
-    if (!isContactWaiverValid(contact, waiverType)) {
-      return NextResponse.json(
-        { error: "Your waiver needs signing again. Continue with the full sign-up." },
-        { status: 409 }
-      );
-    }
-
     // Already on this roster? Hand back the same pay link instead of creating a
     // duplicate row. A double-tap on a phone at the field is not a new player.
+    //
+    // This lookup runs BEFORE the waiver check on purpose. The waiver gate
+    // guards *enrolment* — it must not fire for someone already on the roster,
+    // who now reaches this route just to change their team from the signup
+    // screen. A player whose registration is signed but whose contact-level
+    // waiver has lapsed sits in exactly that state, and refusing them a team
+    // would be refusing the wrong thing.
     const { data: existing } = await supabaseAdmin
       .from("registrations")
       .select("id")
@@ -91,20 +88,37 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
+    // The quick path is only quick because the waiver already exists. If it has
+    // lapsed, say so plainly rather than enrolling someone with no waiver — the
+    // screen sends them to the full signup, which collects a new signature.
+    if (!existing?.id && !isContactWaiverValid(contact, waiverType)) {
+      return NextResponse.json(
+        { error: "Your waiver needs signing again. Continue with the full sign-up." },
+        { status: 409 }
+      );
+    }
+
     const teamId = await resolveTeamIdForTournament(requestedTeamId, tournamentId);
 
     let registrationId: string;
 
     if (existing?.id) {
       registrationId = existing.id;
-      if (teamId) {
-        const { error: teamErr } = await supabaseAdmin
-          .from("registrations")
-          .update({ team_id: teamId })
-          .eq("id", registrationId);
-        if (teamErr) {
-          console.warn("[register/join] team update failed:", teamErr.message);
-        }
+      // Written unconditionally, including when `teamId` resolves to null.
+      // Skipping the null case would make "Not sure yet" a no-op, so a player
+      // who picked the wrong team could never take it back — and the signup
+      // screen's team picker (SavedTeamPicker) is the only way most players
+      // will ever set this at all.
+      const { error: teamErr } = await supabaseAdmin
+        .from("registrations")
+        .update({ team_id: teamId })
+        .eq("id", registrationId);
+      if (teamErr) {
+        console.error("[register/join] team update failed:", teamErr.message);
+        return NextResponse.json(
+          { error: "We couldn't save your team. Please try again." },
+          { status: 500 }
+        );
       }
     } else {
       const enrolled = await enrollContactInTournament({

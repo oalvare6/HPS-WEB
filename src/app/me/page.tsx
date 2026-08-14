@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   CreditCard,
   Key,
-  LogOut,
   Mail,
   ShieldAlert,
   ShieldCheck,
@@ -20,6 +19,7 @@ import {
   type PlayerRegistrationRow,
 } from "@/lib/player-auth";
 import { isContactWaiverValid } from "@/lib/contacts";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 import { MeProfileForm } from "./MeProfileForm";
 
 export const dynamic = "force-dynamic";
@@ -58,15 +58,7 @@ export default async function MePage() {
               </h1>
               <p className="text-zinc-400 text-sm">{contact.email}</p>
             </div>
-            <form action="/auth/signout" method="post">
-              <button
-                type="submit"
-                className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-border-token rounded-lg px-3 py-2 transition-colors"
-              >
-                <LogOut size={14} />
-                Sign out
-              </button>
-            </form>
+            <SignOutButton className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-border-token rounded-lg px-3 py-2 transition-colors disabled:opacity-60" />
           </div>
         </div>
       </section>
