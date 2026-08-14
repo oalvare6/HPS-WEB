@@ -158,3 +158,80 @@ Open items, most urgent first:
 - **`APP_SIGNING_SECRET` is not set in Vercel and does not need to be** —
   `src/lib/app-signing.ts` falls back to `ADMIN_SESSION_SECRET`, which is set. Renaming it
   someday would silence a deprecation warning; nothing is broken.
+
+## 2026-08-14 (later) — the waiver round trip, and pay-later
+
+- **Root cause of "you sign the waiver and nothing updates": the DocuSeal webhook is
+  configured against the APEX domain, and Vercel 307s the apex to `www` at the edge.**
+  DocuSeal **does not follow redirects** — it records the 307 as a delivered event and moves
+  on, so the POST body never reaches the app. Verified in DocuSeal's own event log on
+  2026-08-14: **10 of 10 deliveries are 307, the "Failed" tab is empty**, and every one of the
+  7 stuck submissions is COMPLETED on DocuSeal's side with valid `registration_id` metadata.
+  The signatures exist; they were never delivered.
+
+  ```
+  configured:  https://houstonpremiersoccer.com/api/docuseal/webhook      ← apex, 307s
+  correct:     https://www.houstonpremiersoccer.com/api/docuseal/webhook
+  ```
+
+  ⚠ **This is not fixable in code.** The apex→www 307 is a Vercel *domain-level* redirect
+  issued at the edge before middleware runs — see the comment in `src/lib/canonical-host.ts`
+  that says exactly this. The URL has to be changed in the DocuSeal dashboard.
+
+- **A second, latent fault sat behind the first: `DOCUSEAL_WEBHOOK_SECRET` is not set in
+  Vercel.** `POST /api/docuseal/webhook` on the *www* host returns 503 before reading the
+  payload (`route.ts` guards on the secret first). Nothing had noticed because no delivery
+  ever got that far. **Fix the secret BEFORE fixing the URL** — otherwise deliveries start
+  arriving into a 503, which DocuSeal *does* log as a failure and may burn retries on.
+
+- **A diagnosis trap worth remembering:** `POST`ing the endpoint directly proves what the
+  endpoint does, not what the sender experiences. The 503 was real and misleading. Always
+  establish the URL the third party is actually configured with *first* — and check the
+  sender's own delivery log, which is the only place the 307 was visible.
+
+- ⚠ **Check every other third-party webhook for the same apex trap.** Stripe is the one that
+  matters: if `STRIPE_WEBHOOK_SECRET` is set but the Stripe endpoint URL is the apex, payment
+  webhooks are silently dying too. It would not be obvious, because `/pay/success` also
+  records the payment server-side via `recordCheckoutSessionPayment` — so card payments still
+  land and the broken webhook stays invisible until someone closes the tab before the
+  success page renders.
+
+  **7 registrations are stuck**, the oldest 2026-07-22, including two players who have already
+  paid. No code change caused any of it: there are **zero commits between 2026-07-10 and
+  2026-08-01**. It is entirely configuration.
+- **The webhook's HMAC verification is correct** — checked against DocuSeal's documented
+  scheme (`X-Docuseal-Signature: <timestamp>.<hmac>` over `<timestamp>.<raw body>`, raw bytes
+  via `request.text()`). Nothing to fix there; it simply never gets to run. The secret is the
+  `whsec_…` value under the webhook's Security → HMAC tab.
+- **Waivers that flipped to signed before 2026-07-17 were almost certainly the admin "Sync
+  Waivers" button, not the webhook.** `waiver_signed_at` is written from DocuSeal's
+  `completed_at`, so those timestamps look like instant confirmations but say nothing about
+  when we learned. Do not read them as evidence the webhook ever worked.
+- **Fixed structurally: the app no longer depends on the webhook.** `src/lib/waiver-reconcile.ts`
+  asks DocuSeal directly whenever a decision is about to be made from `waiver_signed`, on both
+  `/register` and `/pay`. Same principle as A4's "Done — check". Setting the webhook secret is
+  still worth doing (instant, and covers players who close the tab) but is no longer load-bearing.
+- **`GET /api/docuseal/webhook`** is a new configuration probe — returns `ready`,
+  `webhookSecretConfigured`, `apiKeyConfigured` as booleans. Added because this failure was
+  invisible for a month behind a platform that keeps one hour of logs. Safe to leave public:
+  booleans only, and the endpoint fails closed.
+- **`needs_waiver` now resumes the player's existing DocuSeal submission** (`docuseal_sign_url`)
+  instead of minting a second one, and carries an "I already signed — check again" link. Falls
+  back to in-app signing only when the registration has no submission.
+- ⚠ **`PayForm` must be the only thing inside its Suspense boundary on `/pay`.** It calls
+  `useSearchParams()`, so it renders behind Suspense; rendering *anything* alongside that
+  boundary — sibling in the same section, its own `<section>`, server or client component —
+  strands the fallback `<template>` in the DOM and **the Pay button never appears at all**.
+  Reproduced on a clean production build, not just dev. The roster banner and pay-later exit
+  are therefore passed *into* PayForm as the `enrolled` prop. Do not compose them around it.
+- **Pay-later is UI only — no schema change.** `payment_status` already had `'pending'` and
+  `'partial'`, team is already written at signup, and the Roster already has the by-team panel.
+  What was missing was the player-facing half: signup ended on a bare Stripe form, so someone
+  not paying that day closed the tab unsure they had a spot. Their row existed the whole time.
+- **Waiver stays a hard gate on roster membership** (operator's decision, 2026-08-14). `/pay`
+  with a valid resume token now refuses to take money when the waiver is unconfirmed, which is
+  the state that produced the two paid-but-unsigned Community Cup players.
+- Tests: `npx tsx scripts/test-waiver-reconcile.ts` — 16 cases over the reconcile branch table
+  and DocuSeal's document-URL shapes. `scripts/_mint-pay-token.ts` mints a **localhost-only**
+  pay-resume link for exercising `/pay` in dev (signed with the local secret; production
+  rejects it).

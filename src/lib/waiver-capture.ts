@@ -52,13 +52,23 @@ export function documentUrlFrom(submission: RawSubmission | null): string | null
   );
 }
 
-/** Read a submission's current state from DocuSeal. */
+/**
+ * Read a submission's current state from DocuSeal.
+ *
+ * `timeoutMs` matters when this is called during a page render — see
+ * `src/lib/waiver-reconcile.ts`. Without it a stalled DocuSeal connection would
+ * hold the player's page open until the platform's own timeout fired.
+ */
 export async function fetchSubmissionSnapshot(
   submissionId: number | string,
-  apiKey: string
+  apiKey: string,
+  opts?: { timeoutMs?: number }
 ): Promise<DocuSealSubmissionSnapshot | null> {
   const res = await fetch(`${DOCUSEAL_API}/submissions/${submissionId}`, {
     headers: { "X-Auth-Token": apiKey },
+    ...(opts?.timeoutMs
+      ? { signal: AbortSignal.timeout(opts.timeoutMs) }
+      : {}),
   });
   if (!res.ok) return null;
   const body = (await res.json()) as RawSubmission;

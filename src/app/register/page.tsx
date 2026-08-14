@@ -24,6 +24,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createPayResumeToken } from "@/lib/app-signing";
 import { buildPayResumePath, buildWaiverSignPath } from "@/lib/pay-resume-url";
 import { acceptsPayments, acceptsRegistrations } from "@/lib/tournament-state";
+import { reconcileIfUnsigned } from "@/lib/waiver-reconcile";
 import {
   defaultWaiverTypeFor,
   resolveSignupState,
@@ -84,9 +85,24 @@ export default async function RegisterPage({
   const canRegister = acceptsRegistrations(event);
   const canPay = acceptsPayments(event);
 
-  const registration = contact
+  let registration = contact
     ? await findRegistration(event.id, contact.id)
     : null;
+
+  // Before telling anyone to sign a waiver, check whether they already signed
+  // it. `waiver_signed` is only as current as the last webhook we received, and
+  // the DocuSeal webhook was answering 503 to every delivery for weeks — so a
+  // player who signed correctly was sent back here and told to sign again. Ask
+  // DocuSeal instead of trusting our own column. See lib/waiver-reconcile.ts.
+  let resumeSignUrl: string | null = null;
+  if (registration && !registration.waiver_signed) {
+    const reconciled = await reconcileIfUnsigned(registration);
+    if (reconciled?.changed) {
+      registration = { ...registration, waiver_signed: true };
+    } else {
+      resumeSignUrl = reconciled?.signUrl ?? null;
+    }
+  }
 
   const state = resolveSignupState({
     contact,
@@ -119,11 +135,23 @@ export default async function RegisterPage({
       {state.kind === "needs_waiver" && (
         <NeedsWaiverCard
           tournamentTitle={event.title}
-          waiverHref={buildWaiverSignPath({
-            registrationId: state.registrationId,
-            payToken: createPayResumeToken(state.registrationId),
-            tournamentSlug: event.slug,
-          })}
+          /*
+            Resume the submission they already have rather than minting a second
+            one. Creating a fresh DocuSeal submission on every visit is how a
+            player ends up with three half-signed documents and we still can't
+            tell whether they signed. Falls back to in-app signing when this
+            registration never got a DocuSeal submission at all.
+          */
+          waiverHref={
+            resumeSignUrl ??
+            buildWaiverSignPath({
+              registrationId: state.registrationId,
+              payToken: createPayResumeToken(state.registrationId),
+              tournamentSlug: event.slug,
+            })
+          }
+          isExternalWaiver={Boolean(resumeSignUrl)}
+          recheckHref={`/register?tournament=${encodeURIComponent(event.slug)}`}
         />
       )}
 
