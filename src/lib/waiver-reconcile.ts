@@ -5,12 +5,24 @@
  * ## Why this exists
  *
  * The app used to learn about a signature in exactly one way: the DocuSeal
- * webhook. On 2026-08-14 that webhook was measured returning **503 to every
- * callback** — `DOCUSEAL_WEBHOOK_SECRET` was never set in Vercel, so
- * `/api/docuseal/webhook` rejected each delivery before it read the payload.
+ * webhook. On 2026-08-14 that webhook was found to have **two independent
+ * faults, either of which alone would have lost every signature**:
+ *
+ *  1. It was configured against the **apex domain**, which Vercel 307s to
+ *     `www` at the edge. DocuSeal does not follow redirects — it logged the
+ *     307 as a successful delivery and dropped the body. 10 of 10 deliveries
+ *     in its log were 307s and its "Failed" tab was empty, so from the
+ *     sending side everything looked healthy.
+ *  2. `DOCUSEAL_WEBHOOK_SECRET` was never set in Vercel, so the endpoint
+ *     would have answered 503 to any delivery that did arrive.
+ *
  * Seven registrations sat at `docuseal_status='sent'` with players who had
- * genuinely signed, and `waiver_document_url` was NULL for all 104 rows ever
- * created.
+ * genuinely signed — every one of them COMPLETED on DocuSeal's side — and
+ * `waiver_document_url` was NULL for all 104 rows ever created.
+ *
+ * Both faults were configuration, and neither was visible from inside the app.
+ * That is the point: **a webhook can fail in ways the receiver cannot detect
+ * or fix.** This module removes the dependency instead of trusting it.
  *
  * The player-visible symptom was worse than a missing column. A signer was
  * redirected back to the site, `waiver_signed` was still false, and

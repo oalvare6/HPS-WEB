@@ -161,14 +161,44 @@ Open items, most urgent first:
 
 ## 2026-08-14 (later) — the waiver round trip, and pay-later
 
-- **Root cause of "you sign the waiver and nothing updates": `DOCUSEAL_WEBHOOK_SECRET` is
-  not set in Vercel.** `POST /api/docuseal/webhook` returns **503 to every DocuSeal
-  delivery** before it reads the payload (`route.ts` guards on the secret first). Measured
-  directly against production. Consequence: `docuseal_status` never leaves `'sent'`, so
-  `resolveSignupState` answers `needs_waiver` and asks the player to sign again — the loop
-  the operator reported. **7 registrations are stuck**, the oldest 2026-07-22, including two
-  players who have already paid. No code change caused this: there are **zero commits between
-  2026-07-10 and 2026-08-01**. It is pure configuration.
+- **Root cause of "you sign the waiver and nothing updates": the DocuSeal webhook is
+  configured against the APEX domain, and Vercel 307s the apex to `www` at the edge.**
+  DocuSeal **does not follow redirects** — it records the 307 as a delivered event and moves
+  on, so the POST body never reaches the app. Verified in DocuSeal's own event log on
+  2026-08-14: **10 of 10 deliveries are 307, the "Failed" tab is empty**, and every one of the
+  7 stuck submissions is COMPLETED on DocuSeal's side with valid `registration_id` metadata.
+  The signatures exist; they were never delivered.
+
+  ```
+  configured:  https://houstonpremiersoccer.com/api/docuseal/webhook      ← apex, 307s
+  correct:     https://www.houstonpremiersoccer.com/api/docuseal/webhook
+  ```
+
+  ⚠ **This is not fixable in code.** The apex→www 307 is a Vercel *domain-level* redirect
+  issued at the edge before middleware runs — see the comment in `src/lib/canonical-host.ts`
+  that says exactly this. The URL has to be changed in the DocuSeal dashboard.
+
+- **A second, latent fault sat behind the first: `DOCUSEAL_WEBHOOK_SECRET` is not set in
+  Vercel.** `POST /api/docuseal/webhook` on the *www* host returns 503 before reading the
+  payload (`route.ts` guards on the secret first). Nothing had noticed because no delivery
+  ever got that far. **Fix the secret BEFORE fixing the URL** — otherwise deliveries start
+  arriving into a 503, which DocuSeal *does* log as a failure and may burn retries on.
+
+- **A diagnosis trap worth remembering:** `POST`ing the endpoint directly proves what the
+  endpoint does, not what the sender experiences. The 503 was real and misleading. Always
+  establish the URL the third party is actually configured with *first* — and check the
+  sender's own delivery log, which is the only place the 307 was visible.
+
+- ⚠ **Check every other third-party webhook for the same apex trap.** Stripe is the one that
+  matters: if `STRIPE_WEBHOOK_SECRET` is set but the Stripe endpoint URL is the apex, payment
+  webhooks are silently dying too. It would not be obvious, because `/pay/success` also
+  records the payment server-side via `recordCheckoutSessionPayment` — so card payments still
+  land and the broken webhook stays invisible until someone closes the tab before the
+  success page renders.
+
+  **7 registrations are stuck**, the oldest 2026-07-22, including two players who have already
+  paid. No code change caused any of it: there are **zero commits between 2026-07-10 and
+  2026-08-01**. It is entirely configuration.
 - **The webhook's HMAC verification is correct** — checked against DocuSeal's documented
   scheme (`X-Docuseal-Signature: <timestamp>.<hmac>` over `<timestamp>.<raw body>`, raw bytes
   via `request.text()`). Nothing to fix there; it simply never gets to run. The secret is the
