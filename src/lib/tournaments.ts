@@ -288,6 +288,35 @@ export async function getTournamentBySlug(slug: string): Promise<Tournament | nu
   }
 }
 
+/**
+ * Slim rows for a known set of tournament ids — currently the events named in
+ * an open-play night's `free_entry_tournament_ids`, so the public page can say
+ * *which* players get in free. Display-only: the binding money decision stays
+ * in `/api/register/join`. Empty input costs zero queries; errors return [] so
+ * the caller simply renders nothing.
+ */
+export async function getTournamentsByIds(
+  ids: string[]
+): Promise<Pick<Tournament, "id" | "title" | "slug">[]> {
+  if (ids.length === 0) return [];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("tournaments")
+      .select("id, title, slug")
+      .in("id", ids)
+      .eq("is_draft", false)
+      .order("title", { ascending: true });
+    if (error) {
+      console.error("[tournaments] by-ids fetch failed:", error.message);
+      return [];
+    }
+    return (data ?? []) as Pick<Tournament, "id" | "title" | "slug">[];
+  } catch (err) {
+    console.error("[tournaments] by-ids fetch failed:", err);
+    return [];
+  }
+}
+
 /** The team choices a player sees at signup (A2 / D3). */
 export type TeamOption = Pick<Team, "id" | "name" | "color">;
 

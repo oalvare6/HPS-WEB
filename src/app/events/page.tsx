@@ -26,7 +26,7 @@ function sortEventsForList(tournaments: Tournament[]): Tournament[] {
 export const dynamic = "force-dynamic";
 
 const DEFAULT_HERO_SUBTITLE =
-  "Upcoming tournaments, leagues, and one-day cups at Houston Premier Soccer.";
+  "Upcoming tournaments, leagues, and open play nights at Houston Premier Soccer.";
 
 export default async function EventsPage() {
   const { tournaments: rawTournaments, loadError: listLoadError } =
@@ -34,15 +34,12 @@ export default async function EventsPage() {
   const tournaments = sortEventsForList(rawTournaments);
   const tournamentEvents = tournaments.filter((t) => !isOpenPlay(t));
   const openPlayEvents = tournaments.filter((t) => isOpenPlay(t));
-  const { tournaments: featuredTournaments, loadError: featuredLoadError } =
-    await getFeaturedTournaments();
-  const featuredTournament = featuredTournaments[0] ?? null;
+  const { loadError: featuredLoadError } = await getFeaturedTournaments();
 
-  const heroSource =
-    featuredTournament ??
-    (!listLoadError ? tournaments.find((t) => t.status === "upcoming") : undefined) ??
-    (!listLoadError ? tournaments[0] : undefined);
-  const heroSubtitle = heroSource?.description?.trim() || DEFAULT_HERO_SUBTITLE;
+  // Always the static line. Reusing the featured event's description here
+  // printed the same paragraph twice — once as the page intro, once in that
+  // event's own card directly below it.
+  const heroSubtitle = DEFAULT_HERO_SUBTITLE;
 
   const listBanner = listLoadError;
   const featuredBanner = featuredLoadError && !listLoadError;

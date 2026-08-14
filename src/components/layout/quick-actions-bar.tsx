@@ -19,7 +19,7 @@ export function QuickActionsBar() {
                 className="inline-flex items-center gap-2 bg-brand-deep text-white px-4 py-2.5 text-sm font-bold rounded-md hover:bg-brand transition-all shadow-md shadow-brand/30 border border-brand"
               >
                 <Trophy size={16} />
-                Tournaments
+                Events
               </Link>
             </div>
             <a
@@ -43,7 +43,7 @@ export function QuickActionsBar() {
             className="flex items-center justify-center gap-2 bg-brand-deep text-white h-12 text-sm font-bold rounded-lg hover:bg-brand transition-all shadow-lg shadow-brand/40 border border-brand"
           >
             <Trophy size={18} />
-            Tournaments
+            Events
           </Link>
           <a
             href={GOOGLE_MAPS_URL}

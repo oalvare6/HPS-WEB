@@ -120,9 +120,9 @@ export default async function MePage() {
               <EmptyState
                 icon={<Trophy size={20} className="text-zinc-500" />}
                 title="No upcoming registrations"
-                body="When you register for an upcoming tournament, it shows up here."
+                body="When you sign up for an upcoming event, it shows up here."
                 actionHref="/register"
-                actionLabel="Register for a tournament"
+                actionLabel="Sign up to play"
               />
             ) : (
               <RegistrationsTable rows={upcoming} />
@@ -342,7 +342,7 @@ function RegistrationsTable({ rows }: { rows: PlayerRegistrationRow[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border-token text-left">
-              <th className="px-4 py-3 text-zinc-400 font-medium">Tournament</th>
+              <th className="px-4 py-3 text-zinc-400 font-medium">Event</th>
               <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">
                 Registered
               </th>
@@ -362,10 +362,10 @@ function RegistrationsTable({ rows }: { rows: PlayerRegistrationRow[] }) {
                       href={`/events/${r.tournament_slug}`}
                       className="hover:text-brand"
                     >
-                      {r.tournament_title ?? "Untitled tournament"}
+                      {r.tournament_title ?? "Untitled event"}
                     </Link>
                   ) : (
-                    r.tournament_title ?? "Unlinked tournament"
+                    r.tournament_title ?? "Unlinked event"
                   )}
                 </td>
                 <td className="px-4 py-3 text-zinc-400 hidden md:table-cell">

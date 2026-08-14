@@ -18,6 +18,13 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["next", "start", "-p", "3200"],
       "port": 3200
+    },
+    {
+      "name": "hps-web-prod-auto",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "start"],
+      "port": 3300,
+      "autoPort": true
     }
   ]
 }

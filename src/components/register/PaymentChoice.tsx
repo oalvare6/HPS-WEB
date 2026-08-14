@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertCircle, Banknote, CreditCard, Loader2 } from "lucide-react";
 import { trackRegistrationEvent } from "@/lib/analytics";
+import type { EventKind } from "@/lib/types";
 
 /**
  * Card or cash — the two ways this business actually gets paid, offered as two
@@ -44,6 +45,7 @@ export function PaymentChoice({
   initialMethod = null,
   mode = "both",
   className = "",
+  eventKind = "tournament",
 }: {
   registrationId: string;
   /** HMAC pay-resume token for this registration — the route's authorization. */
@@ -53,6 +55,8 @@ export function PaymentChoice({
   entryFeeLabel: string | null;
   /** `"cash"` when they have already told us. */
   initialMethod?: string | null;
+  /** Words only — "match night" reads wrong on a one-off open play night. */
+  eventKind?: EventKind;
   /**
    * `"cash-only"` drops the card button, for `/pay` — the Stripe form is
    * already on that screen, and a second route to it would be two buttons that
@@ -101,7 +105,9 @@ export function PaymentChoice({
     }
   };
 
-  const feeText = entryFeeLabel ?? "your entry fee";
+  const feeText =
+    entryFeeLabel ??
+    (eventKind === "open_play" ? "the door price" : "your entry fee");
 
   if (method === "cash") {
     return (
@@ -113,8 +119,9 @@ export function PaymentChoice({
               Paying {feeText} at the field
             </p>
             <p className="text-xs text-zinc-400">
-              Your spot is saved. Bring it on your first match night — we&apos;ll
-              mark you off when you hand it over.
+              Your spot is saved. Bring it{" "}
+              {eventKind === "open_play" ? "on the night" : "on your first match night"}
+              {" "}— we&apos;ll mark you off when you hand it over.
             </p>
           </div>
         </div>

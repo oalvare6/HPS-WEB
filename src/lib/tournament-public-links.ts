@@ -1,5 +1,7 @@
 import { safeInternalLink } from "@/lib/safe-internal-link";
+import { eventKindCopy, isOpenPlay } from "@/lib/event-kind";
 import type { SignupState } from "@/lib/signup-state";
+import type { Tournament } from "@/lib/types";
 
 type TournamentLinkFields = {
   slug: string;
@@ -10,6 +12,8 @@ type TournamentLinkFields = {
 type TournamentCtaFields = TournamentLinkFields & {
   registration_open: boolean;
   payments_open: boolean;
+  /** Optional so hand-built fixtures stay valid; missing resolves to 'tournament'. */
+  kind?: Tournament["kind"];
 };
 
 /** Default `/register` and `/pay` paths include the tournament slug for gate + preselect. */
@@ -62,7 +66,7 @@ export function tournamentPrimaryCta(tournament: TournamentCtaFields): Tournamen
     return {
       kind: "pay",
       href: tournamentPayHref(tournament),
-      label: "Pay entry fee",
+      label: `Pay ${eventKindCopy(tournament).feeLabel.toLowerCase()}`,
     };
   }
   return { kind: "none" };
@@ -152,6 +156,9 @@ export function viewerEventCta({
   if (!state) return anonymous();
 
   const signupHref = tournamentRegisterHref(tournament);
+  // Words only — the kind never decides which branch runs, just what it says.
+  const openPlay = isOpenPlay(tournament);
+  const feeNoun = eventKindCopy(tournament).feeLabel;
 
   switch (state.kind) {
     /*
@@ -169,7 +176,9 @@ export function viewerEventCta({
         heading: "You're all set",
         note: teamName
           ? `You're on the roster, playing for ${teamName}. See you on the field.`
-          : "You're on the roster and paid up. See you on the field.",
+          : openPlay
+            ? "You're signed up and paid. See you on the field."
+            : "You're on the roster and paid up. See you on the field.",
         personalised: true,
       };
 
@@ -179,8 +188,8 @@ export function viewerEventCta({
           kind: "none",
           href: signupHref,
           label: null,
-          heading: "You're on the roster",
-          note: `${entryFeeLabel ?? "Your entry fee"} due at the field${
+          heading: openPlay ? "You're on the list" : "You're on the roster",
+          note: `${entryFeeLabel ?? (openPlay ? feeNoun : "Your entry fee")} due at the field${
             teamName ? ` — playing for ${teamName}` : ""
           }. Nothing else to do before then.`,
           personalised: true,
@@ -189,8 +198,10 @@ export function viewerEventCta({
       return {
         kind: "pay",
         href: signupHref,
-        label: entryFeeLabel ? `Pay ${entryFeeLabel} now` : "Pay entry fee",
-        heading: "You're on the roster",
+        label: entryFeeLabel
+          ? `Pay ${entryFeeLabel} now`
+          : `Pay ${feeNoun.toLowerCase()}`,
+        heading: openPlay ? "You're on the list" : "You're on the roster",
         note: teamName
           ? `Playing for ${teamName}. Pay now, or bring it to the field.`
           : "Your spot is confirmed. Pay now, or bring it to the field.",
@@ -203,7 +214,9 @@ export function viewerEventCta({
         href: signupHref,
         label: "Sign my waiver",
         heading: "One thing left",
-        note: "You're on the roster, but we don't have your signed waiver yet. It takes about a minute.",
+        note: openPlay
+          ? "You're signed up, but we don't have your signed waiver yet. It takes about a minute."
+          : "You're on the roster, but we don't have your signed waiver yet. It takes about a minute.",
         personalised: true,
       };
 
@@ -213,7 +226,9 @@ export function viewerEventCta({
         href: signupHref,
         label: "Sign up to play",
         heading: "Welcome back",
-        note: "Your waiver is already on file — just pick a team.",
+        note: openPlay
+          ? "Your waiver is already on file — just confirm your spot."
+          : "Your waiver is already on file — just pick a team.",
         personalised: true,
       };
 

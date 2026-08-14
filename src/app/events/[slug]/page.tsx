@@ -21,13 +21,16 @@ import {
   Timer,
   Trophy,
   Users,
+  Zap,
 } from "lucide-react";
 import {
   getTournamentBySlug,
   getTournamentMatches,
   getTournamentRounds,
   getTournamentUpdates,
+  getTournamentsByIds,
 } from "@/lib/tournaments";
+import { parseFreeEntryTournamentIds } from "@/lib/open-play-free-entry";
 import { computeStandings, computeTopScorers } from "@/lib/standings";
 import { getWorldCupStandingsOverride } from "@/lib/world-cup-standings";
 import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
@@ -199,11 +202,20 @@ function formatRoundDate(iso: string | null): string {
 }
 
 /** One icon vocabulary for the CTA card, so the header and the button agree. */
-function CtaIcon({ cta, size = 18 }: { cta: ViewerEventCta; size?: number }) {
+function CtaIcon({
+  cta,
+  size = 18,
+  openPlay = false,
+}: {
+  cta: ViewerEventCta;
+  size?: number;
+  openPlay?: boolean;
+}) {
   if (cta.kind === "pay") return <CreditCard size={size} className="text-brand" />;
   if (cta.kind === "waiver") return <PenLine size={size} className="text-amber-400" />;
   if (cta.kind === "none" && cta.personalised)
     return <CheckCircle2 size={size} className="text-emerald-400" />;
+  if (openPlay) return <Zap size={size} className="text-brand" />;
   return <Trophy size={size} className="text-brand" />;
 }
 
@@ -214,7 +226,7 @@ export async function generateMetadata({
 }) {
   const { slug } = await params;
   const t = await getTournamentBySlug(slug);
-  if (!t) return { title: "Tournament not found" };
+  if (!t) return { title: "Event not found" };
 
   const title = `${t.title} | Houston Premier Soccer`;
   // The fallback blurb has to match what the event actually is — the tournament
@@ -276,7 +288,7 @@ export default async function TournamentDetailPage({
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
-  const [{ updates }, { rounds }, { matches, teams }, attendees] =
+  const [{ updates }, { rounds }, { matches, teams }, attendees, freeEntryEvents] =
     await Promise.all([
       getTournamentUpdates(tournament.id),
       getTournamentRounds(tournament.id),
@@ -287,6 +299,14 @@ export default async function TournamentDetailPage({
       // empty list for anything that is not an open-play night, so asking
       // unconditionally costs one cheap call and keeps the branch out of here.
       getOpenPlayAttendees(tournament.id),
+      // Which tournaments confer free entry to this night — display only, so a
+      // signed-out visitor can see the deal exists. Zero queries for anything
+      // that is not an open play night with a non-empty config.
+      getTournamentsByIds(
+        isOpenPlay(tournament)
+          ? parseFreeEntryTournamentIds(tournament.free_entry_tournament_ids)
+          : []
+      ),
     ]);
 
   const openPlay = isOpenPlay(tournament);
@@ -370,7 +390,11 @@ export default async function TournamentDetailPage({
           </div>
 
           <div className="flex items-center gap-3 mb-4">
-            <Trophy size={28} className="text-brand flex-shrink-0" />
+            {openPlay ? (
+              <Zap size={28} className="text-brand flex-shrink-0" />
+            ) : (
+              <Trophy size={28} className="text-brand flex-shrink-0" />
+            )}
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
               {tournament.title}
             </h1>
@@ -659,7 +683,7 @@ export default async function TournamentDetailPage({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <CtaIcon cta={cta} />
+                  <CtaIcon cta={cta} openPlay={openPlay} />
                   <h3 className="text-base font-semibold text-white">
                     {cta.heading}
                   </h3>
@@ -686,7 +710,7 @@ export default async function TournamentDetailPage({
                     href={cta.href}
                     className="btn-primary w-full justify-center text-sm"
                   >
-                    <CtaIcon cta={cta} size={14} />
+                    <CtaIcon cta={cta} size={14} openPlay={openPlay} />
                     {cta.label}
                     <ArrowRight size={14} />
                   </Link>
@@ -713,6 +737,27 @@ export default async function TournamentDetailPage({
                     {!openPlay &&
                       tournament.max_teams != null &&
                       ` · Max ${tournament.max_teams} teams`}
+                  </p>
+                )}
+                {/*
+                  Display only — /api/register/join re-derives the entitlement at
+                  write time; this line just makes the deal visible signed-out.
+                */}
+                {openPlay && freeEntryEvents.length > 0 && (
+                  <p className="text-xs text-emerald-300/90 text-center pt-1">
+                    Free for{" "}
+                    {freeEntryEvents.map((t, i) => (
+                      <span key={t.id}>
+                        {i > 0 && ", "}
+                        <Link
+                          href={`/events/${t.slug}`}
+                          className="underline underline-offset-2 hover:text-white"
+                        >
+                          {t.title}
+                        </Link>
+                      </span>
+                    ))}{" "}
+                    players — sign in to claim your free spot.
                   </p>
                 )}
               </div>

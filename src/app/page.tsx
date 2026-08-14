@@ -11,6 +11,7 @@ import { FeaturedTournamentCard } from "@/components/shared/FeaturedTournamentCa
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 import { safeInternalLink } from "@/lib/safe-internal-link";
+import { eventKindCopy } from "@/lib/event-kind";
 import {
   getFeaturedTournaments,
   getRecentEvents,
@@ -59,6 +60,11 @@ export default async function Home() {
     : "/events";
   const heroTournamentImage =
     heroTournament && getTournamentBannerUrl(heroTournament);
+  // "Featured tournament" over an open play night is how a Friday pop-up gets
+  // mistaken for a season. Words only — the hero shows whatever is featured.
+  const heroEyebrow = heroTournament
+    ? `Featured ${eventKindCopy(heroTournament).label.toLowerCase()}`
+    : "Featured event";
 
   return (
     <>
@@ -110,12 +116,12 @@ export default async function Home() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link href="/register" className="btn-primary btn-shimmer group">
                   <Trophy size={18} />
-                  Register for Tournament
+                  Sign up to play
                   <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
                 </Link>
                 <Link href="/events" className="btn-secondary bg-base/70 backdrop-blur-md">
                   <Calendar size={18} />
-                  View Tournaments
+                  View events
                 </Link>
               </div>
             </div>
@@ -133,7 +139,7 @@ export default async function Home() {
                     )}
                     <div className="p-5 space-y-4">
                       <p className="text-xs font-mono uppercase tracking-[0.24em] text-brand">
-                        Featured Tournament
+                        {heroEyebrow}
                       </p>
                       <div>
                         <h2 className="text-2xl font-bold text-white transition-colors group-hover:text-brand">
@@ -153,7 +159,7 @@ export default async function Home() {
                         </div>
                       </div>
                       <span className="inline-flex items-center gap-2 text-sm font-semibold text-white transition-colors group-hover:text-brand">
-                        See all featured tournaments
+                        See all featured events
                         <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
                       </span>
                     </div>
@@ -162,18 +168,18 @@ export default async function Home() {
                     href={heroTournamentHref}
                     className="mx-5 mb-5 inline-flex items-center gap-2 rounded-lg border border-brand/35 bg-brand/10 px-3 py-2 text-sm font-semibold text-white hover:bg-brand/20 transition-colors group"
                   >
-                    {heroTournament.registration_open ? "Register now" : "View tournament"}
+                    {heroTournament.registration_open ? "Sign up now" : "View event"}
                     <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
                   </Link>
                 </>
               ) : (
                 <div className="p-5 space-y-4">
                   <p className="text-xs font-mono uppercase tracking-[0.24em] text-brand">
-                    Featured Tournament
+                    Featured event
                   </p>
-                  <h2 className="text-2xl font-bold text-white">Tournaments under the lights</h2>
+                  <h2 className="text-2xl font-bold text-white">Soccer under the lights</h2>
                   <p className="text-sm leading-relaxed text-zinc-300">
-                    Explore upcoming leagues, tournaments, and field events at Houston Premier Soccer.
+                    Explore upcoming tournaments, open play nights, and field events at Houston Premier Soccer.
                   </p>
                   <Link
                     href="/events"
@@ -192,8 +198,8 @@ export default async function Home() {
       {(featuredLoadError || featuredTournaments.length > 0) && (
         <Section id="featured-tournaments" dark className="bg-base bg-tactical-grid-dense scroll-mt-24">
           <SectionHeader
-            title="Featured Tournaments"
-            subtitle="Upcoming competitions and registration windows."
+            title="Featured Events"
+            subtitle="Upcoming events and registration windows."
             dark
           />
           {featuredLoadError && (
@@ -319,7 +325,7 @@ export default async function Home() {
         <Section dark className="bg-base bg-tactical-grid-dense">
           <SectionHeader
             title="Recent Events"
-            subtitle="Completed tournaments and leagues."
+            subtitle="Completed tournaments, leagues, and open play nights."
             dark
           />
 
@@ -417,12 +423,12 @@ export default async function Home() {
             Ready to Play 7v7?
           </h2>
           <p className="text-zinc-400 mb-8">
-            Register for upcoming 7v7 tournaments and league seasons. 
+            Sign up for upcoming 7v7 tournaments, leagues, and open play nights.
             Contact us for group rates and field rental inquiries.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/register" className="btn-primary">
-              Register for Tournament
+              Sign up to play
             </Link>
             <Link href="/contact" className="btn-secondary">
               Contact Us

@@ -18,6 +18,8 @@ import {
 import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
 import { NO_TEAM, TeamSelect } from "@/components/register/TeamPicker";
 import { PaymentChoice } from "@/components/register/PaymentChoice";
+import { copyForKind } from "@/lib/event-kind";
+import type { EventKind } from "@/lib/types";
 import type { TeamOption } from "@/lib/tournaments";
 
 type RegistrationOption = {
@@ -95,6 +97,7 @@ export function RegistrationForm({
   prefill = null,
   lockedToEvent = false,
   entryFeeLabel = null,
+  eventKind = "tournament",
 }: {
   tournaments: RegistrationOption[];
   /** Teams available per tournament id. Missing/empty hides the picker. */
@@ -114,6 +117,8 @@ export function RegistrationForm({
    * that looks editable is a small lie about how much choice the player has.
    */
   lockedToEvent?: boolean;
+  /** Words only — "entry fee" vs "door price" on the confirmation card. */
+  eventKind?: EventKind;
 }) {
   const initialId = useMemo(() => {
     if (preselectedSlug) {
@@ -201,7 +206,7 @@ export function RegistrationForm({
     setConfirmation(null);
 
     if (!tournamentId) {
-      setSubmitError("Please select a tournament to register for.");
+      setSubmitError("Please select an event to register for.");
       return;
     }
 
@@ -286,6 +291,7 @@ export function RegistrationForm({
         registrationId={confirmation.registrationId}
         payToken={confirmation.payToken}
         entryFeeLabel={entryFeeLabel}
+        eventKind={eventKind}
       />
     );
   }
@@ -314,7 +320,7 @@ export function RegistrationForm({
             htmlFor="tournamentId"
             className="block text-sm font-semibold text-zinc-200"
           >
-            Tournament <span className="text-red-400">*</span>
+            Event <span className="text-red-400">*</span>
           </label>
         </div>
         {hasOptions ? (
@@ -340,8 +346,8 @@ export function RegistrationForm({
           </select>
         ) : (
           <p className="text-sm text-zinc-400">
-            No tournaments are currently open for registration. Please check
-            back soon.
+            No events are currently open for registration. Please check back
+            soon.
           </p>
         )}
       </div>
@@ -834,6 +840,7 @@ function ConfirmationCard({
   registrationId,
   payToken,
   entryFeeLabel,
+  eventKind = "tournament",
 }: {
   tournamentTitle: string | null;
   waiverSignedAt: string | null;
@@ -841,7 +848,9 @@ function ConfirmationCard({
   registrationId: string | null;
   payToken: string | null;
   entryFeeLabel: string | null;
+  eventKind?: EventKind;
 }) {
+  const feeNoun = copyForKind(eventKind).feeLabel.toLowerCase();
   const paymentLinkTracked = useRef(false);
 
   useEffect(() => {
@@ -891,7 +900,7 @@ function ConfirmationCard({
         */}
         <p className="text-sm text-zinc-400">
           Your spot is saved. Last thing: how do you want to pay
-          {entryFeeLabel ? ` the ${entryFeeLabel} entry fee` : " the entry fee"}?
+          {entryFeeLabel ? ` the ${entryFeeLabel} ${feeNoun}` : ` the ${feeNoun}`}?
         </p>
         {registrationId && payToken ? (
           <PaymentChoice
@@ -899,6 +908,7 @@ function ConfirmationCard({
             payToken={payToken}
             payHref={payUrl}
             entryFeeLabel={entryFeeLabel}
+            eventKind={eventKind}
           />
         ) : (
           <Link
