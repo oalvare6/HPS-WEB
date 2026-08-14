@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Trophy,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import {
@@ -22,6 +23,15 @@ import {
 import { isContactWaiverValid } from "@/lib/contacts";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { MeProfileForm } from "./MeProfileForm";
+import { getRegistrationOpenTournaments } from "@/lib/tournaments";
+import { loadEventStanding } from "@/lib/event-standing";
+import {
+  viewerEventCta,
+  type ViewerEventCta,
+} from "@/lib/tournament-public-links";
+import { resolveEventState } from "@/lib/tournament-state";
+import { isOpenPlay } from "@/lib/event-kind";
+import type { Tournament } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +52,39 @@ export default async function MePage() {
 
   const { contact } = player;
   const { registrations, payments } = await getPlayerProfileData(contact.id);
+
+  /*
+    "What's next" — the answer to the question this page used to leave hanging.
+
+    Signing in from the header lands here with no `next` path, so a first-time
+    player arrived at a profile FORM and had to guess. The operator's report:
+    *"they might get confused and not know where to click."*
+
+    Every answer is resolved per event by the same `loadEventStanding` +
+    `viewerEventCta` pair the event page uses, so this cannot invent a third
+    opinion about where someone stands — a player already on the roster is told
+    "You're all set", never "Sign up". `loadEventStanding` never calls DocuSeal,
+    so this adds two cheap lookups per open event and no third-party round trip.
+  */
+  const { tournaments: openEvents } = await getRegistrationOpenTournaments();
+  const nextSteps = await Promise.all(
+    openEvents.map(async (event) => {
+      const { state, teamName, entryFeeLabel } = await loadEventStanding({
+        event,
+        contact,
+      });
+      return {
+        event,
+        cta: viewerEventCta({
+          tournament: event,
+          state,
+          teamName,
+          entryFeeLabel,
+          isFinished: resolveEventState(event) === "finished",
+        }),
+      };
+    })
+  );
   const visible = collapseSupersededRows(registrations);
   // A cancelled signup is never "current", whatever the event's calendar says —
   // listing it under Current registrations would tell the player they still hold
@@ -75,6 +118,23 @@ export default async function MePage() {
 
       <Section dark className="bg-surface !py-8 md:!py-12" container={false}>
         <div className="max-w-4xl mx-auto px-6 space-y-8">
+          {/*
+            First thing on the page, above the waiver card and the profile form.
+            A player who has just signed in needs a next tap, not a form.
+          */}
+          {nextSteps.length > 0 && (
+            <section>
+              <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4">
+                What&apos;s next
+              </h2>
+              <div className="space-y-3">
+                {nextSteps.map(({ event, cta }) => (
+                  <NextStepCard key={event.id} event={event} cta={cta} />
+                ))}
+              </div>
+            </section>
+          )}
+
           <WaiverStatusCard
             waiverSignedAt={contact.waiver_signed_at}
             waiverExpiresAt={contact.waiver_expires_at}
@@ -416,6 +476,65 @@ function PaymentStatusBadge({ status }: { status: string }) {
       <Icon size={12} />
       {status}
     </span>
+  );
+}
+
+/**
+ * One open event, and the one thing this player should do about it.
+ *
+ * The words come entirely from `viewerEventCta`, which is a pure projection of
+ * `SignupState`. Nothing is decided here — if this card ever disagrees with the
+ * event page about the same person, the bug is upstream of it, which is the
+ * whole point of routing both through one resolver.
+ */
+function NextStepCard({
+  event,
+  cta,
+}: {
+  event: Tournament;
+  cta: ViewerEventCta;
+}) {
+  const settled = cta.kind === "none" && cta.personalised;
+  return (
+    <div
+      className={`dashboard-card p-5 space-y-3 ${
+        settled ? "" : "border-brand/40"
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+            settled
+              ? "bg-emerald-500/15 text-emerald-400"
+              : "bg-brand/15 text-brand"
+          }`}
+        >
+          {settled ? (
+            <CheckCircle2 size={20} />
+          ) : isOpenPlay(event) ? (
+            <Zap size={20} />
+          ) : (
+            <Trophy size={20} />
+          )}
+        </div>
+        <div className="min-w-0 space-y-1">
+          <p className="text-base font-semibold text-white">{event.title}</p>
+          <p className="text-sm text-zinc-400">
+            {cta.note ?? cta.heading}
+          </p>
+        </div>
+      </div>
+
+      {cta.kind !== "none" && cta.href && cta.label && (
+        <Link
+          href={cta.href}
+          className="btn-primary w-full justify-center text-sm"
+        >
+          {cta.label}
+          <ArrowRight size={14} />
+        </Link>
+      )}
+    </div>
   );
 }
 
