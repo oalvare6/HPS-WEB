@@ -44,6 +44,15 @@ will pass `tsc` and `npm run build` either way — the ambiguity lives in the da
 call sites were rewritten when the column landed (`/pay`, `/me`, the waiver signing screen,
 admin Registrants, `/api/registrations/[id]`, captain paid-ack); add yours to that habit.
 
+**And note what that migration did to the code already running.** It only *added* things, so it
+looked backward compatible — but the second FK breaks every existing unqualified embed the
+instant it lands, which meant the **deployed** site, not just the new code. "Migration first,
+then deploy" is the right instinct for a new column and the wrong one here. A migration that
+adds a second relationship between two tables is a breaking change to every embed between them,
+in **both** deploy orders. The zero-downtime path is to ship the constraint-naming fix alone
+first (naming a constraint is valid against a one-FK schema too), then migrate, then ship the
+feature.
+
 **The webhook trap, found 2026-08-14.** The DocuSeal webhook had **never once delivered** to
 this app. It was pointed at the **apex** domain, Vercel 307s apex → www *at the edge*, and
 DocuSeal does not follow redirects — it logged every 307 as a success. Green checks on their
@@ -84,7 +93,8 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md`](docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md) | **Most recent session.** Confirm-before-roster, self-cancel, and a 9-way duplicate-registration fix. Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md`](docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md) | **Most recent session.** D7 free entry, the guest list, the two-FK deploy trap, and why "correct" wasn't "delivered". Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md`](docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md) | Earlier the same day: confirm-before-roster, self-cancel, and a 9-way duplicate-registration fix. |
 | [`docs/SESSION-LOG-2026-08-14-WAIVERS.md`](docs/SESSION-LOG-2026-08-14-WAIVERS.md) | Earlier the same day: the waiver round trip and pay-later. |
 | [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) | Earlier still: auth URLs, one canonical host. |
 | [`docs/SESSION-LOG-2026-08-13.md`](docs/SESSION-LOG-2026-08-13.md) | The session before it. |

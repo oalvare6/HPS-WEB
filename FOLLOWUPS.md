@@ -428,3 +428,40 @@ havent commited."*
   route and read back from the DOM, and the confirm step was exercised. Pressing Confirm on a real
   registration needs a Google session no automated check here can hold — the same limitation every
   prior session recorded.
+
+## 2026-08-14 (sixth) — open play free entry (D7), and a guest list
+
+Full detail in
+[`docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md`](docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md).
+
+- ⚠ **An additive migration broke the code that was already deployed.**
+  `registrations.free_entry_tournament_id` is the **second** FK from `registrations` to
+  `tournaments`, and PostgREST answers **PGRST201** to any embed that doesn't name a constraint —
+  so six live pages broke the instant it landed, not the new code. "Migrate first, then deploy"
+  is the right instinct for a new *column* and the wrong one for a new *relationship*. The
+  zero-downtime path: ship the constraint-naming fix alone first, then migrate, then ship the
+  feature. Taken as a ~60s window this time, with the operator's explicit go-ahead; zero 5xx
+  recorded across it.
+- ⚠ **Free entry requires `team_id IS NOT NULL`.** Anyone signed up to Community Cup but **not
+  yet assigned a team pays the $15** at the door. Deliberate — an abandoned half-finished signup
+  for an $80 tournament must not buy free Fridays forever — but it means **assigning teams before
+  Friday is now operator work with a money consequence.**
+- ⚠ **`payment_method` is never read by the free-entry rule and must not be.** It is NULL on
+  three of four live Community Cup rows, *including both players who paid $80 by card*. A rule
+  that read it would charge $15 at the door to people who had already paid.
+- **`waived` counts as a qualifying status.** Those are the people the owner personally comped;
+  excluding them would charge exactly the players he decided to let in free. No row is in that
+  state today — fixed before one is.
+- **A correct money decision that says nothing is not finished.** D7 shipped comping entitled
+  players correctly while the signup screen still showed "Door price: $15.00" and asked "How are
+  you paying?" — operator's report: *"even tho my payment is waived ... i cant just sign up
+  saying oh for u its free."* Fixed in `ecb73df`: the notice replaces the price and the payment
+  question disappears. Nobody was ever overcharged; they just couldn't tell.
+- **Migration versions on disk don't match the ledger.** Applied via the Supabase MCP tool, which
+  stamps its own version (`20260814211133`, `20260814211247` vs the `20260815030000` /
+  `20260815031000` filenames) — same quirk as the dedupe migration. `supabase db push` will retry
+  all three; all three are idempotent, so it's a no-op. Don't rely on that for a future migration
+  that isn't written that way.
+- ⚠ **Never verified: the rendered free-entry card, and a completed open-play signup.** No row
+  exists yet with `payment_status = 'waived'` + `free_entry_tournament_id` set. Highest-value
+  check remaining, and it needs a human with a Google session.
