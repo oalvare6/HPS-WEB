@@ -223,7 +223,7 @@ export async function getPlayerProfileData(
       .select(
         `id, created_at, tournament_id, registration_type, payment_status,
          payment_amount, docuseal_status, cancelled_at,
-         tournament:tournaments ( id, title, slug, status )`
+         tournament:tournaments!registrations_tournament_id_fkey ( id, title, slug, status )`
       )
       .eq("contact_id", contactId)
       .order("created_at", { ascending: false }),

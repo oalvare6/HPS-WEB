@@ -10,6 +10,7 @@ import {
   parseOptionalMoney,
   parseOptionalNonNegInt,
   parseTournamentStatus,
+  resolveFreeEntryTournamentIds,
 } from "@/lib/tournament-api-validation";
 import { parseEventKind } from "@/lib/event-kind";
 import type { TournamentInput } from "@/lib/types";
@@ -76,6 +77,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid display order." }, { status: 400 });
   }
 
+  const kind = parseEventKind(body.kind) ?? "tournament";
+  // No `excludeId` on create: the row has no id yet, so it cannot name itself.
+  const freeEntryTournamentIds = resolveFreeEntryTournamentIds(
+    body.free_entry_tournament_ids,
+    kind,
+    null
+  );
+
   const isDraft = body.is_draft === true;
   // A draft is not public, so it cannot headline the homepage.
   const isFeatured = body.is_featured === true && !isDraft;
@@ -101,7 +110,8 @@ export async function POST(request: Request) {
     format: body.format ?? null,
     // Unrecognised (or absent) falls back to 'tournament', which is both the
     // column default and how every event behaved before kinds existed.
-    kind: parseEventKind(body.kind) ?? "tournament",
+    kind,
+    free_entry_tournament_ids: freeEntryTournamentIds,
     entry_fee: entryFee,
     entry_fee_cents: entryFeeCents,
     max_teams: maxTeams,

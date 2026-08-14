@@ -43,6 +43,19 @@ function firstOf(value: unknown): ContactJoin {
 }
 
 /**
+ * PostgREST returns an embedded row as an object or a one-element array
+ * depending on how it infers the relationship, so both shapes have to be
+ * handled. `firstOf` above does this for contacts; this is the same unwrap for
+ * the free-entry tournament, kept separate so neither has to widen its type.
+ */
+function embeddedTitle(value: unknown): string | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!row || typeof row !== "object") return null;
+  const title = (row as { title?: unknown }).title;
+  return typeof title === "string" ? title : null;
+}
+
+/**
  * How solid this person's waiver is.
  *
  * The distinction matters: production has 39 of 57 contact waivers recorded as
@@ -99,6 +112,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
           `id, created_at, team_id, contact_id, first_name, last_name, email, phone, dob,
            emergency_name, emergency_phone, payment_status, payment_method,
            needs_admin_review, waiver_signed_at, waiver_document_url,
+           free_entry_tournament_id,
+           free_entry_tournament:tournaments!registrations_free_entry_tournament_id_fkey ( id, title ),
            contact:contacts ( id, first_name, last_name, email, phone,
                               waiver_signed_at, waiver_expires_at,
                               waiver_document_url, waiver_source )`
@@ -166,6 +181,15 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         paid: SETTLED.has(r.payment_status),
         paymentStatus: r.payment_status,
         paymentMethod: r.payment_method ?? null,
+        /*
+          D7: why this person owes nothing.
+
+          The title is read from the row's own FK, not recomputed from the
+          event's current config — somebody arguing about a comp at the field
+          needs the answer that was true when they signed up, and the organiser
+          may well have edited the list since. Null for everyone who paid.
+        */
+        freeEntryVia: embeddedTitle(r.free_entry_tournament),
         needsReview: r.needs_admin_review === true,
         // A walk-in added from this screen still owes us the real details.
         incomplete:

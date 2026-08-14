@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const { data: registration, error: regErr } = await supabaseAdmin
       .from("registrations")
       .select(
-        "id, email, payment_status, notes, team_name, tournament:tournaments ( slug )"
+        "id, email, payment_status, notes, team_name, tournament:tournaments!registrations_tournament_id_fkey ( slug )"
       )
       .eq("id", registrationId)
       .maybeSingle();

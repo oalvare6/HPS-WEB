@@ -132,6 +132,16 @@ type FormState = {
   image_preset: string | null;
   display_order: string;
   is_featured: boolean;
+  /**
+   * Open play only (D7). Tournaments whose live, team-assigned players get into
+   * this night free.
+   *
+   * Chosen every time an open-play night is created — never carried over from
+   * the last one. The owner asked for it that way and he is right to: an
+   * inherited list means a tournament added in October silently starts comping
+   * people on a Friday nobody re-checked.
+   */
+  free_entry_tournament_ids: string[];
 };
 
 const DEFAULT_DROP_IN_FEE_CENTS = 2000;
@@ -171,8 +181,16 @@ function fromInitial(t: Tournament | null): FormState {
     image_preset: t?.image_preset ?? null,
     display_order: t?.display_order != null ? String(t.display_order) : "0",
     is_featured: t?.is_featured ?? false,
+    free_entry_tournament_ids: Array.isArray(t?.free_entry_tournament_ids)
+      ? t.free_entry_tournament_ids.filter(
+          (id): id is string => typeof id === "string"
+        )
+      : [],
   };
 }
+
+/** The shortlist the free-entry picker offers. */
+type FreeEntryCandidate = { id: string; title: string; kind?: string | null };
 
 export function TournamentForm({ initial }: { initial: Tournament | null }) {
   const router = useRouter();
@@ -189,6 +207,54 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
 
   const isOpenPlayForm = form.kind === "open_play";
   const kindCopy = copyForKind(form.kind);
+
+  /*
+    Candidates for the free-entry picker.
+
+    Fetched here rather than passed in because both screens that render this
+    form (`/new` and `/[id]/edit`) are client components with different data
+    already loaded, and threading the list through both would mean two more
+    props for one control that only appears on open-play nights.
+
+    Only fetched once the form is actually set to open play — creating an
+    ordinary tournament should not cost a round trip for a field it will never
+    show.
+  */
+  const [freeEntryCandidates, setFreeEntryCandidates] = useState<
+    FreeEntryCandidate[]
+  >([]);
+  useEffect(() => {
+    if (!isOpenPlayForm || freeEntryCandidates.length > 0) return;
+    let cancelled = false;
+    fetch("/api/admin/tournaments")
+      .then((r) => (r.ok ? r.json() : { tournaments: [] }))
+      .then((d: { tournaments?: FreeEntryCandidate[] }) => {
+        if (cancelled) return;
+        setFreeEntryCandidates(
+          (d.tournaments ?? []).filter(
+            // Only real tournaments confer free entry, and an event can never
+            // comp itself — offering either would be offering a mistake.
+            (c) => c.kind !== "open_play" && c.id !== initial?.id
+          )
+        );
+      })
+      .catch(() => {
+        // A failed list is not a failed save. The picker shows its empty state
+        // and every other field on this form still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpenPlayForm, freeEntryCandidates.length, initial?.id]);
+
+  const toggleFreeEntry = (id: string) => {
+    setForm((f) => ({
+      ...f,
+      free_entry_tournament_ids: f.free_entry_tournament_ids.includes(id)
+        ? f.free_entry_tournament_ids.filter((x) => x !== id)
+        : [...f.free_entry_tournament_ids, id],
+    }));
+  };
 
   // Auto-derive slug from title until user edits slug field
   useEffect(() => {
@@ -367,6 +433,12 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       title: form.title.trim(),
       slug: form.slug.trim(),
       kind: form.kind,
+      // Sent empty for a tournament so switching a night back to a tournament
+      // clears the list rather than leaving dead config behind. The API enforces
+      // the same rule — this just means the two never disagree.
+      free_entry_tournament_ids: isOpenPlayForm
+        ? form.free_entry_tournament_ids
+        : [],
       format: form.format,
       description: form.description.trim() || null,
       start_date: form.start_date
@@ -669,13 +741,49 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
           )}
         </div>
         {isOpenPlayForm ? (
-          <div className="flex items-start gap-2 px-4 py-3 text-xs text-zinc-400 bg-surface-2/40 border border-dashed border-border-token rounded-lg">
-            <Info size={14} className="text-zinc-500 shrink-0 mt-0.5" />
-            <span>
-              One price for an open play night — there is no separate guest tier
-              to configure, because everybody here is a guest for the evening.
-            </span>
-          </div>
+          <>
+            <div className="flex items-start gap-2 px-4 py-3 text-xs text-zinc-400 bg-surface-2/40 border border-dashed border-border-token rounded-lg">
+              <Info size={14} className="text-zinc-500 shrink-0 mt-0.5" />
+              <span>
+                One price for an open play night — there is no separate guest tier
+                to configure, because everybody here is a guest for the evening.
+              </span>
+            </div>
+
+            {/* D7: who gets in free. Deliberately unticked by default on every
+                new night — nobody should be comped because a past event was. */}
+            <Field
+              label="Who gets in free"
+              hint="Tick a tournament and its players walk in free tonight. They must be on a team and not have cancelled. Leave everything unticked and everybody pays."
+            >
+              {freeEntryCandidates.length === 0 ? (
+                <p className="text-xs text-zinc-500 px-1">
+                  No tournaments to choose from yet. Everybody pays the door
+                  price.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {freeEntryCandidates.map((c) => {
+                    const checked = form.free_entry_tournament_ids.includes(c.id);
+                    return (
+                      <label
+                        key={c.id}
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border-token bg-surface-2/40 cursor-pointer hover:border-brand/50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleFreeEntry(c.id)}
+                          className="accent-brand"
+                        />
+                        <span className="text-sm text-zinc-200">{c.title}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </Field>
+          </>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Toggle

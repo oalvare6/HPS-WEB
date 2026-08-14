@@ -32,8 +32,17 @@ npx tsx scripts/test-tournament-state.ts
 npx tsx scripts/test-signup-state.ts
 npx tsx scripts/test-roster-totals.ts
 npx tsx scripts/test-canonical-host.ts
+npx tsx scripts/test-open-play-free-entry.ts
 npm run build
 ```
+
+**Two FKs now run from `registrations` to `tournaments`** — `tournament_id` and D7's
+`free_entry_tournament_id`. PostgREST will not choose between them: any `.select()` that
+embeds `tournaments(...)` from `registrations` **must** name the constraint
+(`tournaments!registrations_tournament_id_fkey(...)`) or it answers PGRST201 at runtime. It
+will pass `tsc` and `npm run build` either way — the ambiguity lives in the database. Six
+call sites were rewritten when the column landed (`/pay`, `/me`, the waiver signing screen,
+admin Registrants, `/api/registrations/[id]`, captain paid-ack); add yours to that habit.
 
 **The webhook trap, found 2026-08-14.** The DocuSeal webhook had **never once delivered** to
 this app. It was pointed at the **apex** domain, Vercel 307s apex → www *at the edge*, and

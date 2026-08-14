@@ -38,6 +38,8 @@ import type {
   TournamentUpdate,
 } from "@/lib/types";
 import { TournamentHub } from "@/components/tournament/TournamentHub";
+import { OpenPlayAttendees } from "@/components/tournament/OpenPlayAttendees";
+import { getOpenPlayAttendees } from "@/lib/open-play-attendance";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 import {
@@ -274,11 +276,18 @@ export default async function TournamentDetailPage({
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
-  const [{ updates }, { rounds }, { matches, teams }] = await Promise.all([
-    getTournamentUpdates(tournament.id),
-    getTournamentRounds(tournament.id),
-    getTournamentMatches(tournament.id),
-  ]);
+  const [{ updates }, { rounds }, { matches, teams }, attendees] =
+    await Promise.all([
+      getTournamentUpdates(tournament.id),
+      getTournamentRounds(tournament.id),
+      getTournamentMatches(tournament.id),
+      // Added to the existing Promise.all rather than awaited after it: this is
+      // the most-visited page on the site and it is force-dynamic, so a fourth
+      // serial round trip would be paid on every view. The query returns an
+      // empty list for anything that is not an open-play night, so asking
+      // unconditionally costs one cheap call and keeps the branch out of here.
+      getOpenPlayAttendees(tournament.id),
+    ]);
 
   const openPlay = isOpenPlay(tournament);
   const kindCopy = eventKindCopy(tournament);
@@ -523,6 +532,11 @@ export default async function TournamentDetailPage({
                 </ul>
               )}
             </div>
+
+            {/* Who's coming — open play only. Sits in the wide column where a
+                tournament shows its schedule and table, because for a one-night
+                event this *is* "what's happening here". */}
+            {openPlay && <OpenPlayAttendees attendees={attendees} />}
 
             {/* Tournament hub: schedule, results, standings, top scorers */}
             {hasHub ? (

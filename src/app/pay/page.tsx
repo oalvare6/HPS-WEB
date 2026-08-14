@@ -77,7 +77,13 @@ async function loadResumeSummary(
   const { data, error } = await supabaseAdmin
     .from("registrations")
     .select(
-      "payment_status, payment_method, waiver_signed, teams(name), tournaments(title, slug, entry_fee_cents)"
+      // The FK is named explicitly because `registrations` now has *two*
+      // relationships to `tournaments` — `tournament_id` and D7's
+      // `free_entry_tournament_id`. An unqualified `tournaments(...)` embed
+      // stopped being valid the moment the second one existed: PostgREST
+      // answers PGRST201 ("more than one relationship was found") rather than
+      // guessing, which would have taken this page down on deploy.
+      "payment_status, payment_method, waiver_signed, teams(name), tournaments!registrations_tournament_id_fkey(title, slug, entry_fee_cents)"
     )
     .eq("id", registrationId)
     // A resume token stays valid for 90 days, so one minted before a cancel is

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { parseFreeEntryTournamentIds } from "@/lib/open-play-free-entry";
 import {
   MAX_FEATURED_TOURNAMENTS,
   TOURNAMENT_STATUSES,
@@ -31,6 +32,34 @@ export function parseOptionalNonNegInt(v: unknown): number | null | "invalid" {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) return "invalid";
   return n;
+}
+
+/**
+ * Free-entry config as it should be written to the row (D7).
+ *
+ * Two rules enforced here rather than in the UI, because the UI is not the only
+ * caller and a stale admin tab is a caller too:
+ *
+ *  1. **Only an open-play night confers free entry.** Storing a list on a
+ *     tournament would be dead config that a later reader could mistake for an
+ *     active rule. A tournament always saves `[]`.
+ *  2. **An event cannot comp itself.** Naming your own id would mean "everyone
+ *     already signed up for tonight gets tonight free" — a rule that pays for
+ *     itself in a circle. `excludeId` is the row being written (null on POST,
+ *     where the id does not exist yet, so the case cannot arise).
+ *
+ * Anything unparseable degrades to `[]` — everybody pays — rather than 400ing a
+ * save that is otherwise fine. Losing a fee is recoverable at the field; losing
+ * the owner's edit to the date because of a malformed array is not.
+ */
+export function resolveFreeEntryTournamentIds(
+  value: unknown,
+  kind: string | null | undefined,
+  excludeId: string | null
+): string[] {
+  if (kind !== "open_play") return [];
+  const ids = parseFreeEntryTournamentIds(value);
+  return excludeId ? ids.filter((id) => id !== excludeId.toLowerCase()) : ids;
 }
 
 /**
