@@ -273,6 +273,11 @@ export async function POST(request: Request) {
         waiverSkipped: true,
         waiverSignedAt: canonicalSignedAt,
         tournamentTitle,
+        // The confirmation screen offers card-or-cash, and declaring a method
+        // needs the same signed token the pay link carries. Handed over
+        // directly rather than parsed back out of `signUrl`.
+        registrationId: inserted.id,
+        payToken,
       });
     }
 

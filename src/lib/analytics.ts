@@ -10,6 +10,12 @@ export const REGISTRATION_EVENTS = [
   "registration_waiver_skipped",
   "registration_payment_link_shown",
   "registration_payment_success",
+  /**
+   * A player declared how they intend to settle up — `card` or `cash` (D14).
+   * Worth its own event because the cash share is the number that says whether
+   * offering the choice changed anything, and it is invisible in Stripe.
+   */
+  "registration_payment_method_chosen",
 ] as const;
 
 export type RegistrationEvent = (typeof REGISTRATION_EVENTS)[number];

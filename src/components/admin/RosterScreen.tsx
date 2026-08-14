@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  Banknote,
   Check,
   X,
   Search,
@@ -23,12 +24,15 @@ import {
   type RosterTotals,
   type TeamProgress,
 } from "@/lib/admin-roster";
+import { showsCashPending } from "@/lib/payment-method";
 
-type Filter = "all" | "unpaid" | "waiver-missing" | "no-team";
+type Filter = "all" | "unpaid" | "paying-cash" | "waiver-missing" | "no-team";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "Everyone" },
   { id: "unpaid", label: "Still owes money" },
+  // The collection list for match night: everyone who told us they'd bring it.
+  { id: "paying-cash", label: "Paying cash" },
   { id: "waiver-missing", label: "No waiver" },
   { id: "no-team", label: "No team" },
 ];
@@ -39,7 +43,19 @@ const FILTERS: { id: Filter; label: string }[] = [
  * someone's team, mark them paid, add a walk-in — happens in this one screen
  * without opening a second page.
  */
-export default function RosterScreen({ tournamentId }: { tournamentId: string }) {
+export default function RosterScreen({
+  tournamentId,
+  showTeams = true,
+}: {
+  tournamentId: string;
+  /**
+   * False for an open-play night (D15): one evening, no squads. The by-team
+   * panel, the Team column and the "No team" filter all disappear, because a
+   * screen that asks which team somebody is on for a Friday pop-up is asking a
+   * question with no answer.
+   */
+  showTeams?: boolean;
+}) {
   const [data, setData] = useState<RosterPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -86,6 +102,11 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
     [rows, teams]
   );
 
+  const visibleFilters = useMemo(
+    () => (showTeams ? FILTERS : FILTERS.filter((f) => f.id !== "no-team")),
+    [showTeams]
+  );
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -96,6 +117,12 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
         if ((r.teamId ?? null) !== teamFilter) return false;
       }
       if (filter === "unpaid" && r.paid) return false;
+      if (
+        filter === "paying-cash" &&
+        !showsCashPending(r.paymentMethod, r.paymentStatus)
+      ) {
+        return false;
+      }
       if (filter === "waiver-missing" && r.waiverOk) return false;
       if (filter === "no-team" && (r.teamId || r.role === "guest")) return false;
       if (!q) return true;
@@ -171,7 +198,7 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
     <div className="space-y-4">
       <TotalsBar totals={data?.totals} loading={loading} />
 
-      {!loading && teamProgress.length > 0 && (
+      {showTeams && !loading && teamProgress.length > 0 && (
         <TeamProgressPanel
           progress={teamProgress}
           selected={teamFilter}
@@ -197,7 +224,7 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
             />
           </div>
           <div className="flex flex-wrap gap-1 bg-surface-2 rounded-lg p-1">
-            {FILTERS.map((f) => (
+            {visibleFilters.map((f) => (
               <button
                 key={f.id}
                 type="button"
@@ -256,6 +283,7 @@ export default function RosterScreen({ tournamentId }: { tournamentId: string })
           <RosterTable
             rows={visible}
             teams={teams}
+            showTeams={showTeams}
             busyId={busyId}
             onTogglePaid={togglePaid}
             onChangeTeam={changeTeam}
@@ -304,13 +332,28 @@ function TotalsBar({
   totals: RosterTotals | undefined;
   loading: boolean;
 }) {
-  const cells: { label: string; value: number | string; tone?: string }[] = [
+  const cells: {
+    label: string;
+    value: number | string;
+    tone?: string;
+    hint?: string;
+  }[] = [
     { label: "Signed up", value: totals?.signedUp ?? "—" },
     { label: "Paid", value: totals?.paid ?? "—", tone: "text-green-400" },
     {
       label: "Still owes",
       value: totals?.unpaid ?? "—",
       tone: (totals?.unpaid ?? 0) > 0 ? "text-yellow-400" : undefined,
+      /*
+        Deliberately a sub-line under "Still owes" rather than a sixth number.
+        Cash-expected is a *subset* of what is outstanding, and a card of its own
+        would read as a separate bucket to add up — which is how a total that
+        does not tally gets in front of somebody at the field.
+      */
+      hint:
+        (totals?.payingCash ?? 0) > 0
+          ? `${totals!.payingCash} bringing cash`
+          : undefined,
     },
     {
       label: "Waiver on file",
@@ -331,6 +374,15 @@ function TotalsBar({
           >
             {c.value}
           </p>
+          {c.hint && (
+            <p
+              className={`text-[11px] text-amber-300/80 mt-0.5 ${
+                loading ? "opacity-40" : ""
+              }`}
+            >
+              {c.hint}
+            </p>
+          )}
         </div>
       ))}
     </div>
@@ -434,6 +486,7 @@ function TeamProgressPanel({
 function RosterTable({
   rows,
   teams,
+  showTeams,
   busyId,
   onTogglePaid,
   onChangeTeam,
@@ -441,6 +494,7 @@ function RosterTable({
 }: {
   rows: RosterRow[];
   teams: RosterTeam[];
+  showTeams: boolean;
   busyId: string | null;
   onTogglePaid: (r: RosterRow) => void;
   onChangeTeam: (r: RosterRow, teamId: string) => void;
@@ -448,11 +502,13 @@ function RosterTable({
 }) {
   return (
     <div className="overflow-x-auto -mx-4 px-4">
-      <table className="w-full text-sm min-w-[640px]">
+      <table className={`w-full text-sm ${showTeams ? "min-w-[640px]" : "min-w-[480px]"}`}>
         <thead>
           <tr className="text-left border-b border-border-token">
             <th className="py-2 pr-3 text-zinc-400 font-medium">Player</th>
-            <th className="py-2 px-3 text-zinc-400 font-medium">Team</th>
+            {showTeams && (
+              <th className="py-2 px-3 text-zinc-400 font-medium">Team</th>
+            )}
             <th className="py-2 px-3 text-zinc-400 font-medium">Waiver</th>
             <th className="py-2 pl-3 text-zinc-400 font-medium text-right">Paid</th>
           </tr>
@@ -496,27 +552,29 @@ function RosterTable({
                 </div>
               </td>
 
-              <td className="py-2.5 px-3">
-                {r.role === "guest" ? (
-                  <span className="text-zinc-500">—</span>
-                ) : teams.length === 0 ? (
-                  <span className="text-zinc-500 text-xs">No teams yet</span>
-                ) : (
-                  <select
-                    value={r.teamId ?? ""}
-                    disabled={busyId === r.id}
-                    onChange={(e) => onChangeTeam(r, e.target.value)}
-                    className="px-2 py-1 bg-surface-2 border border-border-token text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 disabled:opacity-50"
-                  >
-                    <option value="">— No team —</option>
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </td>
+              {showTeams && (
+                <td className="py-2.5 px-3">
+                  {r.role === "guest" ? (
+                    <span className="text-zinc-500">—</span>
+                  ) : teams.length === 0 ? (
+                    <span className="text-zinc-500 text-xs">No teams yet</span>
+                  ) : (
+                    <select
+                      value={r.teamId ?? ""}
+                      disabled={busyId === r.id}
+                      onChange={(e) => onChangeTeam(r, e.target.value)}
+                      className="px-2 py-1 bg-surface-2 border border-border-token text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 disabled:opacity-50"
+                    >
+                      <option value="">— No team —</option>
+                      {teams.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </td>
+              )}
 
               <td className="py-2.5 px-3">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -540,26 +598,43 @@ function RosterTable({
               </td>
 
               <td className="py-2.5 pl-3 text-right">
-                <button
-                  type="button"
-                  disabled={busyId === r.id}
-                  onClick={() => onTogglePaid(r)}
-                  title={r.paid ? "Mark as not paid" : "Mark as paid"}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
-                    r.paid
-                      ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
-                      : "bg-surface-2 text-zinc-400 border border-border-token hover:text-white"
-                  }`}
-                >
-                  {busyId === r.id ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : r.paid ? (
-                    <Check size={12} />
-                  ) : (
-                    <X size={12} />
+                <div className="inline-flex items-center gap-1.5">
+                  {/*
+                    The chip only ever appears beside "Unpaid" — `showsCashPending`
+                    drops it the moment the money lands, so nobody gets asked for
+                    cash they have already handed over. Marking them paid is the
+                    override; there is no second control to learn.
+                  */}
+                  {showsCashPending(r.paymentMethod, r.paymentStatus) && (
+                    <span
+                      title="This player said they're bringing cash to the field"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                    >
+                      <Banknote size={11} />
+                      Cash
+                    </span>
                   )}
-                  {r.paid ? "Paid" : "Unpaid"}
-                </button>
+                  <button
+                    type="button"
+                    disabled={busyId === r.id}
+                    onClick={() => onTogglePaid(r)}
+                    title={r.paid ? "Mark as not paid" : "Mark as paid"}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
+                      r.paid
+                        ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
+                        : "bg-surface-2 text-zinc-400 border border-border-token hover:text-white"
+                    }`}
+                  >
+                    {busyId === r.id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : r.paid ? (
+                      <Check size={12} />
+                    ) : (
+                      <X size={12} />
+                    )}
+                    {r.paid ? "Paid" : "Unpaid"}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

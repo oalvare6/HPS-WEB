@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, ShieldCheck } from "lucide-react";
+import { AlertCircle, Banknote, CreditCard, ShieldCheck } from "lucide-react";
 import { NO_TEAM, TeamSelect } from "@/components/register/TeamPicker";
 import type { TeamOption } from "@/lib/tournaments";
 
@@ -29,32 +29,68 @@ export function QuickJoinCard({
   entryFeeLabel: string | null;
 }) {
   const [teamId, setTeamId] = useState(NO_TEAM);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<"card" | "cash" | null>(null);
   const [error, setError] = useState("");
 
-  const join = async () => {
+  /**
+   * Both buttons join the roster; they differ only in what happens next.
+   *
+   * The join itself is the commitment, and it is identical either way — which
+   * is the point. Before this there was one button, "Join and pay", so joining
+   * and paying looked like a single indivisible act and anyone not ready to pay
+   * had nothing to press.
+   */
+  const join = async (method: "card" | "cash") => {
     setError("");
-    setSubmitting(true);
+    setSubmitting(method);
     try {
       const res = await fetch("/api/register/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tournamentId, teamId: teamId || null }),
       });
-      const data = (await res.json()) as { error?: string; payUrl?: string };
+      const data = (await res.json()) as {
+        error?: string;
+        payUrl?: string;
+        payToken?: string;
+        registrationId?: string;
+      };
 
       if (!res.ok || !data.payUrl) {
         setError(data.error || "We couldn't add you to this roster. Please try again.");
-        setSubmitting(false);
+        setSubmitting(null);
         return;
       }
 
-      window.location.href = data.payUrl;
+      if (method === "card") {
+        window.location.href = data.payUrl;
+        return;
+      }
+
+      // Record the cash intent, then reload. This screen resolves state from
+      // the server on every load, so the reload lands on the "you're on the
+      // roster, cash due at the field" card without this component having to
+      // reimplement it. A failure here is not worth blocking on — they are on
+      // the roster, which is the part that mattered.
+      if (data.registrationId && data.payToken) {
+        await fetch("/api/register/payment-intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            registrationId: data.registrationId,
+            payToken: data.payToken,
+            method: "cash",
+          }),
+        }).catch(() => {});
+      }
+      window.location.reload();
     } catch {
       setError("Network error. Check your connection and try again.");
-      setSubmitting(false);
+      setSubmitting(null);
     }
   };
+
+  const busy = submitting !== null;
 
   return (
     <div className="dashboard-card p-6 md:p-8 space-y-6">
@@ -92,7 +128,7 @@ export function QuickJoinCard({
             value={teamId}
             onChange={setTeamId}
             teams={teams}
-            disabled={submitting}
+            disabled={busy}
           />
         ) : (
           <p className="text-xs text-zinc-500">
@@ -110,14 +146,35 @@ export function QuickJoinCard({
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={join}
-          disabled={submitting}
-          className="w-full btn-primary h-12 justify-center disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {submitting ? "Adding you to the roster…" : "Join and pay"}
-        </button>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => join("card")}
+            disabled={busy}
+            className="w-full btn-primary h-12 justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            <CreditCard size={16} />
+            {submitting === "card"
+              ? "Adding you to the roster…"
+              : `Join and pay${entryFeeLabel ? ` ${entryFeeLabel}` : ""} by card`}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => join("cash")}
+            disabled={busy}
+            className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-border-token text-sm font-medium text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            <Banknote size={16} />
+            {submitting === "cash"
+              ? "Saving your spot…"
+              : "Join — I'll pay cash at the field"}
+          </button>
+
+          <p className="text-xs text-zinc-500 text-center">
+            Both save your spot. Your waiver is what holds it, not the payment.
+          </p>
+        </div>
       </div>
     </div>
   );

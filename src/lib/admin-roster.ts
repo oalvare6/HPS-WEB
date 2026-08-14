@@ -8,6 +8,7 @@
  * screen that answers "who is playing Friday and who still owes me money".
  */
 import { WAIVER_VALIDITY_DAYS } from "@/lib/contacts";
+import { isPayingCash } from "@/lib/payment-method";
 
 export type RosterRole = "player" | "guest";
 
@@ -35,6 +36,16 @@ export type RosterRow = {
   waiverExpiresAt: string | null;
   paid: boolean;
   paymentStatus: string;
+  /**
+   * What this player said they would pay with — `'cash'` when they told us they
+   * are bringing it to the field. Null means they have not said, which is not
+   * the same as "card": most rows have never declared anything.
+   *
+   * This is the half of pay-later the owner needs. Before it, a pending row was
+   * pending whether the player had promised cash on Friday or had quietly
+   * closed the tab three weeks ago, and those are different jobs.
+   */
+  paymentMethod: string | null;
   /** Flagged by `linkRegistrationToContact` when email and phone disagree. */
   needsReview: boolean;
   /** True for a walk-in added from this screen with details still missing. */
@@ -52,6 +63,12 @@ export type RosterTotals = {
   waiverMissing: number;
   guests: number;
   unassigned: number;
+  /**
+   * Of the unpaid, how many have said they are bringing cash. A subset of
+   * `unpaid`, never added to it — the money is still outstanding and the
+   * "still owes" number must not shrink because somebody made a promise.
+   */
+  payingCash: number;
 };
 
 export type RosterPayload = {
@@ -113,6 +130,7 @@ export function emptyTotals(): RosterTotals {
     waiverMissing: 0,
     guests: 0,
     unassigned: 0,
+    payingCash: 0,
   };
 }
 
@@ -121,7 +139,13 @@ export function totalsFromRows(rows: RosterRow[]): RosterTotals {
   for (const r of rows) {
     t.signedUp++;
     if (r.paid) t.paid++;
-    else t.unpaid++;
+    else {
+      t.unpaid++;
+      // Counted inside the unpaid branch on purpose: a declared cash payment is
+      // still an unpaid one, and somebody who has already paid should never be
+      // listed as cash-expected however they said they'd pay at the time.
+      if (isPayingCash(r.paymentMethod)) t.payingCash++;
+    }
     if (r.waiverOk) t.waiverOnFile++;
     else t.waiverMissing++;
     if (r.role === "guest") t.guests++;

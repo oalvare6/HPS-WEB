@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
 import { NO_TEAM, TeamSelect } from "@/components/register/TeamPicker";
+import { PaymentChoice } from "@/components/register/PaymentChoice";
 import type { TeamOption } from "@/lib/tournaments";
 
 type RegistrationOption = {
@@ -50,12 +51,17 @@ type RegistrationApiResponse = {
   waiverSkipped?: boolean;
   waiverSignedAt?: string | null;
   tournamentTitle?: string | null;
+  registrationId?: string;
+  payToken?: string;
 };
 
 type ConfirmationState = {
   tournamentTitle: string | null;
   waiverSignedAt: string | null;
   payUrl: string;
+  /** Both null on legacy responses; the card then shows the plain pay link. */
+  registrationId: string | null;
+  payToken: string | null;
 };
 
 function formatPhone(value: string) {
@@ -88,6 +94,7 @@ export function RegistrationForm({
   preselectedType = null,
   prefill = null,
   lockedToEvent = false,
+  entryFeeLabel = null,
 }: {
   tournaments: RegistrationOption[];
   /** Teams available per tournament id. Missing/empty hides the picker. */
@@ -96,6 +103,11 @@ export function RegistrationForm({
   /** From `/register?type=adult|youth` (pay gate register links). */
   preselectedType?: "adult" | "youth" | null;
   prefill?: RegistrationPrefill | null;
+  /**
+   * `"$80.00"`. Shown on the confirmation card so "pay by card" names the
+   * amount rather than sending the player to a page to find out.
+   */
+  entryFeeLabel?: string | null;
   /**
    * The event is already decided (the page was reached from that event), so the
    * dropdown becomes a statement rather than a question. A one-option select
@@ -239,6 +251,8 @@ export function RegistrationForm({
           tournamentTitle: data.tournamentTitle ?? selectedTournamentTitle,
           waiverSignedAt: data.waiverSignedAt ?? null,
           payUrl: data.signUrl,
+          registrationId: data.registrationId ?? null,
+          payToken: data.payToken ?? null,
         });
         return;
       }
@@ -269,6 +283,9 @@ export function RegistrationForm({
         tournamentTitle={confirmation.tournamentTitle}
         waiverSignedAt={confirmation.waiverSignedAt}
         payUrl={confirmation.payUrl}
+        registrationId={confirmation.registrationId}
+        payToken={confirmation.payToken}
+        entryFeeLabel={entryFeeLabel}
       />
     );
   }
@@ -814,10 +831,16 @@ function ConfirmationCard({
   tournamentTitle,
   waiverSignedAt,
   payUrl,
+  registrationId,
+  payToken,
+  entryFeeLabel,
 }: {
   tournamentTitle: string | null;
   waiverSignedAt: string | null;
   payUrl: string;
+  registrationId: string | null;
+  payToken: string | null;
+  entryFeeLabel: string | null;
 }) {
   const paymentLinkTracked = useRef(false);
 
@@ -860,15 +883,31 @@ function ConfirmationCard({
       </div>
 
       <div className="border-t border-border-token pt-5 space-y-3">
+        {/*
+          Not "one more step". The spot is already theirs — the waiver is what
+          holds it — and saying otherwise is what taught players that closing
+          the tab before paying meant they weren't in. All that is left is
+          settling up, and there are two ways to do that.
+        */}
         <p className="text-sm text-zinc-400">
-          One more step — secure your spot by paying the entry fee.
+          Your spot is saved. Last thing: how do you want to pay
+          {entryFeeLabel ? ` the ${entryFeeLabel} entry fee` : " the entry fee"}?
         </p>
-        <Link
-          href={payUrl}
-          className="btn-primary w-full h-12 inline-flex items-center justify-center"
-        >
-          Pay here
-        </Link>
+        {registrationId && payToken ? (
+          <PaymentChoice
+            registrationId={registrationId}
+            payToken={payToken}
+            payHref={payUrl}
+            entryFeeLabel={entryFeeLabel}
+          />
+        ) : (
+          <Link
+            href={payUrl}
+            className="btn-primary w-full h-12 inline-flex items-center justify-center"
+          >
+            Pay here
+          </Link>
+        )}
         <p className="text-xs text-zinc-500 text-center">
           You can also view this registration any time at{" "}
           <Link href="/me" className="underline underline-offset-2">

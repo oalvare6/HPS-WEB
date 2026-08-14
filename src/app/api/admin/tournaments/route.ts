@@ -11,6 +11,7 @@ import {
   parseOptionalNonNegInt,
   parseTournamentStatus,
 } from "@/lib/tournament-api-validation";
+import { parseEventKind } from "@/lib/event-kind";
 import type { TournamentInput } from "@/lib/types";
 
 export async function GET() {
@@ -98,6 +99,9 @@ export async function POST(request: Request) {
     recurrence: body.recurrence ?? null,
     location: body.location ?? null,
     format: body.format ?? null,
+    // Unrecognised (or absent) falls back to 'tournament', which is both the
+    // column default and how every event behaved before kinds existed.
+    kind: parseEventKind(body.kind) ?? "tournament",
     entry_fee: entryFee,
     entry_fee_cents: entryFeeCents,
     max_teams: maxTeams,

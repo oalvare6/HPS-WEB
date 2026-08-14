@@ -34,6 +34,7 @@ import RegistrationsList from "@/components/admin/RegistrationsList";
 import RosterScreen from "@/components/admin/RosterScreen";
 import TournamentTeamsPanel from "@/components/admin/TournamentTeamsPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
+import { eventKindCopy } from "@/lib/event-kind";
 import { useQueryParam } from "@/lib/admin-url-state";
 import { TournamentDetailSkeleton } from "@/components/shared/skeleton";
 
@@ -68,6 +69,13 @@ function ViewContent({ id }: { id: string }) {
   const setRosterTab = (next: RosterTab) => {
     setRosterParam(next === "roster" ? null : next);
   };
+
+  const kindCopy = eventKindCopy(tournament);
+  // `?roster=teams` survives in the URL (a bookmark, a back button, or an event
+  // switched to open play while the tab was selected). Fall back rather than
+  // render a Teams panel with no tab to leave it by.
+  const effectiveRosterTab: RosterTab =
+    rosterTab === "teams" && !kindCopy.hasTeams ? "roster" : rosterTab;
 
   useEffect(() => {
     let cancelled = false;
@@ -214,23 +222,36 @@ function ViewContent({ id }: { id: string }) {
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
-                    Roster
+                    {kindCopy.rosterHeading}
                   </h2>
-                  <RosterTabs value={rosterTab} onChange={setRosterTab} />
+                  {/*
+                    An open play night has no teams, so it gets no Teams tab.
+                    Offering one would be an empty screen inviting the owner to
+                    build a squad for a single Friday evening.
+                  */}
+                  <RosterTabs
+                    value={effectiveRosterTab}
+                    onChange={setRosterTab}
+                    showTeams={kindCopy.hasTeams}
+                    rosterLabel={kindCopy.rosterHeading}
+                  />
                 </div>
 
-                {rosterTab === "roster" && (
-                  <RosterScreen tournamentId={tournament.id} />
+                {effectiveRosterTab === "roster" && (
+                  <RosterScreen
+                    tournamentId={tournament.id}
+                    showTeams={kindCopy.hasTeams}
+                  />
                 )}
 
                 {/* Keep Registrants mounted to preserve internal filter/sort
                     state when toggling tabs; matches the pattern used on the
                     Overview page (Phase 2). */}
-                <div className={rosterTab === "registrants" ? "" : "hidden"}>
+                <div className={effectiveRosterTab === "registrants" ? "" : "hidden"}>
                   <RegistrationsList tournamentId={tournament.id} />
                 </div>
 
-                {rosterTab === "teams" && (
+                {effectiveRosterTab === "teams" && kindCopy.hasTeams && (
                   <TournamentTeamsPanel
                     tournamentId={tournament.id}
                     maxTeams={tournament.max_teams}
@@ -248,14 +269,20 @@ function ViewContent({ id }: { id: string }) {
 function RosterTabs({
   value,
   onChange,
+  showTeams,
+  rosterLabel,
 }: {
   value: RosterTab;
   onChange: (next: RosterTab) => void;
+  showTeams: boolean;
+  rosterLabel: string;
 }) {
   const tabs: { id: RosterTab; label: string; icon: React.ReactNode }[] = [
-    { id: "roster", label: "Roster", icon: <Users size={14} /> },
+    { id: "roster", label: rosterLabel, icon: <Users size={14} /> },
     { id: "registrants", label: "Details", icon: <ReceiptText size={14} /> },
-    { id: "teams", label: "Teams", icon: <UsersRound size={14} /> },
+    ...(showTeams
+      ? [{ id: "teams" as const, label: "Teams", icon: <UsersRound size={14} /> }]
+      : []),
   ];
   return (
     <div

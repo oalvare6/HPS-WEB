@@ -97,8 +97,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         .from("registrations")
         .select(
           `id, created_at, team_id, contact_id, first_name, last_name, email, phone, dob,
-           emergency_name, emergency_phone, payment_status, needs_admin_review,
-           waiver_signed_at, waiver_document_url,
+           emergency_name, emergency_phone, payment_status, payment_method,
+           needs_admin_review, waiver_signed_at, waiver_document_url,
            contact:contacts ( id, first_name, last_name, email, phone,
                               waiver_signed_at, waiver_expires_at,
                               waiver_document_url, waiver_source )`
@@ -161,6 +161,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         waiverExpiresAt: waiver.expiresAt,
         paid: SETTLED.has(r.payment_status),
         paymentStatus: r.payment_status,
+        paymentMethod: r.payment_method ?? null,
         needsReview: r.needs_admin_review === true,
         // A walk-in added from this screen still owes us the real details.
         incomplete:
@@ -191,6 +192,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         waiverExpiresAt: waiver.expiresAt,
         paid: SETTLED.has(d.payment_status),
         paymentStatus: d.payment_status,
+        // `drop_ins` has no payment_method column; a guest pays on the night by
+        // definition, so there is no intent to record.
+        paymentMethod: null,
         needsReview: false,
         incomplete: false,
         createdAt: d.created_at,

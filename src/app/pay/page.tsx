@@ -18,6 +18,7 @@ import { acceptsRegistrations } from "@/lib/tournament-state";
 import { buildPayResumePath, buildWaiverSignPath } from "@/lib/pay-resume-url";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { reconcileWaiverForRegistration } from "@/lib/waiver-reconcile";
+import { isSettledStatus, showsCashPending } from "@/lib/payment-method";
 import { NeedsWaiverCard } from "@/components/register/SignupStatusCards";
 import type {
   PayEligibilitySuccessBody,
@@ -62,6 +63,7 @@ function resolveDefaultWaiverType(
  */
 type ResumeSummary = {
   paymentStatus: string;
+  paymentMethod: string | null;
   waiverSigned: boolean;
   teamName: string | null;
   tournamentTitle: string | null;
@@ -75,7 +77,7 @@ async function loadResumeSummary(
   const { data, error } = await supabaseAdmin
     .from("registrations")
     .select(
-      "payment_status, waiver_signed, teams(name), tournaments(title, slug, entry_fee_cents)"
+      "payment_status, payment_method, waiver_signed, teams(name), tournaments(title, slug, entry_fee_cents)"
     )
     .eq("id", registrationId)
     .maybeSingle();
@@ -92,6 +94,7 @@ async function loadResumeSummary(
 
   const row = data as unknown as {
     payment_status: string;
+    payment_method: string | null;
     waiver_signed: boolean | null;
     teams?: { name?: string | null } | { name?: string | null }[] | null;
     tournaments?:
@@ -104,6 +107,7 @@ async function loadResumeSummary(
 
   return {
     paymentStatus: row.payment_status,
+    paymentMethod: row.payment_method ?? null,
     waiverSigned: Boolean(row.waiver_signed),
     teamName: one(row.teams)?.name ?? null,
     tournamentTitle: event?.title ?? null,
@@ -324,9 +328,11 @@ export default async function PayPage({
                       tournamentTitle:
                         resume.tournamentTitle ?? initialTournament?.title ?? null,
                       teamName: resume.teamName,
-                      isPaid:
-                        resume.paymentStatus === "paid" ||
-                        resume.paymentStatus === "waived",
+                      isPaid: isSettledStatus(resume.paymentStatus),
+                      payingCash: showsCashPending(
+                        resume.paymentMethod,
+                        resume.paymentStatus
+                      ),
                       statusHref: (resume.tournamentSlug ?? tournamentSlug)
                         ? `/register?tournament=${encodeURIComponent(
                             (resume.tournamentSlug ?? tournamentSlug)!

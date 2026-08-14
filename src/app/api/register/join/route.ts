@@ -156,6 +156,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       registrationId,
+      // Returned alongside the URL so the caller can also declare a payment
+      // method (`/api/register/payment-intent`) without having to pick the
+      // token back out of a query string it just received.
+      payToken,
       payUrl: buildPayResumePath({
         registrationId,
         payToken,

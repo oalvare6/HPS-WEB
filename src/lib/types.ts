@@ -24,11 +24,46 @@ export const TOURNAMENT_FORMATS: TournamentFormat[] = [
   "Other",
 ];
 
+/**
+ * What sort of event this is (D15).
+ *
+ *   tournament — a season: teams, a schedule, standings, an entry fee
+ *   open_play  — a pop-up night: one date, one door price, no teams, no table
+ *
+ * The distinction is presentational and organisational, never a money gate —
+ * both kinds sell through the same paths.
+ */
+export type EventKind = "tournament" | "open_play";
+
+export const EVENT_KINDS: { value: EventKind; label: string; help: string }[] = [
+  {
+    value: "tournament",
+    label: "Tournament",
+    help: "A season with teams, a schedule and a league table. Players join a team and pay an entry fee.",
+  },
+  {
+    value: "open_play",
+    label: "Open play night",
+    help: "A one-off pop-up night. One date, one door price, no teams and no standings.",
+  },
+];
+
 export type Tournament = {
   id: string;
   title: string;
   slug: string;
   status: TournamentStatus;
+  /**
+   * Optional on purpose. The column ships in
+   * `20260814230000_add_tournaments_kind.sql`, and making it required would
+   * mean every `.select()` naming it returns a PostgREST 42703 the moment the
+   * code deploys ahead of the migration — the exact trap `is_draft` set.
+   *
+   * Never read this field directly. Go through `resolveEventKind()` in
+   * `lib/event-kind.ts`, which treats anything unrecognised as a tournament, so
+   * an un-migrated database degrades to today's behaviour rather than breaking.
+   */
+  kind?: EventKind | string | null;
   /**
    * Still being set up: hidden from every public listing and page, and takes no
    * money. The storage behind the "Draft" option of the one Event Status

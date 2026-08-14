@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { CheckCircle2, Clock, CreditCard, PenLine, RefreshCw } from "lucide-react";
+import { CheckCircle2, Clock, PenLine, RefreshCw } from "lucide-react";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { SavedTeamPicker } from "@/components/register/TeamPicker";
+import { PaymentChoice } from "@/components/register/PaymentChoice";
 import type { TeamOption } from "@/lib/tournaments";
 
 /**
@@ -81,6 +82,9 @@ export function OwesPaymentCard({
   teams,
   teamId,
   teamName,
+  payingCash,
+  registrationId,
+  payToken,
 }: {
   tournamentTitle: string;
   tournamentId: string;
@@ -89,6 +93,10 @@ export function OwesPaymentCard({
   teams: TeamOption[];
   teamId: string | null;
   teamName: string | null;
+  /** They have already told us they're bringing cash. */
+  payingCash: boolean;
+  registrationId: string;
+  payToken: string;
 }) {
   return (
     <div className={cardClass}>
@@ -136,18 +144,21 @@ export function OwesPaymentCard({
           already tracks who owes what, so nothing here needs to block them.
           What this must never do is imply their spot is contingent on paying
           today — that misread is what sent people back through signup twice.
+
+          Card and cash are two buttons of equal weight (D14). This used to be a
+          pay button with "or pay later" as a grey caption underneath, which is
+          why the only exit anybody found was a card payment.
         */}
-        <Link
-          href={payHref}
-          className="btn-primary w-full h-12 inline-flex items-center justify-center gap-2"
-        >
-          <CreditCard size={16} />
-          Pay {entryFeeLabel ?? "entry fee"} now
-        </Link>
+        <PaymentChoice
+          registrationId={registrationId}
+          payToken={payToken}
+          payHref={payHref}
+          entryFeeLabel={entryFeeLabel}
+          initialMethod={payingCash ? "cash" : null}
+        />
         <p className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 text-center">
           <Clock size={12} />
-          Or pay later — at the field, or from this page any time before your
-          first match.
+          You can settle up from this page any time before your first match.
         </p>
       </div>
     </div>

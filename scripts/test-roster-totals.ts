@@ -11,6 +11,7 @@
  */
 import {
   progressByTeam,
+  totalsFromRows,
   type RosterRow,
   type RosterTeam,
 } from "../src/lib/admin-roster";
@@ -40,6 +41,7 @@ function row(over: Partial<RosterRow>): RosterRow {
     waiverExpiresAt: null,
     paid: false,
     paymentStatus: "pending",
+    paymentMethod: null,
     needsReview: false,
     incomplete: false,
     createdAt: new Date(0).toISOString(),
@@ -145,6 +147,52 @@ check(
   `Heights players=${heights?.players} unpaid=${heights?.unpaid}`
 );
 
-const total = EXPECTED.length + 4;
+/* ------------------------------------------------------------------ *
+ * Cash-expected — the collection list for match night.
+ *
+ * The trap this guards: `payingCash` is a SUBSET of `unpaid`, never an addition
+ * to it. Declaring cash is a promise, not a payment, so the moment it starts
+ * shrinking "still owes" the owner is looking at a number that says they are
+ * owed less money than they are.
+ * ------------------------------------------------------------------ */
+
+const CASH_ROWS: RosterRow[] = [
+  row({ paid: false, paymentStatus: "pending", paymentMethod: "cash" }),
+  row({ paid: false, paymentStatus: "pending", paymentMethod: "cash" }),
+  row({ paid: false, paymentStatus: "pending", paymentMethod: "card" }),
+  row({ paid: false, paymentStatus: "pending", paymentMethod: null }),
+  // Paid, but said cash at the time. Must NOT be on the collection list — this
+  // is the person who otherwise gets asked for money they already handed over.
+  row({ paid: true, paymentStatus: "paid", paymentMethod: "cash" }),
+];
+
+const cashTotals = totalsFromRows(CASH_ROWS);
+
+check(
+  "payingCash counts only the unpaid who said cash",
+  cashTotals.payingCash === 2,
+  `payingCash=${cashTotals.payingCash} (expected 2)`
+);
+
+check(
+  "declaring cash does not shrink 'still owes'",
+  cashTotals.unpaid === 4 && cashTotals.paid === 1,
+  `unpaid=${cashTotals.unpaid} paid=${cashTotals.paid} (expected 4 / 1)`
+);
+
+check(
+  "payingCash never exceeds unpaid",
+  cashTotals.payingCash <= cashTotals.unpaid,
+  `payingCash=${cashTotals.payingCash} unpaid=${cashTotals.unpaid}`
+);
+
+check(
+  "a roster where nobody declared anything reports zero, not undefined",
+  totalsFromRows([row({}), row({ paid: true, paymentStatus: "paid" })])
+    .payingCash === 0,
+  "payingCash=0"
+);
+
+const total = EXPECTED.length + 8;
 console.log(`\n${total - failed}/${total} passed`);
 process.exit(failed === 0 ? 0 : 1);
