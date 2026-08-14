@@ -29,6 +29,8 @@ import {
   findEventRegistration,
   loadEventStanding,
 } from "@/lib/event-standing";
+import { defaultWaiverTypeFor } from "@/lib/signup-state";
+import { loadOpenPlayFreeEntry } from "@/lib/open-play-attendance";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import type { Tournament } from "@/lib/types";
 
@@ -117,6 +119,27 @@ export default async function RegisterPage({
 
   const teams = canRegister ? (await getTeamsByTournament([event.id]))[event.id] ?? [] : [];
 
+  /*
+    D7: whether this person walks in free, resolved *before* the card is drawn.
+
+    The entitlement was already correct at write time — /api/register/join comps
+    them whatever the browser sends. What was missing is that nothing said so, so
+    an entitled player was shown a door price and made to answer "how are you
+    paying?" for a fee they did not owe, and the comp only appeared afterwards.
+
+    Same `defaultWaiverTypeFor` derivation as `loadEventStanding` above, on
+    purpose: two different answers to "which waiver applies" on one screen would
+    show the free notice to somebody the join route then turns away to sign.
+
+    Returns null for every tournament without querying, so this costs nothing on
+    the events that make up most of this page's traffic.
+  */
+  const freeEntry = await loadOpenPlayFreeEntry({
+    contact,
+    event,
+    waiverType: defaultWaiverTypeFor(contact, typeParam),
+  });
+
   return (
     <SignupShell
       title={state.kind === "closed" ? event.title : `Sign up — ${event.title}`}
@@ -196,6 +219,7 @@ export default async function RegisterPage({
           feeLabel={eventKindCopy(event).feeLabel}
           showTeams={eventKindCopy(event).hasTeams}
           whenLabel={eventWhenLabel(event)}
+          freeEntry={freeEntry}
         />
       )}
 

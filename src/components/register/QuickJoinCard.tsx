@@ -8,10 +8,12 @@ import {
   Check,
   CreditCard,
   ShieldCheck,
+  Ticket,
 } from "lucide-react";
 import { NO_TEAM, TeamSelect } from "@/components/register/TeamPicker";
 import type { PaymentMethodChoice } from "@/lib/payment-method";
 import type { TeamOption } from "@/lib/tournaments";
+import type { OpenPlayFreeEntryNotice } from "@/lib/open-play-attendance";
 
 /**
  * The returning-player path (REBUILD-PLAN §6, D5): recognized → "waiver good
@@ -49,6 +51,7 @@ export function QuickJoinCard({
   feeLabel,
   showTeams,
   whenLabel,
+  freeEntry,
 }: {
   tournamentId: string;
   tournamentTitle: string;
@@ -68,6 +71,15 @@ export function QuickJoinCard({
   showTeams: boolean;
   /** "Friday, August 14 · 7:00 PM – 9:00 PM", or null when undated. */
   whenLabel: string | null;
+  /**
+   * Set when this person walks in free (D7). A **display hint only** — the
+   * server re-derives the entitlement at write time and is the sole authority
+   * on what anyone is charged. If this is wrong in the generous direction the
+   * join route still charges them; if it is wrong in the mean direction they
+   * are still comped. It exists so the screen stops asking an entitled player
+   * how they intend to settle a fee they do not owe.
+   */
+  freeEntry: OpenPlayFreeEntryNotice | null;
 }) {
   const [teamId, setTeamId] = useState(NO_TEAM);
   const [method, setMethod] = useState<PaymentMethodChoice | null>(null);
@@ -76,7 +88,11 @@ export function QuickJoinCard({
 
   // No fee configured means there is nothing to choose between, so the radios
   // would be a question with one answer. Confirm stands alone.
-  const asksForPayment = entryFeeLabel !== null;
+  //
+  // Free entry is the same situation arrived at differently: there is nothing
+  // to collect, so "how are you paying?" is a question with no true answer, and
+  // both options would name a price this person does not owe.
+  const asksForPayment = entryFeeLabel !== null && !freeEntry;
   const canConfirm = !submitting && (!asksForPayment || method !== null);
 
   const confirm = async () => {
@@ -171,11 +187,28 @@ export function QuickJoinCard({
             {whenLabel}
           </p>
         )}
-        {entryFeeLabel && (
+        {/*
+          Free entry replaces the price rather than sitting next to it. Showing
+          "Door price: $15.00" above "Free for you" states the thing they do not
+          owe more prominently than the thing that is true, which is how a player
+          ends up at the field expecting to hand over cash.
+        */}
+        {freeEntry ? (
+          <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+            <Ticket size={14} className="mt-0.5 shrink-0 text-emerald-300" aria-hidden />
+            <p className="text-sm text-emerald-100">
+              <span className="font-semibold">Free for you.</span>{" "}
+              {freeEntry.viaTournamentTitle
+                ? `You're on the ${freeEntry.viaTournamentTitle} roster, so there's nothing to pay at the door.`
+                : `You're on a qualifying tournament roster, so there's nothing to pay at the door.`}
+              {entryFeeLabel ? ` Normally ${entryFeeLabel}.` : ""}
+            </p>
+          </div>
+        ) : entryFeeLabel ? (
           <p className="text-sm text-zinc-300">
             {feeLabel}: <span className="text-white font-medium">{entryFeeLabel}</span>
           </p>
-        )}
+        ) : null}
       </div>
 
       <div className="border-t border-border-token pt-6 space-y-5">

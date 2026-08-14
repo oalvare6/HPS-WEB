@@ -8,6 +8,7 @@
  * uses. This module is the only place that reads rows to feed it.
  */
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { isOpenPlay } from "@/lib/event-kind";
 import {
   parseFreeEntryTournamentIds,
   resolveDoorPriceCents,
@@ -99,6 +100,72 @@ export async function loadOpenPlayEntitlement(input: {
     doorPriceCents,
     waiverType,
   });
+}
+
+/** What the signup screen needs to say "you're in free, and here's why". */
+export type OpenPlayFreeEntryNotice = {
+  viaTournamentId: string;
+  /** Null only if the conferring tournament was deleted between the two reads. */
+  viaTournamentTitle: string | null;
+};
+
+/**
+ * The same question as `loadOpenPlayEntitlement`, asked one screen earlier.
+ *
+ * That function decides the money at the moment somebody confirms. This one
+ * exists because deciding correctly is not the same as *saying so*: without it
+ * the signup card shows a door price and asks "how are you paying?", the player
+ * picks a method for a fee they do not owe, and only then does the server
+ * quietly comp them. The charge was always right; the screen was wrong.
+ *
+ * Returns null for anything that is not a comped open-play spot — every
+ * tournament, every un-entitled player, every failure — so a caller can render
+ * the result unconditionally and a fault degrades to "you owe the door price",
+ * which is the same safe direction the entitlement rule itself takes.
+ *
+ * ⚠ This is a display hint and nothing more. It must never be the thing that
+ * decides what somebody is charged: it runs against the roster as it was one
+ * page-load ago, and the browser could be lying about having seen it. The
+ * authority stays in `/api/register/join`, which re-derives the entitlement at
+ * write time. The two agreeing is a convenience; only the write-time answer is
+ * binding.
+ *
+ * The title is resolved here rather than passed as an id because the id is not
+ * an explanation. "You're on the Community Cup roster" is what settles a
+ * question at the field; a UUID is not.
+ */
+export async function loadOpenPlayFreeEntry(input: {
+  contact: Pick<
+    Contact,
+    "id" | "waiver_type" | "waiver_signed_at" | "waiver_expires_at"
+  > | null;
+  event: OpenPlayEventForEntitlement;
+  waiverType: SignupWaiverType;
+}): Promise<OpenPlayFreeEntryNotice | null> {
+  if (!isOpenPlay(input.event)) return null;
+
+  const entitlement = await loadOpenPlayEntitlement(input);
+  if (entitlement.kind !== "free") return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("tournaments")
+    .select("title")
+    .eq("id", entitlement.viaTournamentId)
+    .maybeSingle();
+
+  if (error) {
+    // Still free — we just cannot name the reason. Saying "you're in free"
+    // without the why beats charging somebody who is entitled.
+    console.error(
+      "[open-play] could not name the conferring tournament:",
+      error.message
+    );
+  }
+
+  return {
+    viaTournamentId: entitlement.viaTournamentId,
+    viaTournamentTitle: data?.title ?? null,
+  };
 }
 
 export type OpenPlayAttendee = {
