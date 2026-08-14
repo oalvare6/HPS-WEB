@@ -106,7 +106,6 @@ export default async function AuthClaimPage() {
         </div>
       </Section>
 
-      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }

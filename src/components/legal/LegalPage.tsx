@@ -46,7 +46,6 @@ export function LegalPage({
         </div>
       </Section>
 
-      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }

@@ -140,7 +140,6 @@ export default async function WaiverSignPage({
         </div>
       </section>
 
-      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }

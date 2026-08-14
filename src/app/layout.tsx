@@ -3,7 +3,6 @@ import { Inter, Bebas_Neue, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
-import { WhatsAppButton } from "@/components/layout/whatsapp-button";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -70,10 +69,19 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.variable} ${bebas.variable} ${jetbrains.variable} font-sans antialiased bg-base text-white`} suppressHydrationWarning>
+        {/*
+          No floating WhatsApp button. It lived here, so it rendered on every
+          page — a 147x40 pill, 39% of a 375px screen, fixed over the content,
+          including the signup form. It was also positioned 88px up to clear the
+          QuickActionsBar, which only ever renders on the homepage, so on the
+          other twelve pages it hovered in empty space over body text.
+
+          WhatsApp is still on every page in the footer, and contextually where
+          somebody might actually be stuck (register, pay, event pages).
+        */}
         <Header />
         <main className="min-h-screen">{children}</main>
         <Footer />
-        <WhatsAppButton />
       </body>
     </html>
   );

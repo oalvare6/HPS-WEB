@@ -193,8 +193,6 @@ export default function FacilityPage() {
         </div>
       </Section>
 
-      {/* Bottom padding for mobile fixed bar */}
-      <div className="h-20 md:hidden bg-base" />
     </>
   );
 }
