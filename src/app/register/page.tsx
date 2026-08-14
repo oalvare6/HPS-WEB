@@ -374,7 +374,6 @@ function SignupShell({
         <div className="max-w-2xl mx-auto">{children}</div>
       </Section>
 
-      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }

@@ -152,7 +152,6 @@ export function ContactPageClient({
         </div>
       </Section>
 
-      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }

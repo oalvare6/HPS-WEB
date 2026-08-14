@@ -272,7 +272,6 @@ export default async function MePage() {
         </div>
       </Section>
 
-      <div className="h-20 md:hidden bg-surface" />
     </>
   );
 }
