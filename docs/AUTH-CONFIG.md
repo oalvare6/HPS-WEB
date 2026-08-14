@@ -16,7 +16,11 @@ https://www.houstonpremiersoccer.com
 
 > ### ⚠ This setting broke sign-in for everyone, silently, for two days.
 >
-> Until 2026-08-14 the Site URL was `https://hps-web-oalvare6s-projects.vercel.app/`
+> **Corrected 2026-08-14 to the values in this section and §2.** Kept on record
+> because the failure is invisible and the next person to touch these fields
+> needs to know what it looks like.
+>
+> Until then the Site URL was `https://hps-web-oalvare6s-projects.vercel.app/`
 > and the Redirect URLs listed only `*.vercel.app` hosts. Nothing matched
 > `www.houstonpremiersoccer.com/auth/callback`.
 >

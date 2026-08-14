@@ -30,6 +30,8 @@ Supabase; admin = HMAC cookie.
 npx tsc --noEmit
 npx tsx scripts/test-tournament-state.ts
 npx tsx scripts/test-signup-state.ts
+npx tsx scripts/test-roster-totals.ts
+npx tsx scripts/test-canonical-host.ts
 npm run build
 ```
 
@@ -41,13 +43,20 @@ npm run build
   removed 2026-08-14 — never configured, so it failed every tap). Gating signup on sign-in
   would take the site offline for players (§A8, §9).
 
-**The auth trap that cost a week:** Supabase's **Site URL and Redirect URLs** must list the
-real domain. They pointed at `hps-web-oalvare6s-projects.vercel.app` until 2026-08-14, and
-`www.houstonpremiersoccer.com/auth/callback` matched none of them — so Supabase silently
-redirected to the Site URL instead of erroring, `/auth/callback` never ran, and **no player
-could complete a Google sign-in on the real domain** (1 MAU, zero `auth.sessions` after
-2026-07-01). If sign-in ever "does nothing" or lands on a strange hostname, check that
-allow-list *before* reading any code.
+**The auth trap that cost a week — FIXED 2026-08-14, but read it anyway.** Supabase's
+**Site URL and Redirect URLs** must list the real domain. They pointed at
+`hps-web-oalvare6s-projects.vercel.app`, and `www.houstonpremiersoccer.com/auth/callback`
+matched none of them — so Supabase silently redirected to the Site URL instead of erroring,
+`/auth/callback` never ran, and **no player could complete a Google sign-in on the real
+domain** (1 MAU, zero `auth.sessions` after 2026-07-01). If sign-in ever "does nothing" or
+lands on a strange hostname, check that allow-list *before* reading any code —
+[`docs/AUTH-CONFIG.md`](docs/AUTH-CONFIG.md) §1 has the current values.
+
+**One host serves this site: `www.houstonpremiersoccer.com`.** Vercel assigns four other
+aliases that used to serve a full working duplicate; the middleware now 308s them to the
+canonical host (`src/lib/canonical-host.ts`). Sessions are per-host and `.vercel.app` is on
+the Public Suffix List, so a session made on an alias can never be read on the real domain.
+Preview deployments are exempt on purpose — don't "simplify" that check away.
 
 | Doc | What |
 |---|---|

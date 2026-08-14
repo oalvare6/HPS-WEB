@@ -1,12 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseMiddlewareClient } from "@/lib/supabase-server";
+import { canonicalRedirectHost } from "@/lib/canonical-host";
 
 /**
  * Phase 6 middleware.
  *
+ * - Sends production traffic on a non-canonical host to the real domain
+ *   (see `src/lib/canonical-host.ts`).
  * - Refreshes the Supabase auth session cookie on every matched request via
- *   `@supabase/ssr`. This is what keeps magic-link sessions alive across
- *   Server Components.
+ *   `@supabase/ssr`. This is what keeps sessions alive across Server
+ *   Components.
  * - Protects `/me/*`: anonymous visitors are redirected to
  *   `/login?next=<original-path>`.
  *
@@ -14,6 +17,24 @@ import { createSupabaseMiddlewareClient } from "@/lib/supabase-server";
  * two cookie namespaces are independent.
  */
 export async function middleware(request: NextRequest) {
+  // Host check runs FIRST, before the Supabase client is built. Refreshing a
+  // session cookie onto a host we are about to redirect away from would write
+  // it to the wrong domain — and on `.vercel.app`, to a domain the real site
+  // can never read.
+  const redirectHost = canonicalRedirectHost(
+    request.headers.get("host"),
+    process.env.VERCEL_ENV
+  );
+  if (redirectHost) {
+    const target = new URL(request.nextUrl.toString());
+    target.host = redirectHost;
+    target.protocol = "https:";
+    target.port = "";
+    // 308 rather than 307: this is permanent, and it tells search engines to
+    // drop the duplicate hosts from the index instead of keeping both.
+    return NextResponse.redirect(target, { status: 308 });
+  }
+
   const { supabase, response } = createSupabaseMiddlewareClient(request);
 
   if (!supabase) {
