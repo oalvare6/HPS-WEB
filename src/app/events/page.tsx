@@ -2,6 +2,7 @@ import { Section, SectionHeader } from "@/components/shared/section";
 import { TournamentCard } from "@/components/shared/TournamentCard";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { getFeaturedTournaments, getPublicTournaments } from "@/lib/tournaments";
+import { isOpenPlay } from "@/lib/event-kind";
 import type { Tournament, TournamentStatus } from "@/lib/types";
 
 const STATUS_SORT: Record<TournamentStatus, number> = {
@@ -31,6 +32,8 @@ export default async function EventsPage() {
   const { tournaments: rawTournaments, loadError: listLoadError } =
     await getPublicTournaments();
   const tournaments = sortEventsForList(rawTournaments);
+  const tournamentEvents = tournaments.filter((t) => !isOpenPlay(t));
+  const openPlayEvents = tournaments.filter((t) => isOpenPlay(t));
   const { tournaments: featuredTournaments, loadError: featuredLoadError } =
     await getFeaturedTournaments();
   const featuredTournament = featuredTournaments[0] ?? null;
@@ -79,20 +82,49 @@ export default async function EventsPage() {
         </div>
       )}
 
-      {/* Tournaments list */}
+      {/*
+        Split by kind. A ten-week season and a Friday pop-up night are different
+        commitments, and interleaving them by date made a player read every card
+        to work out which was which.
+
+        Each section is hidden when empty rather than showing an empty state:
+        there is nothing useful to say about "no open play nights scheduled", and
+        a page of empty boxes reads as a broken site.
+      */}
       <Section dark className="bg-surface">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <SectionHeader
-            title="All events"
-            subtitle="Upcoming tournaments first, then completed events you can still browse for schedules and details."
-            dark
-          />
+        <div className="max-w-4xl mx-auto space-y-12">
           {listLoadError ? null : tournaments.length === 0 ? (
             <div className="dashboard-card border-2 border-dashed border-border-token p-10 text-center">
               <p className="text-zinc-400">No events listed yet. Check back soon!</p>
             </div>
           ) : (
-            tournaments.map((t) => <TournamentCard key={t.id} tournament={t} />)
+            <>
+              {tournamentEvents.length > 0 && (
+                <div className="space-y-6">
+                  <SectionHeader
+                    title="Tournaments"
+                    subtitle="Seasons with teams, a schedule and a league table. Upcoming first, then completed events you can still browse."
+                    dark
+                  />
+                  {tournamentEvents.map((t) => (
+                    <TournamentCard key={t.id} tournament={t} />
+                  ))}
+                </div>
+              )}
+
+              {openPlayEvents.length > 0 && (
+                <div className="space-y-6">
+                  <SectionHeader
+                    title="Open play nights"
+                    subtitle="One-off nights. Turn up, pay at the door or online, sides are made on the night — no season, no commitment."
+                    dark
+                  />
+                  {openPlayEvents.map((t) => (
+                    <TournamentCard key={t.id} tournament={t} />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </Section>

@@ -1,4 +1,5 @@
 import { safeInternalLink } from "@/lib/safe-internal-link";
+import type { SignupState } from "@/lib/signup-state";
 
 type TournamentLinkFields = {
   slug: string;
@@ -65,4 +66,161 @@ export function tournamentPrimaryCta(tournament: TournamentCtaFields): Tournamen
     };
   }
   return { kind: "none" };
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * The same CTA, but answered for **this visitor** rather than for the event.
+ *
+ * `tournamentPrimaryCta` above cannot tell a stranger from somebody who signed
+ * up three weeks ago, picked a team and signed a waiver — it reads two boolean
+ * flags on the event and nothing else. So the button said "Sign up to play" to
+ * a player who was already on the roster, and the only way to discover what was
+ * actually left was to click it and read the resulting screen.
+ *
+ * This is a pure projection of `SignupState` (from `lib/signup-state.ts`) onto
+ * a button. It adds **no branch logic of its own** — every decision was already
+ * made and tested upstream; all that happens here is choosing words. The
+ * signed-out case delegates straight back to `tournamentPrimaryCta`, so a
+ * visitor we don't know sees exactly what they saw before.
+ */
+export type ViewerEventCta = {
+  /**
+   * `"none"` renders no button at all — used when there is genuinely nothing
+   * left to do, which is a different thing from an event that is closed.
+   */
+  kind: "register" | "pay" | "waiver" | "none";
+  href: string | null;
+  label: string | null;
+  /** Headline above the button. */
+  heading: string;
+  /** One line under it. Null when the heading says everything. */
+  note: string | null;
+  /** True when this reflects a known person, so the card can style itself. */
+  personalised: boolean;
+};
+
+export function viewerEventCta({
+  tournament,
+  state,
+  teamName,
+  entryFeeLabel,
+  isFinished = false,
+}: {
+  tournament: TournamentCtaFields;
+  /** Null when signed out, or when we have never met this person. */
+  state: SignupState | null;
+  teamName: string | null;
+  entryFeeLabel: string | null;
+  /** The event's last day has passed. Outranks everything below. */
+  isFinished?: boolean;
+}): ViewerEventCta {
+  const anonymous = (): ViewerEventCta => {
+    const cta = tournamentPrimaryCta(tournament);
+    if (cta.kind === "none") {
+      return {
+        kind: "none",
+        href: null,
+        label: null,
+        heading: "Take part",
+        note: null,
+        personalised: false,
+      };
+    }
+    return {
+      kind: cta.kind === "pay" ? "pay" : "register",
+      href: cta.href,
+      label: cta.label,
+      heading: "Take part",
+      note: null,
+      personalised: false,
+    };
+  };
+
+  if (isFinished) {
+    return {
+      kind: "none",
+      href: null,
+      label: null,
+      heading: "Past event",
+      note: null,
+      personalised: false,
+    };
+  }
+
+  if (!state) return anonymous();
+
+  const signupHref = tournamentRegisterHref(tournament);
+
+  switch (state.kind) {
+    /*
+      Every personalised branch points at `/register`, and that is deliberate.
+      `/register` is the one front door (REBUILD-PLAN §A6): it re-checks the
+      waiver against DocuSeal, mints the signed resume token, and holds the team
+      picker. Linking around it — straight to a pay URL, say — would rebuild the
+      second door this project spent a session removing.
+    */
+    case "already_paid":
+      return {
+        kind: "none",
+        href: signupHref,
+        label: null,
+        heading: "You're all set",
+        note: teamName
+          ? `You're on the roster, playing for ${teamName}. See you on the field.`
+          : "You're on the roster and paid up. See you on the field.",
+        personalised: true,
+      };
+
+    case "owes_payment":
+      if (state.payingCash) {
+        return {
+          kind: "none",
+          href: signupHref,
+          label: null,
+          heading: "You're on the roster",
+          note: `${entryFeeLabel ?? "Your entry fee"} due at the field${
+            teamName ? ` — playing for ${teamName}` : ""
+          }. Nothing else to do before then.`,
+          personalised: true,
+        };
+      }
+      return {
+        kind: "pay",
+        href: signupHref,
+        label: entryFeeLabel ? `Pay ${entryFeeLabel} now` : "Pay entry fee",
+        heading: "You're on the roster",
+        note: teamName
+          ? `Playing for ${teamName}. Pay now, or bring it to the field.`
+          : "Your spot is confirmed. Pay now, or bring it to the field.",
+        personalised: true,
+      };
+
+    case "needs_waiver":
+      return {
+        kind: "waiver",
+        href: signupHref,
+        label: "Sign my waiver",
+        heading: "One thing left",
+        note: "You're on the roster, but we don't have your signed waiver yet. It takes about a minute.",
+        personalised: true,
+      };
+
+    case "quick_join":
+      return {
+        kind: "register",
+        href: signupHref,
+        label: "Sign up to play",
+        heading: "Welcome back",
+        note: "Your waiver is already on file — just pick a team.",
+        personalised: true,
+      };
+
+    // A known person who is not on this roster and has no valid waiver is, for
+    // this button's purposes, a stranger: they need the full sign-up.
+    case "full_signup":
+    case "closed":
+      return anonymous();
+  }
 }

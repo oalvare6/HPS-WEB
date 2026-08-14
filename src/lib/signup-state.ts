@@ -16,6 +16,7 @@
  * a database — see scripts/test-signup-state.ts.
  */
 import { isContactWaiverValid } from "@/lib/contacts";
+import { isPayingCash } from "@/lib/payment-method";
 import type { Contact, RegistrationPaymentStatus } from "@/lib/types";
 
 export type SignupWaiverType = "adult" | "youth";
@@ -25,6 +26,12 @@ export type SignupRegistrationSnapshot = {
   payment_status: RegistrationPaymentStatus;
   waiver_signed: boolean;
   team_id: string | null;
+  /**
+   * What this player said they would pay with — `'cash'` when they are bringing
+   * it to the field. Optional because most rows have never declared anything and
+   * NULL must keep meaning "they have not told us", not "card".
+   */
+  payment_method?: string | null;
 };
 
 export type SignupStateInput = {
@@ -48,8 +55,20 @@ export type SignupState =
    * does not settle which team you are on — the card still offers the picker.
    */
   | { kind: "already_paid"; registrationId: string; teamId: string | null }
-  /** On the roster, still owes the entry fee. */
-  | { kind: "owes_payment"; registrationId: string; teamId: string | null }
+  /**
+   * On the roster, still owes the entry fee.
+   *
+   * `payingCash` is carried because it changes what this screen should say, not
+   * what it should do: the spot is theirs either way, but a player who has told
+   * us they are bringing cash must not be shown a pay-now button as if nothing
+   * had been agreed. It is never a payment state — see lib/payment-method.ts.
+   */
+  | {
+      kind: "owes_payment";
+      registrationId: string;
+      teamId: string | null;
+      payingCash: boolean;
+    }
   /** On the roster but the waiver is still outstanding. */
   | { kind: "needs_waiver"; registrationId: string }
   /**
@@ -92,6 +111,7 @@ export function resolveSignupState(input: SignupStateInput): SignupState {
       kind: "owes_payment",
       registrationId: registration.id,
       teamId: registration.team_id,
+      payingCash: isPayingCash(registration.payment_method),
     };
   }
 

@@ -20,16 +20,14 @@ import {
 } from "@/lib/tournaments";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { isContactWaiverValid } from "@/lib/contacts";
-import { supabaseAdmin } from "@/lib/supabase-admin";
 import { createPayResumeToken } from "@/lib/app-signing";
 import { buildPayResumePath, buildWaiverSignPath } from "@/lib/pay-resume-url";
-import { acceptsPayments, acceptsRegistrations } from "@/lib/tournament-state";
+import { acceptsRegistrations } from "@/lib/tournament-state";
 import { reconcileIfUnsigned } from "@/lib/waiver-reconcile";
 import {
-  defaultWaiverTypeFor,
-  resolveSignupState,
-  type SignupRegistrationSnapshot,
-} from "@/lib/signup-state";
+  findEventRegistration,
+  loadEventStanding,
+} from "@/lib/event-standing";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import type { Tournament } from "@/lib/types";
 
@@ -62,7 +60,6 @@ export default async function RegisterPage({
   ]);
 
   const contact = player?.contact ?? null;
-  const waiverType = defaultWaiverTypeFor(contact, typeParam);
 
   // Which event are we talking about? An explicit slug wins. Failing that, if
   // exactly one event is open there is nothing to choose — presenting a
@@ -83,10 +80,9 @@ export default async function RegisterPage({
   }
 
   const canRegister = acceptsRegistrations(event);
-  const canPay = acceptsPayments(event);
 
   let registration = contact
-    ? await findRegistration(event.id, contact.id)
+    ? await findEventRegistration(event.id, contact.id)
     : null;
 
   // Before telling anyone to sign a waiver, check whether they already signed
@@ -104,16 +100,21 @@ export default async function RegisterPage({
     }
   }
 
-  const state = resolveSignupState({
+  /*
+    Resolved through the shared module so this screen and the event page can
+    never disagree about the same person. The reconciled row is passed back in
+    as an override — without it, a player who has just this second signed with
+    DocuSeal would be resolved from the stale column and told to sign again,
+    which is the exact loop this screen exists to end.
+  */
+  const { state, teamName, entryFeeLabel } = await loadEventStanding({
+    event,
     contact,
-    registration,
-    waiverType,
-    canRegister,
-    canPay,
+    waiverTypeParam: typeParam,
+    registrationOverride: registration,
   });
 
   const teams = canRegister ? (await getTeamsByTournament([event.id]))[event.id] ?? [] : [];
-  const entryFeeLabel = formatFee(event.entry_fee_cents, event.entry_fee);
 
   return (
     <SignupShell
@@ -162,7 +163,10 @@ export default async function RegisterPage({
           entryFeeLabel={entryFeeLabel}
           teams={teams}
           teamId={state.teamId}
-          teamName={await teamNameFor(state.teamId)}
+          teamName={teamName}
+          payingCash={state.payingCash}
+          registrationId={state.registrationId}
+          payToken={createPayResumeToken(state.registrationId)}
           payHref={buildPayResumePath({
             registrationId: state.registrationId,
             payToken: createPayResumeToken(state.registrationId),
@@ -198,6 +202,7 @@ export default async function RegisterPage({
             preselectedSlug={event.slug}
             preselectedType={typeParam === "youth" ? "youth" : typeParam === "adult" ? "adult" : null}
             prefill={buildPrefill(player)}
+            entryFeeLabel={entryFeeLabel}
             lockedToEvent
           />
         </div>
@@ -212,38 +217,6 @@ export default async function RegisterPage({
 }
 
 /* ------------------------------------------------------------------ */
-
-async function findRegistration(
-  tournamentId: string,
-  contactId: string
-): Promise<SignupRegistrationSnapshot | null> {
-  const { data, error } = await supabaseAdmin
-    .from("registrations")
-    .select("id, payment_status, waiver_signed, team_id")
-    .eq("tournament_id", tournamentId)
-    .eq("contact_id", contactId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    // A lookup failure must not hide the signup form — falling through to the
-    // full form is always safe, and the API rejects a duplicate anyway.
-    console.error("[register] registration lookup failed:", error.message);
-    return null;
-  }
-  return (data as SignupRegistrationSnapshot) ?? null;
-}
-
-async function teamNameFor(teamId: string | null): Promise<string | null> {
-  if (!teamId) return null;
-  const { data } = await supabaseAdmin
-    .from("teams")
-    .select("name")
-    .eq("id", teamId)
-    .maybeSingle();
-  return data?.name ?? null;
-}
 
 function displayName(
   contact: { first_name?: string | null; last_name?: string | null } | null
@@ -268,12 +241,6 @@ function buildPrefill(
     hasAdultWaiverOnFile: isContactWaiverValid(c, "adult"),
     hasYouthWaiverOnFile: isContactWaiverValid(c, "youth"),
   };
-}
-
-function formatFee(cents: number | null, fallback: number | null): string | null {
-  const value = cents != null ? cents / 100 : fallback;
-  if (value == null) return null;
-  return `$${value.toFixed(2)}`;
 }
 
 function eventSubtitle(event: Tournament): string {

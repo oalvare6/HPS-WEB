@@ -24,7 +24,9 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/admin/tournaments", label: "Tournaments", icon: Trophy },
+  // "Events", not "Tournaments" — the same list now holds open play nights, and
+  // the owner should not have to know they live under a tournaments URL.
+  { href: "/admin/tournaments", label: "Events", icon: Trophy },
   { href: "/admin/contacts", label: "Contacts", icon: Users },
   { href: "/admin/drop-ins", label: "Drop-ins", icon: Ticket },
   { href: "/admin/site", label: "Site", icon: Settings },

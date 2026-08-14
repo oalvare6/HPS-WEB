@@ -7,8 +7,10 @@ import {
   MapPin,
   Trophy,
   Users,
+  Zap,
 } from "lucide-react";
 import type { Tournament, TournamentStatus } from "@/lib/types";
+import { isOpenPlay } from "@/lib/event-kind";
 import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
@@ -43,6 +45,7 @@ function formatDateRow(t: Tournament): string {
 export function TournamentCard({ tournament }: { tournament: Tournament }) {
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = getTournamentBannerUrl(tournament);
+  const openPlay = isOpenPlay(tournament);
   const cta = tournamentPrimaryCta(tournament);
   const timeRange =
     tournament.time_start && tournament.time_end
@@ -72,7 +75,15 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
         <div className="flex flex-col md:flex-row md:items-center gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-3">
-              <Trophy size={22} className="text-brand flex-shrink-0" />
+              {/*
+                A card can be seen outside its section — the homepage carousel,
+                a shared link — so the icon has to carry the kind on its own.
+              */}
+              {openPlay ? (
+                <Zap size={22} className="text-brand flex-shrink-0" />
+              ) : (
+                <Trophy size={22} className="text-brand flex-shrink-0" />
+              )}
               <h2 className="text-2xl font-bold text-white">
                 <Link
                   href={`/events/${tournament.slug}`}
@@ -116,7 +127,13 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
           <div className="flex flex-col gap-3 md:min-w-[200px]">
             {cta.kind !== "none" && (
               <Link href={cta.href} className="btn-primary justify-center text-sm">
-                {cta.kind === "pay" ? <CreditCard size={16} /> : <Trophy size={16} />}
+                {cta.kind === "pay" ? (
+                  <CreditCard size={16} />
+                ) : openPlay ? (
+                  <Zap size={16} />
+                ) : (
+                  <Trophy size={16} />
+                )}
                 {cta.label}
                 <ArrowRight size={14} />
               </Link>

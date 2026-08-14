@@ -6,12 +6,14 @@ import {
   Award,
   CalendarDays,
   Calendar,
+  CheckCircle2,
   Clock,
   CreditCard,
   Flag,
   Handshake,
   Megaphone,
   MapPin,
+  PenLine,
   Pin,
   Shield,
   Sparkles,
@@ -38,7 +40,14 @@ import type {
 import { TournamentHub } from "@/components/tournament/TournamentHub";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
-import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
+import {
+  viewerEventCta,
+  type ViewerEventCta,
+} from "@/lib/tournament-public-links";
+import { loadEventStanding } from "@/lib/event-standing";
+import { eventKindCopy, isOpenPlay } from "@/lib/event-kind";
+import { getCurrentPlayer } from "@/lib/player-auth";
+import { resolveEventState } from "@/lib/tournament-state";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { ShareTournamentButton } from "@/components/shared/ShareTournamentButton";
@@ -70,6 +79,46 @@ const TOURNAMENT_FEATURES: {
     icon: Flag,
     title: "Refs on every match",
     body: "Centre referee on the field for every game. Every goal counts.",
+  },
+  {
+    icon: Shield,
+    title: "Cleats required",
+    body: "Bring your boots. Shin guards optional but recommended.",
+  },
+  {
+    icon: Handshake,
+    title: "Friendly play — no slide tackling",
+    body: "Competitive, but keep it on the ball. We're here to play.",
+  },
+];
+
+/**
+ * The open-play equivalent. Same shape, different promises.
+ *
+ * The tournament list above is a *season's* pitch — refs on every match, a
+ * clock, MVP awards at the final whistle. Shown on a Friday pop-up night it
+ * describes something that isn't happening: there is no final whistle to give a
+ * Golden Boot at, and no table for the result to land in.
+ */
+const OPEN_PLAY_FEATURES: {
+  icon: typeof Sprout;
+  title: string;
+  body: string;
+}[] = [
+  {
+    icon: Sprout,
+    title: "Real grass field",
+    body: "Natural turf under the lights. Same pitch we run tournaments on.",
+  },
+  {
+    icon: Clock,
+    title: "One night, turn up and play",
+    body: "No season, no commitment. Come for the evening and go home.",
+  },
+  {
+    icon: Users,
+    title: "Sides made on the night",
+    body: "We split teams when everyone's here. Come alone or bring friends.",
   },
   {
     icon: Shield,
@@ -147,6 +196,15 @@ function formatRoundDate(iso: string | null): string {
   });
 }
 
+/** One icon vocabulary for the CTA card, so the header and the button agree. */
+function CtaIcon({ cta, size = 18 }: { cta: ViewerEventCta; size?: number }) {
+  if (cta.kind === "pay") return <CreditCard size={size} className="text-brand" />;
+  if (cta.kind === "waiver") return <PenLine size={size} className="text-amber-400" />;
+  if (cta.kind === "none" && cta.personalised)
+    return <CheckCircle2 size={size} className="text-emerald-400" />;
+  return <Trophy size={size} className="text-brand" />;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -157,10 +215,16 @@ export async function generateMetadata({
   if (!t) return { title: "Tournament not found" };
 
   const title = `${t.title} | Houston Premier Soccer`;
+  // The fallback blurb has to match what the event actually is — the tournament
+  // version promises refs, 25-minute halves and end-of-season awards, none of
+  // which a one-off open play night has.
   const description =
     t.description?.slice(0, 200)?.trim() ||
-    `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer. ` +
-      `Real grass field, 25-min halves, refs on every match, MVP awards at the end.`;
+    (isOpenPlay(t)
+      ? `${t.title} — ${t.format ?? "7v7"} open play at Houston Premier Soccer. ` +
+        `Real grass field under the lights, one night, sides made on the night.`
+      : `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer. ` +
+        `Real grass field, 25-min halves, refs on every match, MVP awards at the end.`);
 
   // Link-preview image: tournament banner first (custom upload or preset),
   // fall back to the brand badge so iMessage / WhatsApp / Twitter always
@@ -216,7 +280,13 @@ export default async function TournamentDetailPage({
     getTournamentMatches(tournament.id),
   ]);
 
-  const hasHub = matches.length > 0;
+  const openPlay = isOpenPlay(tournament);
+  const kindCopy = eventKindCopy(tournament);
+
+  // No standings, no top scorers, no schedule grid for a single evening — even
+  // if stray match rows exist against it, a league table for one night is a
+  // table of one row and reads as a mistake.
+  const hasHub = !openPlay && matches.length > 0;
   const standings = hasHub
     ? tournament.slug === WORLD_CUP_TOURNAMENT_SLUG
       ? getWorldCupStandingsOverride(teams)
@@ -226,7 +296,33 @@ export default async function TournamentDetailPage({
 
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
-  const cta = tournamentPrimaryCta(tournament);
+
+  /*
+    The CTA is answered for *this visitor*, not just for the event.
+
+    Until now `tournamentPrimaryCta` read two boolean flags on the tournament
+    and nothing about who was looking, so a player who had signed up, picked a
+    team and signed their waiver still saw "Sign up to play" — the operator's
+    report: "it still says register even though I am registered." The only way
+    to find out what was actually left was to press it and read the next screen.
+
+    ⚠ No DocuSeal reconcile here, deliberately. `/register` and `/pay` ask
+    DocuSeal directly because they are about to hold a player at a gate; this
+    page only routes them there, and it is the most-visited page on the site.
+    See lib/event-standing.ts.
+  */
+  const player = await getCurrentPlayer();
+  const standing = player
+    ? await loadEventStanding({ event: tournament, contact: player.contact })
+    : null;
+
+  const cta = viewerEventCta({
+    tournament,
+    state: standing?.state ?? null,
+    teamName: standing?.teamName ?? null,
+    entryFeeLabel: standing?.entryFeeLabel ?? null,
+    isFinished: resolveEventState(tournament) === "finished",
+  });
   const timeRange =
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
@@ -314,7 +410,7 @@ export default async function TournamentDetailPage({
             {/* About */}
             <div>
               <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold mb-3">
-                About this tournament
+                {kindCopy.aboutHeading}
               </h2>
               {tournament.description ? (
                 <p className="text-zinc-200 leading-relaxed whitespace-pre-wrap">
@@ -336,7 +432,7 @@ export default async function TournamentDetailPage({
                 </h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {TOURNAMENT_FEATURES.map((feature) => {
+                {(openPlay ? OPEN_PLAY_FEATURES : TOURNAMENT_FEATURES).map((feature) => {
                   const Icon = feature.icon;
                   return (
                     <div
@@ -358,21 +454,28 @@ export default async function TournamentDetailPage({
                   );
                 })}
               </div>
-              <div className="mt-4 dashboard-card border-brand/30 bg-brand/5 p-4 flex gap-3 items-start">
-                <div className="w-10 h-10 rounded-lg bg-brand/15 border border-brand/40 flex items-center justify-center flex-shrink-0">
-                  <Award size={18} className="text-brand" />
+              {/*
+                Season-long awards. An open play night has no final whistle to
+                give them at and no stats carried anywhere, so promising them
+                would be describing an event that isn't happening.
+              */}
+              {!openPlay && (
+                <div className="mt-4 dashboard-card border-brand/30 bg-brand/5 p-4 flex gap-3 items-start">
+                  <div className="w-10 h-10 rounded-lg bg-brand/15 border border-brand/40 flex items-center justify-center flex-shrink-0">
+                    <Award size={18} className="text-brand" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      MVP awards at the final whistle
+                    </p>
+                    <p className="text-xs text-zinc-300 leading-relaxed mt-0.5">
+                      <span className="text-white">Golden Boot</span> for most goals.{" "}
+                      <span className="text-white">Golden Glove</span> for most saves.
+                      Stats tracked live across every match.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">
-                    MVP awards at the final whistle
-                  </p>
-                  <p className="text-xs text-zinc-300 leading-relaxed mt-0.5">
-                    <span className="text-white">Golden Boot</span> for most goals.{" "}
-                    <span className="text-white">Golden Glove</span> for most saves.
-                    Stats tracked live across every match.
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Updates feed */}
@@ -390,7 +493,7 @@ export default async function TournamentDetailPage({
               </div>
               {updates.length === 0 ? (
                 <div className="dashboard-card p-6 text-center text-zinc-500 text-sm border-dashed">
-                  No updates yet. Check back as the tournament gets closer.
+                  No updates yet. Check back as the {kindCopy.noun} gets closer.
                 </div>
               ) : (
                 <ul className="space-y-3">
@@ -446,6 +549,9 @@ export default async function TournamentDetailPage({
                 />
               </div>
             ) : (
+              // Rounds are a season's weeks. One night has one date, already in
+              // the header — a "Schedule" of a single row adds nothing.
+              !openPlay &&
               rounds.length > 0 && (
                 <div>
                   <div className="flex items-center gap-2 mb-3">
@@ -533,58 +639,66 @@ export default async function TournamentDetailPage({
           {/* Sticky CTA card */}
           <aside className="lg:col-span-1">
             <div className="lg:sticky lg:top-28 space-y-4">
-              <div className="dashboard-card p-5 space-y-3">
+              <div
+                className={`dashboard-card p-5 space-y-3 ${
+                  cta.personalised ? "border-brand/40" : ""
+                }`}
+              >
                 <div className="flex items-center gap-2">
-                  <Trophy size={18} className="text-brand" />
+                  <CtaIcon cta={cta} />
                   <h3 className="text-base font-semibold text-white">
-                    {tournament.status === "completed" ? "Past event" : "Take part"}
+                    {cta.heading}
                   </h3>
                 </div>
-                {tournament.status === "completed" ? (
-                  <p className="text-sm text-zinc-400">
-                    This tournament has ended. Schedules and updates stay here
-                    so you can reference what we ran.
+
+                {/*
+                  `note` is what turns a button into an answer: which team you're
+                  on, what you still owe, whether you already told us you're
+                  paying cash. Without it "Pay $80 now" is the same sentence the
+                  site showed a total stranger.
+                */}
+                {cta.note && <p className="text-sm text-zinc-300">{cta.note}</p>}
+
+                {cta.kind === "none" && !cta.note && (
+                  <p className="text-sm text-zinc-400 italic">
+                    {cta.heading === "Past event"
+                      ? "This event has ended. Schedules and updates stay here so you can reference what we ran."
+                      : "Registration isn't open right now. Watch this page for updates."}
                   </p>
-                ) : cta.kind !== "none" ? (
-                  <>
-                    <Link
-                      href={cta.href}
-                      className="btn-primary w-full justify-center text-sm"
-                    >
-                      {cta.kind === "pay" ? <CreditCard size={14} /> : <Trophy size={14} />}
-                      {cta.label}
-                      <ArrowRight size={14} />
-                    </Link>
-                    <ShareTournamentButton
-                      title={tournament.title}
-                      description={tournament.description}
-                      path={`/events/${tournament.slug}`}
-                      variant="secondary"
-                    />
-                    <p className="text-center text-xs text-zinc-500 pt-1">
-                      <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
-                        Questions? Join WhatsApp
-                      </WhatsAppCommunityLinkFromSite>
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm text-zinc-400 italic">
-                      Registration isn&apos;t open right now. Watch this page
-                      for updates.
-                    </p>
-                    <ShareTournamentButton
-                      title={tournament.title}
-                      description={tournament.description}
-                      path={`/events/${tournament.slug}`}
-                      variant="secondary"
-                    />
-                  </>
+                )}
+
+                {cta.kind !== "none" && cta.href && cta.label && (
+                  <Link
+                    href={cta.href}
+                    className="btn-primary w-full justify-center text-sm"
+                  >
+                    <CtaIcon cta={cta} size={14} />
+                    {cta.label}
+                    <ArrowRight size={14} />
+                  </Link>
+                )}
+
+                <ShareTournamentButton
+                  title={tournament.title}
+                  description={tournament.description}
+                  path={`/events/${tournament.slug}`}
+                  variant="secondary"
+                  shareNoun={kindCopy.noun}
+                />
+
+                {cta.href && (
+                  <p className="text-center text-xs text-zinc-500 pt-1">
+                    <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
+                      Questions? Join WhatsApp
+                    </WhatsAppCommunityLinkFromSite>
+                  </p>
                 )}
                 {tournament.entry_fee != null && (
                   <p className="text-xs text-zinc-500 text-center pt-1 border-t border-border-token/50">
-                    Entry fee: ${Number(tournament.entry_fee).toFixed(2)}
-                    {tournament.max_teams != null && ` · Max ${tournament.max_teams} teams`}
+                    {kindCopy.feeLabel}: ${Number(tournament.entry_fee).toFixed(2)}
+                    {!openPlay &&
+                      tournament.max_teams != null &&
+                      ` · Max ${tournament.max_teams} teams`}
                   </p>
                 )}
               </div>

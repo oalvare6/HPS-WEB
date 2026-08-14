@@ -11,6 +11,7 @@ import {
   parseOptionalMoney,
   parseOptionalNonNegInt,
 } from "@/lib/tournament-api-validation";
+import { parseEventKind } from "@/lib/event-kind";
 import type { TournamentInput } from "@/lib/types";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -44,7 +45,7 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const fields: (keyof TournamentInput)[] = [
     "title", "slug", "status", "is_draft", "registration_open", "payments_open",
     "description", "start_date", "end_date", "time_start", "time_end",
-    "recurrence", "location", "format", "entry_fee", "max_teams",
+    "recurrence", "location", "format", "kind", "entry_fee", "max_teams",
     "image_url", "image_preset", "register_url", "pay_url", "display_order",
     "is_featured", "drop_in_fee_cents",
   ];
@@ -94,6 +95,16 @@ export async function PATCH(request: Request, ctx: Ctx) {
       return NextResponse.json({ error: "Invalid max teams." }, { status: 400 });
     }
     update.max_teams = v;
+  }
+  if ("kind" in update) {
+    // Rejected rather than defaulted: a PATCH naming an unknown kind is a bug
+    // in the caller, and silently writing 'tournament' would turn an open-play
+    // night back into a tournament without telling anyone.
+    const v = parseEventKind(update.kind);
+    if (!v) {
+      return NextResponse.json({ error: "Invalid event type." }, { status: 400 });
+    }
+    update.kind = v;
   }
   if ("display_order" in update) {
     const raw = update.display_order;

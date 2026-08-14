@@ -17,7 +17,12 @@ import { TableSkeleton } from "@/components/shared/skeleton";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { toast } from "sonner";
 import { Section } from "@/components/shared/section";
-import { MAX_FEATURED_TOURNAMENTS, type Tournament } from "@/lib/types";
+import {
+  MAX_FEATURED_TOURNAMENTS,
+  type EventKind,
+  type Tournament,
+} from "@/lib/types";
+import { isOpenPlay } from "@/lib/event-kind";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
 import { useScrollRestoration } from "@/lib/use-scroll-restoration";
 import { EventStateBadge } from "@/components/admin/EventStateBadge";
@@ -68,6 +73,39 @@ function AdminTournamentsContent() {
 
   const featuredCount = tournaments.filter((t) => t.is_featured).length;
   const canFeatureMore = featuredCount < MAX_FEATURED_TOURNAMENTS;
+
+  /*
+    Split by kind, keeping each row's index in the GLOBAL order so the reorder
+    arrows keep operating on the one `display_order` sequence that actually
+    exists. Re-indexing per section would let "move up" swap two events that are
+    not adjacent.
+  */
+  const indexed: IndexedEvent[] = tournaments.map((event, index) => ({
+    event,
+    index,
+  }));
+  const tournamentRows = indexed.filter(({ event }) => !isOpenPlay(event));
+  const openPlayRows = indexed.filter(({ event }) => isOpenPlay(event));
+
+  const KIND_SECTIONS: {
+    kind: EventKind;
+    heading: string;
+    blurb: string;
+    rows: IndexedEvent[];
+  }[] = [
+    {
+      kind: "tournament",
+      heading: "Tournaments",
+      blurb: "Seasons with teams, a schedule and a league table.",
+      rows: tournamentRows,
+    },
+    {
+      kind: "open_play",
+      heading: "Open play nights",
+      blurb: "One-off pop-up nights. One date, one door price, no teams.",
+      rows: openPlayRows,
+    },
+  ];
 
   const handleToggleFeatured = async (t: Tournament) => {
     const next = !t.is_featured;
@@ -144,9 +182,13 @@ function AdminTournamentsContent() {
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
         <div className="max-w-6xl mx-auto px-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">Tournament Management</h1>
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">Events</h1>
             <p className="text-zinc-400">
-              {tournaments.length} tournament{tournaments.length === 1 ? "" : "s"} configured
+              {tournamentRows.length} tournament
+              {tournamentRows.length === 1 ? "" : "s"}
+              <span className="mx-2 text-zinc-600">·</span>
+              {openPlayRows.length} open play night
+              {openPlayRows.length === 1 ? "" : "s"}
               <span className="mx-2 text-zinc-600">·</span>
               <span
                 className={
@@ -167,7 +209,7 @@ function AdminTournamentsContent() {
             </Link>
             <Link href="/admin/tournaments/new" className="btn-primary">
               <Plus size={16} />
-              Add Tournament
+              Add event
             </Link>
           </div>
         </div>
@@ -179,25 +221,109 @@ function AdminTournamentsContent() {
 
           {loading ? (
             <TableSkeleton rows={6} columns={8} />
-          ) : (
+          ) : tournaments.length === 0 ? (
             <div className="dashboard-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border-token text-left">
-                      <th className="px-4 py-3 text-zinc-400 font-medium w-16">Image</th>
-                      <th className="px-4 py-3 text-zinc-400 font-medium">Title</th>
-                      <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">Format</th>
-                      <th className="px-4 py-3 text-zinc-400 font-medium hidden lg:table-cell">Dates</th>
-                      <th className="px-4 py-3 text-zinc-400 font-medium">Status</th>
-                      <th className="px-4 py-3 text-zinc-400 font-medium text-right">Actions</th>
-                    </tr>
-                  </thead>
+              <AdminEmptyState
+                icon={Trophy}
+                title="No events yet"
+                description="Create a tournament or an open play night to open sign-ups, payments, and the roster."
+                actionLabel="Add event"
+                actionHref="/admin/tournaments/new"
+              />
+            </div>
+          ) : (
+            /*
+              Grouped by kind because they are different jobs. A Friday pop-up
+              night and a ten-week season were previously interleaved in one
+              undifferentiated list, so the owner had to read every title to
+              work out which was which.
+
+              Reorder still works on the GLOBAL index — `display_order` is one
+              sequence across all events, and passing a per-section index here
+              would let the arrows swap the wrong pair.
+            */
+            <div className="space-y-8">
+              {KIND_SECTIONS.map(({ kind, heading, blurb, rows }) =>
+                rows.length === 0 ? null : (
+                  <div key={kind} className="space-y-3">
+                    <div>
+                      <h2 className="text-sm font-semibold text-white">{heading}</h2>
+                      <p className="text-xs text-zinc-500 mt-0.5">{blurb}</p>
+                    </div>
+                    <EventTable
+                      rows={rows}
+                      kind={kind}
+                      total={tournaments.length}
+                      busyId={busyId}
+                      canFeatureMore={canFeatureMore}
+                      pendingDelete={pendingDelete}
+                      onToggleFeatured={handleToggleFeatured}
+                      onReorder={handleReorder}
+                      onDelete={handleDelete}
+                      onPendingDelete={setPendingDelete}
+                      onOpen={(id) => router.push(`/admin/tournaments/${id}`)}
+                    />
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </div>
+      </Section>
+    </>
+  );
+}
+
+/** One event row plus where it sits in the global display order. */
+type IndexedEvent = { event: Tournament; index: number };
+
+function EventTable({
+  rows,
+  kind,
+  total,
+  busyId,
+  canFeatureMore,
+  pendingDelete,
+  onToggleFeatured,
+  onReorder,
+  onDelete,
+  onPendingDelete,
+  onOpen,
+}: {
+  rows: IndexedEvent[];
+  kind: EventKind;
+  /** Count across every kind — the last row overall cannot move down. */
+  total: number;
+  busyId: string | null;
+  canFeatureMore: boolean;
+  pendingDelete: string | null;
+  onToggleFeatured: (t: Tournament) => void;
+  onReorder: (id: string, direction: "up" | "down") => void;
+  onDelete: (id: string) => void;
+  onPendingDelete: (id: string | null) => void;
+  onOpen: (id: string) => void;
+}) {
+  const isOpenPlaySection = kind === "open_play";
+  return (
+    <div className="dashboard-card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border-token text-left">
+              <th className="px-4 py-3 text-zinc-400 font-medium w-16">Image</th>
+              <th className="px-4 py-3 text-zinc-400 font-medium">Title</th>
+              <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">Format</th>
+              <th className="px-4 py-3 text-zinc-400 font-medium hidden lg:table-cell">
+                {isOpenPlaySection ? "Date" : "Dates"}
+              </th>
+              <th className="px-4 py-3 text-zinc-400 font-medium">Status</th>
+              <th className="px-4 py-3 text-zinc-400 font-medium text-right">Actions</th>
+            </tr>
+          </thead>
                   <tbody>
-                    {tournaments.map((t, i) => {
+                    {rows.map(({ event: t, index: i }) => {
                       const thumb = t.image_url || getPresetUrl(t.image_preset);
-                      const viewHref = `/admin/tournaments/${t.id}`;
-                      const openView = () => router.push(viewHref);
+                      const openView = () => onOpen(t.id);
                       return (
                         <tr
                           key={t.id}
@@ -248,7 +374,7 @@ function AdminTournamentsContent() {
                           >
                             <div className="flex items-center justify-end gap-1">
                               <button
-                                onClick={() => handleToggleFeatured(t)}
+                                onClick={() => onToggleFeatured(t)}
                                 disabled={
                                   busyId === t.id || (!t.is_featured && !canFeatureMore)
                                 }
@@ -272,7 +398,7 @@ function AdminTournamentsContent() {
                                 />
                               </button>
                               <button
-                                onClick={() => handleReorder(t.id, "up")}
+                                onClick={() => onReorder(t.id, "up")}
                                 disabled={i === 0 || busyId === t.id}
                                 className="p-1.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
                                 title="Move up"
@@ -280,8 +406,8 @@ function AdminTournamentsContent() {
                                 <ChevronUp size={16} />
                               </button>
                               <button
-                                onClick={() => handleReorder(t.id, "down")}
-                                disabled={i === tournaments.length - 1 || busyId === t.id}
+                                onClick={() => onReorder(t.id, "down")}
+                                disabled={i === total - 1 || busyId === t.id}
                                 className="p-1.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
                                 title="Move down"
                               >
@@ -297,14 +423,14 @@ function AdminTournamentsContent() {
                               {pendingDelete === t.id ? (
                                 <span className="inline-flex items-center gap-1 ml-1">
                                   <button
-                                    onClick={() => handleDelete(t.id)}
+                                    onClick={() => onDelete(t.id)}
                                     disabled={busyId === t.id}
                                     className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
                                   >
                                     {busyId === t.id ? "…" : "Confirm"}
                                   </button>
                                   <button
-                                    onClick={() => setPendingDelete(null)}
+                                    onClick={() => onPendingDelete(null)}
                                     className="text-xs px-2 py-1 rounded text-zinc-400 hover:text-white"
                                   >
                                     Cancel
@@ -312,7 +438,7 @@ function AdminTournamentsContent() {
                                 </span>
                               ) : (
                                 <button
-                                  onClick={() => setPendingDelete(t.id)}
+                                  onClick={() => onPendingDelete(t.id)}
                                   className="p-1.5 text-zinc-400 hover:text-red-400 transition-colors"
                                   title="Delete"
                                 >
@@ -324,37 +450,9 @@ function AdminTournamentsContent() {
                         </tr>
                       );
                     })}
-                    {tournaments.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="p-0">
-                          <AdminEmptyState
-                            icon={Trophy}
-                            title="No tournaments yet"
-                            description="Create a tournament to open registration, payments, and roster management."
-                            actionLabel="Add tournament"
-                            actionHref="/admin/tournaments/new"
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      </Section>
-    </>
-  );
-}
-
-function Dot({ on }: { on: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 text-xs ${on ? "text-brand" : "text-zinc-500"}`}
-    >
-      <span className={`w-2 h-2 rounded-full ${on ? "bg-brand" : "bg-zinc-600"}`} />
-      {on ? "On" : "Off"}
-    </span>
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

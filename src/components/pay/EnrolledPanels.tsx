@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
+import { PaymentChoice } from "@/components/register/PaymentChoice";
 
 /**
  * The two things a player needs to see on `/pay` that the payment form itself
@@ -66,11 +67,20 @@ export function EnrolledBanner({
 export function PayLaterCard({
   statusHref,
   entryFeeLabel,
+  registrationId,
+  payToken,
+  payingCash,
 }: {
   /** Where the player checks their standing later. */
   statusHref: string;
   entryFeeLabel: string | null;
+  /** Both present on the resume-token path, which is the only path that renders this. */
+  registrationId: string | null;
+  payToken: string | null;
+  payingCash: boolean;
 }) {
+  const canDeclare = Boolean(registrationId && payToken);
+
   return (
     <div className="dashboard-card p-5 md:p-6 mt-6 space-y-4">
       <div className="flex items-start gap-3">
@@ -89,12 +99,34 @@ export function PayLaterCard({
           </p>
         </div>
       </div>
-      <Link
-        href={statusHref}
-        className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-lg border border-border-token text-sm text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
-      >
-        I&apos;ll pay later — save my spot
-      </Link>
+
+      {/*
+        Telling us "cash at the field" is worth more than silently leaving. The
+        owner then knows who to expect money from on the night instead of
+        chasing a list of people who might simply have forgotten.
+
+        `PaymentChoice` is a client component with no async children, which is
+        what keeps it safe inside PayForm's Suspense subtree — see the header of
+        this file before adding anything here.
+      */}
+      {canDeclare ? (
+        <PaymentChoice
+          registrationId={registrationId!}
+          payToken={payToken!}
+          payHref={statusHref}
+          entryFeeLabel={entryFeeLabel}
+          initialMethod={payingCash ? "cash" : null}
+          mode="cash-only"
+        />
+      ) : (
+        <Link
+          href={statusHref}
+          className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-lg border border-border-token text-sm text-zinc-300 hover:text-white hover:border-zinc-500 transition-colors"
+        >
+          I&apos;ll pay later — save my spot
+        </Link>
+      )}
+
       <p className="text-xs text-zinc-500 text-center">
         We&apos;ll keep your spot on the roster either way.
       </p>

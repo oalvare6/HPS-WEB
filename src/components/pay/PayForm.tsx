@@ -79,6 +79,8 @@ export type EnrolledStanding = {
   /** Where "I'll pay later" sends them to check their standing. */
   statusHref: string;
   entryFeeLabel: string | null;
+  /** They have already told us they're bringing cash. */
+  payingCash: boolean;
 };
 
 export function PayForm({
@@ -743,6 +745,11 @@ export function PayForm({
         <PayLaterCard
           statusHref={enrolled.statusHref}
           entryFeeLabel={enrolled.entryFeeLabel}
+          payingCash={enrolled.payingCash}
+          // Read from the URL, which is where this page's authorization already
+          // lives — the same pair the checkout call below is signed with.
+          registrationId={registrationId || null}
+          payToken={payToken || null}
         />
       )}
     </div>

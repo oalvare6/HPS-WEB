@@ -235,3 +235,55 @@ Open items, most urgent first:
   and DocuSeal's document-URL shapes. `scripts/_mint-pay-token.ts` mints a **localhost-only**
   pay-resume link for exercising `/pay` in dev (signed with the local secret; production
   rejects it).
+
+## 2026-08-14 (third) — cash-or-card, open play as a kind, viewer-aware CTA
+
+- **`registrations.payment_method` is now live and was previously dead.** NULL on all 105 rows,
+  declared in `types.ts`, written and read by nothing. It now stores the player's declared
+  intent — `'cash'` or `'card'` — written only by `POST /api/register/payment-intent`.
+  **NULL still means "they have not told us" and must never be read as "card."**
+  `payment_status` is untouched by that route: a cash promise is not a payment, and
+  `RosterTotals.payingCash` is a **subset** of `unpaid`, never added to it
+  (`scripts/test-roster-totals.ts` asserts exactly this).
+- **`tournaments.kind` shipped** (`20260814230000_add_tournaments_kind.sql`, applied to
+  production 2026-08-14 *before* the code). Unlike `is_draft` this is **not** a deploy-order
+  trap: `kind` is optional on `Tournament` and every read goes through `resolveEventKind()` in
+  `src/lib/event-kind.ts`, which treats missing/NULL/unknown as `'tournament'`. An un-migrated
+  database therefore renders the pre-existing site. ⚠ **Never gate money, sign-ups or
+  visibility on `kind`** — those belong to `tournament-state.ts`, which is fail-safe by design.
+- **The live "Open Play: Friday August 14th" row was set to `kind='open_play'`** during
+  verification. Correct data (it is an open play night), and invisible to the deployed code,
+  which does not read the column. Revert with one UPDATE if unwanted.
+- ⚠ **That same row still has TWO prices** — `entry_fee_cents` $15 and `drop_in_fee_cents`
+  $10 — so `/pay` offers a single evening two tiers. The admin form now forces
+  `drop_in_fee_cents = 0` for open play, but only **on the next save** of that event. Existing
+  rows need one save (or an UPDATE) to clear it.
+- ⚠ **That row's slug is `open-play-july-27-28-2026` for an event titled "Friday August
+  14th."** Every shared link carries the wrong date. One admin field — but it breaks links
+  already texted out.
+- **`viewerEventCta` in `tournament-public-links.ts` adds no branch logic** — it is a pure
+  projection of `resolveSignupState` onto a button. `tournamentPrimaryCta` is preserved
+  verbatim as the signed-out case, and `scripts/test-event-cta.ts` asserts parity against it
+  for all four event shapes rather than against hard-coded strings, so the two cannot drift.
+- ⚠ **`/events/[slug]` must NOT call `reconcileIfUnsigned`.** It is the most-visited page on
+  the site and a DocuSeal round trip has a 6s timeout; `/register` and `/pay` reconcile because
+  they hold a player at a gate, the event page only routes them there. Commented at the site.
+- **`findRegistration`/`teamNameFor`/`formatFee` moved out of `/register/page.tsx`** into
+  `src/lib/event-standing.ts` and are now shared. `/register` passes its DocuSeal-reconciled
+  row back in via `registrationOverride` — without that a player who just signed would be
+  resolved from the stale column and told to sign again.
+- ⚠ **The `/pay` Suspense constraint still holds and was re-verified on a production build.**
+  `PaymentChoice` is safe inside `PayForm` only because it is a client component with **no
+  async children**. Do not give it one.
+- **Admin nav says "Events", not "Tournaments"**, and `/admin/tournaments` groups by kind.
+  Reorder arrows still key off the **global** `display_order` index (`IndexedEvent.index`) —
+  re-indexing per section would swap non-adjacent events.
+- **Not verified: the admin Roster screen visually.** The cash chip, the "Paying cash" filter
+  and the open-play attendance view were checked through the API payload
+  (`payingCash: 1`, `unpaid: 3`, `paymentMethod: "cash"`) and the totals unit tests, but the
+  rendered screen needs the owner's login. Same limitation every prior session recorded.
+- **`drop_ins` (0 rows ever) and `team_members` (0 rows ever) both still have admin UI.**
+  `drop_ins` has its own nav item in front of a non-technical owner; open play supersedes the
+  concept. Recommend retiring the nav item — deliberately NOT done unasked.
+- **`/admin` still shows $0.00 revenue on load** (payments only fetch when the Payments tab is
+  clicked; the header computes totals immediately). First number the owner sees. Known as B6.

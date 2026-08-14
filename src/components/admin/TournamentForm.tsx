@@ -9,11 +9,18 @@ import {
   Image as ImageIcon,
   Check,
   ChevronDown,
+  Info,
   Star,
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";
-import { TOURNAMENT_FORMATS, type Tournament } from "@/lib/types";
+import {
+  EVENT_KINDS,
+  TOURNAMENT_FORMATS,
+  type EventKind,
+  type Tournament,
+} from "@/lib/types";
+import { copyForKind, resolveEventKind } from "@/lib/event-kind";
 import { TOURNAMENT_IMAGE_PRESETS, getPresetUrl } from "@/lib/tournament-image-presets";
 import { slugify } from "@/lib/slug";
 import { dateInputToIsoPreservingCalendarDay } from "@/lib/date-input";
@@ -87,6 +94,12 @@ function formatEventDay(dateInput: string): string {
 type FormState = {
   title: string;
   slug: string;
+  /**
+   * Tournament or open-play night (D15). Asked first, because it decides which
+   * of the fields below even apply: a Friday pop-up has no teams, no league
+   * table and no season entry fee — it has a door price.
+   */
+  kind: EventKind;
   format: string;
   description: string;
   /**
@@ -138,6 +151,7 @@ function fromInitial(t: Tournament | null): FormState {
   return {
     title: t?.title ?? "",
     slug: t?.slug ?? "",
+    kind: resolveEventKind(t),
     format: t?.format ?? "Adult 7v7",
     description: t?.description ?? "",
     state: storedStateFrom(t),
@@ -172,6 +186,9 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [slugTouched, setSlugTouched] = useState(Boolean(initial?.slug));
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const isOpenPlayForm = form.kind === "open_play";
+  const kindCopy = copyForKind(form.kind);
 
   // Auto-derive slug from title until user edits slug field
   useEffect(() => {
@@ -304,9 +321,19 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       return;
     }
     setSaving(true);
-    const dropInFeeCents = form.offer_drop_in_tier
-      ? Math.max(0, Math.round(Number(form.drop_in_fee) * 100))
-      : 0;
+    /*
+      An open-play night has ONE price. Offering a second "guest" tier next to
+      the door price is what the live Open Play row does today — $15 entry and
+      $10 drop-in on the same single evening — and `/pay` duly shows a player
+      two cards and asks them to choose. Forced to zero here so that cannot be
+      configured again by accident.
+    */
+    const dropInFeeCents =
+      form.kind === "open_play"
+        ? 0
+        : form.offer_drop_in_tier
+          ? Math.max(0, Math.round(Number(form.drop_in_fee) * 100))
+          : 0;
 
     const dates = {
       start_date: form.start_date || null,
@@ -339,6 +366,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       ...stateFields,
       title: form.title.trim(),
       slug: form.slug.trim(),
+      kind: form.kind,
       format: form.format,
       description: form.description.trim() || null,
       start_date: form.start_date
@@ -353,7 +381,13 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       location: form.location.trim() || null,
       entry_fee: form.entry_fee.trim() ? Number(form.entry_fee) : null,
       drop_in_fee_cents: dropInFeeCents,
-      max_teams: form.max_teams.trim() ? Number(form.max_teams) : null,
+      // Nothing to cap when there are no teams.
+      max_teams:
+        form.kind === "open_play"
+          ? null
+          : form.max_teams.trim()
+            ? Number(form.max_teams)
+            : null,
       register_url: form.register_url.trim() || null,
       pay_url: form.pay_url.trim() || null,
       image_url: form.image_url,
@@ -457,13 +491,59 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
 
       {/* BASIC INFO */}
       <Section title="Basic Info">
-        <Field label="Tournament Title" required error={errors.title}>
+        {/*
+          Asked first because it changes what the rest of this form means. An
+          open-play night has no teams, no league table and no season fee — it
+          has a door price — and until this existed the only way to express one
+          was to fill in a tournament and let the public page call it a
+          tournament anyway.
+        */}
+        <Field label="Event type" required>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {EVENT_KINDS.map((k) => {
+              const active = form.kind === k.value;
+              return (
+                <button
+                  key={k.value}
+                  type="button"
+                  onClick={() => update("kind", k.value)}
+                  className={`text-left rounded-lg border p-4 transition-colors ${
+                    active
+                      ? "border-brand bg-brand/10"
+                      : "border-border-token bg-surface-2 hover:border-zinc-500"
+                  }`}
+                >
+                  <span
+                    className={`block text-sm font-semibold ${
+                      active ? "text-white" : "text-zinc-300"
+                    }`}
+                  >
+                    {k.label}
+                  </span>
+                  <span className="block text-xs text-zinc-400 mt-1 leading-relaxed">
+                    {k.help}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Field>
+
+        <Field
+          label={isOpenPlayForm ? "Night title" : "Tournament Title"}
+          required
+          error={errors.title}
+        >
           <input
             type="text"
             value={form.title}
             onChange={(e) => update("title", e.target.value)}
             className={inputCls("title")}
-            placeholder="Spring Classic 2026"
+            placeholder={
+              isOpenPlayForm
+                ? "Open Play — Friday August 21st"
+                : "Spring Classic 2026"
+            }
           />
         </Field>
         <Field label="Format" required error={errors.format}>
@@ -554,9 +634,16 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       <Divider />
 
       {/* PRICING */}
-      <Section title="Pricing & Size">
+      <Section title={isOpenPlayForm ? "Price" : "Pricing & Size"}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Entry Fee (USD)">
+          <Field
+            label={`${kindCopy.feeLabel} (USD)`}
+            hint={
+              isOpenPlayForm
+                ? "What one player pays for the night. Card or cash — they choose."
+                : undefined
+            }
+          >
             <input
               type="number"
               min="0"
@@ -564,48 +651,61 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
               value={form.entry_fee}
               onChange={(e) => update("entry_fee", e.target.value)}
               className={inputCls("entry_fee")}
-              placeholder="150.00"
+              placeholder={isOpenPlayForm ? "15.00" : "150.00"}
             />
           </Field>
-          <Field label="Max Teams">
-            <input
-              type="number"
-              min="0"
-              value={form.max_teams}
-              onChange={(e) => update("max_teams", e.target.value)}
-              className={inputCls("max_teams")}
-              placeholder="16"
-            />
-          </Field>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Toggle
-            label="Offer guest / single-round tier on pay page"
-            checked={form.offer_drop_in_tier}
-            onChange={(v) => update("offer_drop_in_tier", v)}
-          />
-          {form.offer_drop_in_tier ? (
-            <Field
-              label="Drop-in / Guest Fee (USD)"
-              error={errors.drop_in_fee}
-              hint="Shown as the Guest tier on /pay alongside the Entry Fee."
-            >
+          {/* Teams, and therefore a cap on them, only exist for a tournament. */}
+          {!isOpenPlayForm && (
+            <Field label="Max Teams">
               <input
                 type="number"
                 min="0"
-                step="0.01"
-                value={form.drop_in_fee}
-                onChange={(e) => update("drop_in_fee", e.target.value)}
-                className={inputCls("drop_in_fee")}
-                placeholder="20.00"
+                value={form.max_teams}
+                onChange={(e) => update("max_teams", e.target.value)}
+                className={inputCls("max_teams")}
+                placeholder="16"
               />
             </Field>
-          ) : (
-            <div className="flex items-center px-4 py-3 text-xs text-zinc-500 bg-surface-2/40 border border-dashed border-border-token rounded-lg">
-              Only the Entry Fee tier will show on /pay for this event.
-            </div>
           )}
         </div>
+        {isOpenPlayForm ? (
+          <div className="flex items-start gap-2 px-4 py-3 text-xs text-zinc-400 bg-surface-2/40 border border-dashed border-border-token rounded-lg">
+            <Info size={14} className="text-zinc-500 shrink-0 mt-0.5" />
+            <span>
+              One price for an open play night — there is no separate guest tier
+              to configure, because everybody here is a guest for the evening.
+            </span>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Toggle
+              label="Offer guest / single-round tier on pay page"
+              checked={form.offer_drop_in_tier}
+              onChange={(v) => update("offer_drop_in_tier", v)}
+            />
+            {form.offer_drop_in_tier ? (
+              <Field
+                label="Drop-in / Guest Fee (USD)"
+                error={errors.drop_in_fee}
+                hint="Shown as the Guest tier on /pay alongside the Entry Fee."
+              >
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.drop_in_fee}
+                  onChange={(e) => update("drop_in_fee", e.target.value)}
+                  className={inputCls("drop_in_fee")}
+                  placeholder="20.00"
+                />
+              </Field>
+            ) : (
+              <div className="flex items-center px-4 py-3 text-xs text-zinc-500 bg-surface-2/40 border border-dashed border-border-token rounded-lg">
+                Only the Entry Fee tier will show on /pay for this event.
+              </div>
+            )}
+          </div>
+        )}
       </Section>
 
       <Divider />

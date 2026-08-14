@@ -13,6 +13,8 @@ type ShareTournamentButtonProps = {
   /** Visual variant for the button. */
   variant?: "primary" | "secondary";
   className?: string;
+  /** What this event is called on the button, e.g. "open play night". */
+  shareNoun?: string;
 };
 
 /**
@@ -27,6 +29,9 @@ export function ShareTournamentButton({
   path,
   variant = "secondary",
   className = "",
+  // "tournament" unless the caller knows better — an open play night is not one,
+  // and "Share tournament" on a Friday pop-up reads as the wrong page.
+  shareNoun = "tournament",
 }: ShareTournamentButtonProps) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
@@ -84,7 +89,7 @@ export function ShareTournamentButton({
         ) : (
           <>
             <Share2 size={14} />
-            Share tournament
+            Share {shareNoun}
           </>
         )}
       </button>
