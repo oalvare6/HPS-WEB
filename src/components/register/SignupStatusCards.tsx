@@ -25,6 +25,7 @@ export function AlreadyPaidCard({
   tournamentId,
   teams,
   teamId,
+  teamName,
   registrationId,
   payToken,
 }: {
@@ -32,6 +33,7 @@ export function AlreadyPaidCard({
   tournamentId: string;
   teams: TeamOption[];
   teamId: string | null;
+  teamName: string | null;
   registrationId: string;
   payToken: string;
 }) {
@@ -52,15 +54,17 @@ export function AlreadyPaidCard({
       </div>
 
       {/*
-        Still offered after payment. Paying does not decide your team, and the
+        Still shown after payment. Paying does not decide your team, and the
         alternative is a paid player with nowhere to be on match day — which is
-        most of the roster right now.
+        most of the roster right now. It only *asks* while the answer is unknown;
+        once they have a team it states it and points switches at an admin.
       */}
       <div className="border-t border-border-token pt-5">
         <SavedTeamPicker
           tournamentId={tournamentId}
           teams={teams}
           initialTeamId={teamId}
+          initialTeamName={teamName}
         />
       </div>
 
@@ -128,18 +132,15 @@ export function OwesPaymentCard({
           <h2 className="text-lg font-semibold text-white">
             You&apos;re signed up for {tournamentTitle}
           </h2>
+          {/*
+            The team is deliberately NOT named here. It is named once, in the
+            block below, which is also where "ask us to switch" belongs. Saying
+            it in both places is what made the screen read as if it were asking
+            the question over again.
+          */}
           <p className="text-sm text-zinc-400">
-            {teamName ? (
-              <>
-                Your spot is confirmed and you&apos;re playing for{" "}
-                <span className="text-zinc-200">{teamName}</span>.
-              </>
-            ) : (
-              <>
-                Your spot is confirmed and your waiver is done. Pick your team
-                below.
-              </>
-            )}
+            Your spot is confirmed and your waiver is done.
+            {teamName ? "" : " Pick your team below."}
           </p>
         </div>
       </div>
@@ -154,6 +155,7 @@ export function OwesPaymentCard({
           tournamentId={tournamentId}
           teams={teams}
           initialTeamId={teamId}
+          initialTeamName={teamName}
         />
       </div>
 
@@ -186,8 +188,10 @@ export function OwesPaymentCard({
         The exit. Until this existed the card was payment controls and nothing
         else, so a player who couldn't make it had no way to say so — the
         operator's report was that the screen "wants me to pay" with no other
-        move available. Deliberately understated and behind a confirm: it is the
-        door marked exit, not a third payment option.
+        move available. It shipped as a grey text link and the operator's next
+        note was that it needed to "stand out a lot more": a spot nobody gives
+        back is a spot the owner counts, plans around and cannot resell. Now a
+        visible button, still behind a confirm.
       */}
       <div className="border-t border-border-token pt-5">
         <CancelSpotButton

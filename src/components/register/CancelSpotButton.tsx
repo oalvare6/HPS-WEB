@@ -12,12 +12,19 @@ import { AlertCircle, Loader2, XCircle } from "lucide-react";
  * no way to tell the owner except by messaging them. The operator's words:
  * *"let me get out if i havent made payment."*
  *
- * ## Why it is understated
+ * ## Why it is visible
  *
- * It renders as a text link, below everything, behind a confirm step. The card
- * it sits on is mostly about paying, and a cancel button of equal weight beside
- * "Pay $15 by card" would be offering the two as if they were comparable
- * choices. This is the door marked exit, not a second option.
+ * It shipped as 11px of grey underlined text at the bottom of the card, on the
+ * theory that a cancel of equal weight beside "Pay $15 by card" would offer the
+ * two as comparable choices. The operator's next note was that it needed to
+ * *"stand out a lot more"* — and he's right about which mistake costs more. A
+ * player who quietly closes the tab still occupies a spot: the owner counts
+ * them, plans sides around them, and can't give the place to anyone else. An
+ * exit nobody finds is the same as no exit.
+ *
+ * So it is a real button now — full width, red-tinted, with an icon — but still
+ * outlined rather than filled, below a divider, and behind a confirm step. It
+ * reads as the door marked exit, not as a third way to pay.
  *
  * ## Suspense note
  *
@@ -75,15 +82,23 @@ export function CancelSpotButton({
 
   if (!confirming) {
     return (
-      <div className={className}>
+      <div className={`space-y-2 ${className}`}>
         {error && <ErrorLine message={error} />}
         <button
           type="button"
           onClick={() => setConfirming(true)}
-          className="w-full text-center text-xs text-zinc-500 hover:text-zinc-300 underline underline-offset-2 transition-colors"
+          className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/40 bg-red-500/10 text-sm font-semibold text-red-200 hover:bg-red-500/20 hover:border-red-500/60 transition-colors"
         >
+          <XCircle size={16} />
           Can&apos;t make it? Cancel my spot
         </button>
+        {/*
+          The reason it's worth pressing, said out loud. Most people who drop out
+          say nothing, and silence and "I'm coming" look identical on a roster.
+        */}
+        <p className="text-xs text-zinc-500 text-center">
+          Tell us and we&apos;ll free your place up for someone else.
+        </p>
       </div>
     );
   }
