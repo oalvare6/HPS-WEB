@@ -8,18 +8,31 @@ import { acceptsRegistrations } from "@/lib/tournament-state";
 import { buildPayResumePath } from "@/lib/pay-resume-url";
 import { isContactWaiverValid } from "@/lib/contacts";
 import { defaultWaiverTypeFor } from "@/lib/signup-state";
+import { isPaymentMethodChoice } from "@/lib/payment-method";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * POST /api/register/join
  *
- * The one-tap path for a signed-in player whose waiver is still valid (D5):
- * pick a team, join the roster, go to pay. No form, no second waiver.
+ * The confirmed path for a signed-in player whose waiver is still valid (D5):
+ * pick a team, say how you're paying, join the roster. No form, no second
+ * waiver.
  *
  * Identity comes from the Supabase session, never from the request body — the
- * body carries only the event and the team choice, so this cannot be used to
- * enroll somebody else.
+ * body carries only the event, the team choice and the payment method, so this
+ * cannot be used to enroll somebody else.
+ *
+ * ## Why the payment method arrives here
+ *
+ * It used to be a second request. `QuickJoinCard` called this route, then called
+ * `/api/register/payment-intent`, and swallowed any failure from the second one
+ * — so a player who said "cash at the field" could land on the roster with
+ * `payment_method` NULL and the owner would never learn to expect cash from
+ * them. Writing it in the same insert removes the half-failed state entirely.
+ *
+ * It remains only a declaration. `payment_status` is `'pending'` either way; a
+ * cash promise is not a payment.
  */
 export async function POST(request: Request) {
   try {
@@ -34,9 +47,15 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       tournamentId?: unknown;
       teamId?: unknown;
+      paymentMethod?: unknown;
     };
     const tournamentId = typeof body.tournamentId === "string" ? body.tournamentId : "";
     const requestedTeamId = typeof body.teamId === "string" ? body.teamId : null;
+    // Anything unrecognised becomes NULL rather than a guess — NULL means "they
+    // have not told us", which is the truth when we could not read the answer.
+    const paymentMethod = isPaymentMethodChoice(body.paymentMethod)
+      ? body.paymentMethod
+      : null;
 
     if (!UUID_RE.test(tournamentId)) {
       return NextResponse.json({ error: "Pick an event to join." }, { status: 400 });
@@ -84,6 +103,11 @@ export async function POST(request: Request) {
       .select("id")
       .eq("tournament_id", tournamentId)
       .eq("contact_id", contact.id)
+      // Cancelled rows are not "already on this roster". Without this filter a
+      // player who dropped out could never sign back up: the old row would be
+      // found as `existing`, the insert would be skipped, and they would be
+      // handed a pay link for a spot they no longer hold.
+      .is("cancelled_at", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -109,6 +133,12 @@ export async function POST(request: Request) {
       // who picked the wrong team could never take it back — and the signup
       // screen's team picker (SavedTeamPicker) is the only way most players
       // will ever set this at all.
+      //
+      // `payment_method` is deliberately NOT written here. This branch is the
+      // team picker on an existing signup, and the picker sends no method — so
+      // writing one would blank the choice of anyone changing their team. A
+      // player already on the roster changes how they pay through
+      // `PaymentChoice` → `/api/register/payment-intent`.
       const { error: teamErr } = await supabaseAdmin
         .from("registrations")
         .update({ team_id: teamId })
@@ -126,17 +156,33 @@ export async function POST(request: Request) {
         tournamentId,
         waiverType,
         teamId,
+        paymentMethod,
       });
 
       if (!enrolled.ok) {
+        /*
+          `already_registered` is the unique index catching a race the existing-
+          row lookup above cannot: two taps close enough together that both read
+          "no registration" before either wrote one. Reloading is the right
+          instruction because the screen resolves state server-side and will
+          land them on the "you're on the roster" card — telling them to "try
+          again" would send them at an insert that can now never succeed.
+        */
+        const message =
+          enrolled.reason === "missing_waiver"
+            ? "Your waiver needs signing again. Continue with the full sign-up."
+            : enrolled.reason === "already_registered"
+              ? "You're already signed up for this one. Refresh the page to see where you stand."
+              : "We couldn't add you to this roster. Please try again.";
         return NextResponse.json(
+          { error: message, reason: enrolled.reason },
           {
-            error:
-              enrolled.reason === "missing_waiver"
-                ? "Your waiver needs signing again. Continue with the full sign-up."
-                : "We couldn't add you to this roster. Please try again.",
-          },
-          { status: enrolled.reason === "missing_waiver" ? 409 : 500 }
+            status:
+              enrolled.reason === "missing_waiver" ||
+              enrolled.reason === "already_registered"
+                ? 409
+                : 500,
+          }
         );
       }
       registrationId = enrolled.registrationId;

@@ -182,6 +182,14 @@ export type PlayerRegistrationRow = {
   payment_status: string;
   payment_amount: number | null;
   docuseal_status: string;
+  /**
+   * When they gave this spot up, or null while they still hold it.
+   *
+   * Cancelled rows are deliberately still returned here, unlike everywhere else
+   * that reads registrations. `/me` is the player's own record; a signup that
+   * silently disappeared from it would read as the site having lost something.
+   */
+  cancelled_at: string | null;
 };
 
 export type PlayerPaymentRow = {
@@ -214,7 +222,7 @@ export async function getPlayerProfileData(
       .from("registrations")
       .select(
         `id, created_at, tournament_id, registration_type, payment_status,
-         payment_amount, docuseal_status,
+         payment_amount, docuseal_status, cancelled_at,
          tournament:tournaments ( id, title, slug, status )`
       )
       .eq("contact_id", contactId)
@@ -237,6 +245,7 @@ export async function getPlayerProfileData(
     payment_status: string;
     payment_amount: number | null;
     docuseal_status: string;
+    cancelled_at: string | null;
     tournament: {
       id: string;
       title: string;
@@ -267,6 +276,7 @@ export async function getPlayerProfileData(
       payment_status: r.payment_status,
       payment_amount: r.payment_amount,
       docuseal_status: r.docuseal_status,
+      cancelled_at: r.cancelled_at ?? null,
     }));
 
   const payments: PlayerPaymentRow[] =

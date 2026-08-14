@@ -24,15 +24,19 @@ export async function GET(_request: Request, ctx: Ctx) {
   }
 
   const [allRes, paidRes, paymentsRes] = await Promise.all([
-    supabaseAdmin
-      .from("registrations")
-      .select("id", { count: "exact", head: true })
-      .eq("tournament_id", id),
+    // Both counts exclude players who have cancelled — a headcount the owner
+    // reads before an event has to mean "people who are coming".
     supabaseAdmin
       .from("registrations")
       .select("id", { count: "exact", head: true })
       .eq("tournament_id", id)
-      .eq("payment_status", "paid"),
+      .is("cancelled_at", null),
+    supabaseAdmin
+      .from("registrations")
+      .select("id", { count: "exact", head: true })
+      .eq("tournament_id", id)
+      .eq("payment_status", "paid")
+      .is("cancelled_at", null),
     supabaseAdmin
       .from("payments")
       .select("amount, currency")

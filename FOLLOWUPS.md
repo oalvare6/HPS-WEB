@@ -287,3 +287,120 @@ Open items, most urgent first:
   concept. Recommend retiring the nav item — deliberately NOT done unasked.
 - **`/admin` still shows $0.00 revenue on load** (payments only fetch when the Payments tab is
   clicked; the header computes totals immediately). First number the owner sees. Known as B6.
+
+## 2026-08-14 (fourth) — confirm before you're on a roster, and a way back off it
+
+Two operator reports, one session. *"It wants me to pay or pay cash at field"* on an event they
+were **already registered for**, with nothing else on the screen to press; and *"a lot of people
+will click the register and not even pay or select payment so i dont want ppl to sign up if they
+havent commited."*
+
+- **`registrations.cancelled_at` (timestamptz, nullable) is live** —
+  `20260814234500_add_registrations_cancelled_at.sql`, applied to production before the code.
+  NULL means the spot is live. **Nothing is ever deleted on cancel**; the row and its waiver
+  linkage survive so the owner keeps a record of who dropped.
+- ⚠ **Never infer withdrawal from `payment_status`.** `'waived'` and `'refunded'` are statements
+  about money and are read as *settled* by `resolveSignupState`, the roster totals and the pay
+  gate. That is why this is a separate column and not a sixth status value.
+- ⚠ **The partial UNIQUE index on `(tournament_id, contact_id) where cancelled_at is null` was
+  deliberately NOT created.** It is the right constraint and it would abort the migration today:
+  `elmervillatoro@yahoo.com` has two Community Cup rows seven minutes apart (2026-08-05 18:39
+  pending, 18:46 paid). Merge that pair, then add the index. `registrations` still has no
+  uniqueness guard — a double-POST creates two rows.
+- **Eight live-spot reads now filter `cancelled_at is null`**: `findEventRegistration`
+  (`event-standing.ts` — the important one, it feeds both `/register` and the `/events/[slug]`
+  CTA), both lookups in `findRegistrationForPayGate`, the existing-row check in
+  `/api/register/join` (without it a cancelled player could never sign back up), the admin roster
+  and stats routes, `loadResumeSummary` on `/pay`, `payment-intent`, and the Stripe checkout gate.
+  **Deliberately left unfiltered**: contacts merge/export/detail, `sync-waivers`, the DocuSeal
+  webhook, `waiver-capture`, `waiver-reconcile`, `registration-contact-linking`, and
+  `/api/admin/registrations` — history and ops must still see cancelled rows.
+- **`getPlayerProfileData` keeps cancelled rows on purpose.** `/me` is the player's own record;
+  a signup that silently vanished from it would read as the site having lost something. They drop
+  out of "Current registrations" and render a muted `cancelled` badge that **outranks the payment
+  badge** — "pending" beside a spot they gave up reads as money still owed.
+- **Cancel is allowed unless card money actually moved.** Unpaid, cash-declared, and
+  admin-marked-paid-for-cash all cancel themselves; a succeeded Stripe charge does not, because
+  that owes a refund. ⚠ **The discriminator is a `payments` row with `status='succeeded'`, never
+  `registrations.payment_status`** — that column is set by *two* things (the Stripe webhook, and
+  the owner tapping the paid toggle after someone hands over a twenty), so reading it would refuse
+  exactly the cash players this was built for. Checked two ways, by `registration_id` **and** by
+  `contact_id`+`tournament_id`, because `payments.registration_id` is set on only 38 of 44 rows.
+- **A failed payments lookup blocks the cancel.** `CardPaymentLookup` is a tri-state
+  (`none`/`found`/`failed`) rather than a boolean precisely so "we don't know" is a value the rule
+  can see and `scripts/test-cancel-eligibility.ts` can assert. A wrongly-allowed cancel leaves
+  somebody who has paid believing they are out.
+- **`POST /api/registrations/[id]/cancel` authorizes by session OR pay-resume token.** Both,
+  because sign-in is not required to register (§A8) and most players reach their spot through the
+  link they were texted. Same HMAC token as `/api/waiver/sign` and `payment-intent` — no second
+  scheme. Verified end to end against production data: bad token 403, cancel 200, repeat
+  idempotent 200, `payment-intent` 409, checkout 409, headcount 2→1, row restored afterward.
+- **`QuickJoinCard` is now select-then-confirm, and writes nothing until Confirm.** It used to be
+  two buttons that *each wrote the roster row on the first press*, with card bouncing straight to
+  Stripe — so anyone who had second thoughts at checkout was already permanently on the roster,
+  unpaid, with no way off. Fewer taps was never the goal; knowing what you just did was.
+- **`/api/register/join` takes `paymentMethod` and writes it in the insert.** Previously the card
+  fired a second `payment-intent` call and **swallowed its failure**, so a cash player could land
+  on the roster with `payment_method` NULL and the owner would never know to expect cash. The
+  existing-row branch still writes `team_id` only — it is the team picker, and writing a method
+  there would blank the choice of anyone changing teams.
+- ⚠ **`runPayEligibilityCheck` now requires an explicit `allowAutoEnroll`, and both callers pass
+  `false`.** It used to enroll unconditionally: a signed-in player with a valid waiver who merely
+  *loaded* `/pay?tournament=<slug>` had a roster row written before pressing anything. Shadowed in
+  practice by the `/register` redirect while sign-ups are open — but live the moment sign-ups close
+  with payments still open. The parameter has no default so a future caller has to decide.
+- **`CancelSpotButton` renders in three places** — `OwesPaymentCard`, `AlreadyPaidCard`, and
+  `PayLaterCard` on `/pay`. ⚠ The `/pay` one sits inside `PayForm`'s Suspense subtree, so it is a
+  client component with **no async children**, same rule as `PaymentChoice`. **Re-verified on a
+  production build (`next start`, not `next dev`): the Pay button still renders**, alongside the
+  cash option and the cancel link.
+- **Open play no longer shows a team picker.** `QuickJoinCard` takes `showTeams` from
+  `eventKindCopy().hasTeams`; a Friday night whose own page promises "sides made on the night" was
+  rendering "Teams for this event aren't set up yet". The fee label follows the same table —
+  "Door price" vs "Entry fee". Kind still decides only words and panels.
+- **Not built this session, agreed as Tranche 2:** the D7 "Cup players play open play free" rule
+  (free when their tournament row is paid, waived, **or** cash-declared) and the richer `/me`
+  enrollment view. ⚠ Whoever builds the free rule: it reads `kind` to decide money, which every
+  other part of this codebase forbids. It is defensible only if it **fails toward charging** —
+  default to the event's own fee, waive only on a positively-confirmed active-roster hold, and
+  treat any lookup error as "not free". Record the exception where the invariant is stated.
+- ⚠ **The confirm gate's click path is verified only by static render.** All three variants
+  (open play / tournament / no fee) were rendered with `renderToStaticMarkup` and assert the right
+  radio count and a disabled Confirm — but pressing Confirm needs a signed-in Google session,
+  which no automated check here can hold. Same limitation every prior session recorded for the
+  admin screens.
+- **`APP_SIGNING_SECRET` is still unset; the app is running on the legacy
+  `ADMIN_SESSION_SECRET` alias** and logs a deprecation warning on every token mint. Harmless
+  today, and one rename away from being tidy.
+- **The open play slug is still `open-play-july-27-28-2026`** for an event titled "Friday August
+  14th". Unchanged deliberately — fixing it breaks links already texted out. `drop_in_fee_cents`
+  on that row is now 0, so the two-tier `/pay` hazard recorded above is resolved.
+- **Duplicate signups are fixed and can no longer be created** —
+  `20260815001500_dedupe_registrations_and_guard.sql`, applied to production.
+  **Nine** people held more than one live row, not one: eight on the finished World Cup
+  (`adhanrazwani`, `adrianmineroslv` ×3, `dianancyhernandez`, `ec2943132`, `mahnek.birring`,
+  `mplorenz`, `omararteagacr7`, `shivamdhingram6`) and `elmervillatoro` on the Community Cup.
+  Every group had the same fingerprint — an early `pending` row with no team and no payment, then
+  a later `paid` row with a team and a receipt — which is the two-front-doors bug's signature.
+  105 → 95 live rows.
+- ⚠ **The keep-rule leads with money, not with recency.** Settled first, then a succeeded Stripe
+  payment, then a team, then earliest. "Keep the newest" would have been wrong: in most groups the
+  stray is the *first* attempt, but `mplorenz@gmail.com`'s two rows are identical and 23 seconds
+  apart and only the last tiebreak separates them. Verified after the fact: of the 10 retired
+  rows, **0 were settled and 0 had a Stripe payment.**
+- **Retired, not deleted.** They carry `cancelled_at` plus a `notes` line. There are still no
+  database backups, so a `delete` for tidiness would have been unrecoverable. Reverse any row with
+  `update public.registrations set cancelled_at = null where id = '…'`.
+- ⚠ **`/me` collapses a cancelled row when the same event still has a live one**
+  (`collapseSupersededRows`). Without it, eight people who **actually played the World Cup** would
+  see that registration badged "cancelled" in their own history. It keys on "is there a live
+  sibling", not on a marker in `notes`, so there is no string to parse and a genuine cancel with
+  no replacement still shows as cancelled. Rows with a NULL `tournament_id` are always kept.
+- **`registrations_one_live_spot_idx` now exists** — partial UNIQUE on
+  `(tournament_id, contact_id) where cancelled_at is null and contact_id is not null`. Partial on
+  `cancelled_at` so a cancel stays reversible; partial on `contact_id` because 37 legacy rows have
+  none and a NULL means "unknown", not "the same person". Verified firing against production.
+- ⚠ **23505 must never be reported as a generic failure.** `enrollContactInTournament` returns a
+  distinct `already_registered`, and `/api/register/join` and `/api/register` both answer 409 with
+  "you're already signed up" — "Please try again" would send a player at an insert that can never
+  succeed. The index carries a `comment on index` saying so.

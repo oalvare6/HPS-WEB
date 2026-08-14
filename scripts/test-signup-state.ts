@@ -287,6 +287,55 @@ for (const c of TEAM_CARRYING) {
   );
 }
 
-const total = CASES.length + TEAM_CARRYING.length;
+/**
+ * The cancel contract.
+ *
+ * `resolveSignupState` deliberately knows nothing about `cancelled_at`. The
+ * filtering happens one layer up, in `findEventRegistration`, which only returns
+ * rows where `cancelled_at is null` — so a player who has given up their spot
+ * arrives here as `registration: null` and is answered as though they had never
+ * signed up, which is exactly right.
+ *
+ * These cases pin that contract down rather than exercise the SQL. They are the
+ * two states a cancelled player can legitimately land in, and neither may be an
+ * on-the-roster state: if a future change lets a cancelled row through the
+ * lookup, the screen would tell somebody who just cancelled that they still owe
+ * an entry fee, on the very page they cancelled from.
+ */
+const AFTER_CANCEL: Case[] = [
+  {
+    name: "CANCEL CONTRACT: cancelled, waiver still valid → offered a fresh sign-up",
+    input: {
+      contact: waiverValid,
+      // Filtered out upstream by `cancelled_at is null` — never `owes_payment`.
+      registration: null,
+      waiverType: "adult",
+      ...open,
+    },
+    expect: "quick_join",
+  },
+  {
+    name: "CANCEL CONTRACT: cancelled and waiver lapsed → the full form, not the roster",
+    input: {
+      contact: waiverLapsed,
+      registration: null,
+      waiverType: "adult",
+      ...open,
+    },
+    expect: "full_signup",
+  },
+];
+
+for (const c of AFTER_CANCEL) {
+  const got = resolveSignupState(c.input).kind;
+  const ok = got === c.expect;
+  if (!ok) failed++;
+  console.log(
+    `${ok ? "PASS" : "FAIL"}  ${c.name}\n` +
+      `        state=${got} (expected ${c.expect})`
+  );
+}
+
+const total = CASES.length + TEAM_CARRYING.length + AFTER_CANCEL.length;
 console.log(`\n${total - failed}/${total} passed`);
 process.exit(failed === 0 ? 0 : 1);

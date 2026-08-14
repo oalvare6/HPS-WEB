@@ -319,12 +319,25 @@ export async function POST(req: NextRequest) {
 
       const { data: registration, error: registrationErr } = await supabaseAdmin
         .from("registrations")
-        .select("id, email, payment_status, tournament_id")
+        .select("id, email, payment_status, tournament_id, cancelled_at")
         .eq("id", body.registrationId)
         .maybeSingle();
 
       if (registrationErr || !registration) {
         return NextResponse.json({ error: "Registration not found." }, { status: 404 });
+      }
+      // A pay-resume token lives 90 days, so one minted before a cancel is
+      // still valid. Taking money on it would charge somebody for a spot they
+      // gave up — and then block them from cancelling again, because a
+      // succeeded payment is exactly what makes a cancel need a refund.
+      if (registration.cancelled_at) {
+        return NextResponse.json(
+          {
+            error:
+              "You cancelled this spot, so there's nothing to pay. Sign up again if you'd like to come.",
+          },
+          { status: 409 }
+        );
       }
       if (registration.payment_status === "paid") {
         return NextResponse.json({ error: "This registration is already paid." }, { status: 400 });
@@ -388,6 +401,7 @@ export async function POST(req: NextRequest) {
         .from("registrations")
         .select("id")
         .eq("email", checkoutEmail)
+        .is("cancelled_at", null)
         .order("created_at", { ascending: false })
         .limit(1);
       if (resolved.tournamentId) {

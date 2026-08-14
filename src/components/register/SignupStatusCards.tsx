@@ -3,6 +3,7 @@ import { CheckCircle2, Clock, PenLine, RefreshCw } from "lucide-react";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { SavedTeamPicker } from "@/components/register/TeamPicker";
 import { PaymentChoice } from "@/components/register/PaymentChoice";
+import { CancelSpotButton } from "@/components/register/CancelSpotButton";
 import type { TeamOption } from "@/lib/tournaments";
 
 /**
@@ -24,11 +25,15 @@ export function AlreadyPaidCard({
   tournamentId,
   teams,
   teamId,
+  registrationId,
+  payToken,
 }: {
   tournamentTitle: string;
   tournamentId: string;
   teams: TeamOption[];
   teamId: string | null;
+  registrationId: string;
+  payToken: string;
 }) {
   return (
     <div className={cardClass}>
@@ -69,6 +74,21 @@ export function AlreadyPaidCard({
             View my registrations
           </Link>
         </p>
+      </div>
+
+      {/*
+        Offered here too, not only on the unpaid card. "Paid" covers the owner
+        ticking someone off on the Roster after they hand over cash, and that
+        player has as much reason to drop out as anyone. The route decides:
+        it refuses only when a Stripe charge actually exists, because that is
+        the case that owes a refund.
+      */}
+      <div className="border-t border-border-token pt-5">
+        <CancelSpotButton
+          registrationId={registrationId}
+          payToken={payToken}
+          eventTitle={tournamentTitle}
+        />
       </div>
     </div>
   );
@@ -160,6 +180,21 @@ export function OwesPaymentCard({
           <Clock size={12} />
           You can settle up from this page any time before your first match.
         </p>
+      </div>
+
+      {/*
+        The exit. Until this existed the card was payment controls and nothing
+        else, so a player who couldn't make it had no way to say so — the
+        operator's report was that the screen "wants me to pay" with no other
+        move available. Deliberately understated and behind a confirm: it is the
+        door marked exit, not a third payment option.
+      */}
+      <div className="border-t border-border-token pt-5">
+        <CancelSpotButton
+          registrationId={registrationId}
+          payToken={payToken}
+          eventTitle={tournamentTitle}
+        />
       </div>
     </div>
   );

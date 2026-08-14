@@ -104,6 +104,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
                               waiver_document_url, waiver_source )`
         )
         .eq("tournament_id", id)
+        // The roster is the list the owner reads at the field. Somebody who
+        // cancelled is not on it, and counting them would have the owner
+        // waiting on a player who told us they weren't coming.
+        .is("cancelled_at", null)
         .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("drop_ins")

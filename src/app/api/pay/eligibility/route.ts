@@ -66,6 +66,12 @@ export async function POST(request: Request) {
     email,
     tournamentId,
     waiverType: waiverType as PayEligibilityWaiverType,
+    // Typing an email into a gate is not signing up. This route used to put a
+    // recognised player on the roster as a side effect of answering "who are
+    // you?" — nobody pressed anything. An unregistered player now comes back
+    // `needs_registration`, and the card routes them to `/register`, where
+    // joining is a Confirm button.
+    allowAutoEnroll: false,
   });
 
   if (!result.ok) {

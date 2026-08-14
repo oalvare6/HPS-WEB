@@ -80,6 +80,11 @@ async function loadResumeSummary(
       "payment_status, payment_method, waiver_signed, teams(name), tournaments(title, slug, entry_fee_cents)"
     )
     .eq("id", registrationId)
+    // A resume token stays valid for 90 days, so one minted before a cancel is
+    // still cryptographically good. Returning null here sends that link back
+    // through the normal gate rather than opening a checkout for a spot the
+    // player gave up.
+    .is("cancelled_at", null)
     .maybeSingle();
 
   if (error || !data) {
@@ -207,16 +212,21 @@ export default async function PayPage({
       email: player.email,
       tournamentId: requestedTournament.id,
       waiverType,
+      // Merely rendering this page must not put anybody on a roster. It used
+      // to: a signed-in player with a valid waiver had a registration row
+      // written for them before they clicked a thing, which is the same fault
+      // the confirm gate on `/register` fixes, one screen over.
+      allowAutoEnroll: false,
     });
 
     if (eligibility.ok) {
       const body = eligibility.body;
 
-      // `runPayEligibilityCheck` auto-enrolls a contact that already has a
-      // valid waiver (no per-event re-registration), so a valid-waiver player
-      // comes back as `ready_to_pay` here. A `needs_registration` result means
-      // we could not auto-enroll (e.g. missing emergency contact) and the
-      // inline card below routes them to /register to fill the gap.
+      // `ready_to_pay` now only comes back for a player who already has a
+      // registration on this event — they pressed Confirm at some point, so
+      // sending them to checkout is finishing what they started. Everyone else
+      // resolves to `needs_registration` and the inline card below routes them
+      // to /register.
       if (body.status === "ready_to_pay") {
         redirect(
           buildPayResumePath({

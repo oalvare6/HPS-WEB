@@ -746,6 +746,7 @@ export function PayForm({
           statusHref={enrolled.statusHref}
           entryFeeLabel={enrolled.entryFeeLabel}
           payingCash={enrolled.payingCash}
+          tournamentTitle={enrolled.tournamentTitle}
           // Read from the URL, which is where this page's authorization already
           // lives — the same pair the checkout call below is signed with.
           registrationId={registrationId || null}
