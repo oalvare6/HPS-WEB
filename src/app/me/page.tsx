@@ -479,6 +479,25 @@ function PaymentStatusBadge({ status }: { status: string }) {
   );
 }
 
+/** "Every Friday, starting August 21st · 7:00 PM – 9:00 PM", or null. */
+function eventWhenLine(event: Tournament): string | null {
+  const day =
+    event.recurrence ??
+    (event.start_date
+      ? new Date(event.start_date).toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        })
+      : null);
+  const time =
+    event.time_start && event.time_end
+      ? `${event.time_start} – ${event.time_end}`
+      : event.time_start || event.time_end || null;
+  if (day && time) return `${day} · ${time}`;
+  return day ?? time ?? null;
+}
+
 /**
  * One open event, and the one thing this player should do about it.
  *
@@ -495,6 +514,13 @@ function NextStepCard({
   cta: ViewerEventCta;
 }) {
   const settled = cta.kind === "none" && cta.personalised;
+  /*
+    `note` is null for anyone we don't recognise yet — the commonest visitor on
+    an announcement night — and the bare heading ("Take part") tells them
+    nothing. Fall back to when the event actually is, which is the thing a
+    player wants to know before tapping.
+  */
+  const subtitle = cta.note ?? eventWhenLine(event) ?? cta.heading;
   return (
     <div
       className={`dashboard-card p-5 space-y-3 ${
@@ -519,9 +545,7 @@ function NextStepCard({
         </div>
         <div className="min-w-0 space-y-1">
           <p className="text-base font-semibold text-white">{event.title}</p>
-          <p className="text-sm text-zinc-400">
-            {cta.note ?? cta.heading}
-          </p>
+          <p className="text-sm text-zinc-400">{subtitle}</p>
         </div>
       </div>
 

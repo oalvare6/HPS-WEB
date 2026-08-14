@@ -59,6 +59,14 @@ type Case = {
 
 const cases: Case[] = [
   {
+    label: "BRAND NEW player, no waiver yet — the most common case tonight",
+    tournament: cup,
+    state: { kind: "full_signup" } as SignupState,
+    fee: "$80.00",
+    team: null,
+    mustSay: "Sign up to play",
+  },
+  {
     label: "NEW player, Community Cup — the announcement's target",
     tournament: cup,
     state: { kind: "quick_join" } as SignupState,
