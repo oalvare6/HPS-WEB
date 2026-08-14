@@ -52,12 +52,17 @@ export type EventStanding = {
 };
 
 /**
- * The most recent registration this person holds for this event.
+ * The most recent **live** registration this person holds for this event.
  *
  * A lookup failure returns null rather than throwing: on `/register` that falls
  * through to the full form (always safe — the API rejects a duplicate), and on
  * the event page it falls through to the signed-out CTA. Both are the answer we
  * would have given anyway before this feature existed.
+ *
+ * ⚠ `cancelled_at is null` is the load-bearing filter here. This one function
+ * feeds both `/register` and the `/events/[slug]` CTA, so without it a player
+ * who has just cancelled is still told "You're on the roster" on the two screens
+ * most likely to be the next thing they look at.
  */
 export async function findEventRegistration(
   tournamentId: string,
@@ -68,6 +73,7 @@ export async function findEventRegistration(
     .select("id, payment_status, waiver_signed, team_id, payment_method")
     .eq("tournament_id", tournamentId)
     .eq("contact_id", contactId)
+    .is("cancelled_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

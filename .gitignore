@@ -49,3 +49,7 @@ supabase/.temp/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code — launch.json is shared dev config and IS committed;
+# settings.local.json holds this machine's tool permissions and is not.
+.claude/settings.local.json

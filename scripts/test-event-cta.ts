@@ -235,7 +235,48 @@ for (const state of [
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * 5. After a cancel, the event page must offer signing up again.
+ * ------------------------------------------------------------------ */
+
+/*
+  Cancelling filters the row out of `findEventRegistration`, so a player who has
+  just given up their spot resolves to one of these two — never to an
+  on-the-roster state. The regression worth naming: if the CTA still read
+  "You're on the roster" here, the player would have cancelled and been told on
+  the very next screen that they hadn't.
+
+  Both must offer a real button. A cancelled player looking at an event that is
+  still open has something to do; `kind: "none"` would leave them with a page
+  that neither confirms the cancel nor offers a way back in.
+*/
+const AFTER_CANCEL: { name: string; state: SignupState }[] = [
+  {
+    name: "waiver still valid",
+    state: { kind: "quick_join", contactId: "c-1", waiverExpiresAt: null },
+  },
+  { name: "waiver lapsed", state: { kind: "full_signup" } },
+];
+
+for (const c of AFTER_CANCEL) {
+  const cta = viewerEventCta({
+    tournament: event,
+    state: c.state,
+    teamName: null,
+    entryFeeLabel: "$80.00",
+  });
+  check(
+    `after cancelling (${c.name}) → can sign up again, not "on the roster"`,
+    cta.kind === "register" && cta.href === SIGNUP_HREF && Boolean(cta.label),
+    `kind=${cta.kind} href=${String(cta.href)} label=${String(cta.label)}`
+  );
+}
+
 const total =
-  EVENT_SHAPES.length + CASES.length + PERSONALISED.length * 2 + 2;
+  EVENT_SHAPES.length +
+  CASES.length +
+  PERSONALISED.length * 2 +
+  2 +
+  AFTER_CANCEL.length;
 console.log(`\n${total - failed}/${total} passed`);
 process.exit(failed === 0 ? 0 : 1);

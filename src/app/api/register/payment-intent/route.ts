@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
     const { data: registration, error: loadErr } = await supabaseAdmin
       .from("registrations")
-      .select("id, payment_status, payment_method, waiver_signed")
+      .select("id, payment_status, payment_method, waiver_signed, cancelled_at")
       .eq("id", registrationId)
       .maybeSingle();
 
@@ -76,6 +76,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Registration not found." },
         { status: 404 }
+      );
+    }
+
+    // Cancelled. Recording "I'll pay cash" against a spot they gave up would put
+    // them back on the owner's collection list for a night they aren't coming to.
+    if (registration.cancelled_at) {
+      return NextResponse.json(
+        {
+          error:
+            "You cancelled this spot. Sign up again if you'd like to come, and you can pick how to pay then.",
+        },
+        { status: 409 }
       );
     }
 

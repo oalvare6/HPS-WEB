@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trophy,
+  XCircle,
 } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import {
@@ -41,8 +42,17 @@ export default async function MePage() {
 
   const { contact } = player;
   const { registrations, payments } = await getPlayerProfileData(contact.id);
-  const upcoming = registrations.filter((r) => isUpcomingStatus(r.tournament_status));
-  const past = registrations.filter((r) => !isUpcomingStatus(r.tournament_status));
+  const visible = collapseSupersededRows(registrations);
+  // A cancelled signup is never "current", whatever the event's calendar says —
+  // listing it under Current registrations would tell the player they still hold
+  // a spot they just gave up. It drops to the history below instead of
+  // vanishing, so there is still a record of having signed up at all.
+  const upcoming = visible.filter(
+    (r) => isUpcomingStatus(r.tournament_status) && !r.cancelled_at
+  );
+  const past = visible.filter(
+    (r) => !isUpcomingStatus(r.tournament_status) || Boolean(r.cancelled_at)
+  );
 
   return (
     <>
@@ -202,6 +212,42 @@ function isUpcomingStatus(status: string | null): boolean {
   return status === "upcoming" || status === "ongoing";
 }
 
+/**
+ * Hide a cancelled row when the same event still has a live one.
+ *
+ * This exists because `cancelled_at` carries two meanings that look identical in
+ * the database and must not look identical here. One is "I gave up my spot",
+ * which the player did and should see. The other is "this row was a duplicate
+ * and we retired it" — the dedupe in
+ * `20260815001500_dedupe_registrations_and_guard.sql` retired ten of those, and
+ * eight belong to people who **actually played the World Cup**. Badging that
+ * "cancelled" in their own history would be the site telling them something
+ * untrue about a tournament they turned up to.
+ *
+ * Keying on "is there still a live row for this event" rather than on a marker
+ * in `notes` means there is no string to parse and nothing to keep in sync: a
+ * genuine cancel with no replacement has no live sibling, so it still shows as
+ * cancelled, which is right.
+ *
+ * Rows with no `tournament_id` (37 legacy ones exist) are always kept — a NULL
+ * event is not the same event as another NULL event.
+ */
+function collapseSupersededRows(
+  rows: PlayerRegistrationRow[]
+): PlayerRegistrationRow[] {
+  const eventsWithLiveRow = new Set(
+    rows
+      .filter((r) => !r.cancelled_at && r.tournament_id)
+      .map((r) => r.tournament_id as string)
+  );
+  return rows.filter(
+    (r) =>
+      !r.cancelled_at ||
+      !r.tournament_id ||
+      !eventsWithLiveRow.has(r.tournament_id)
+  );
+}
+
 function displayName(first: string, last: string): string {
   return [first, last].filter(Boolean).join(" ").trim();
 }
@@ -329,7 +375,19 @@ function RegistrationsTable({ rows }: { rows: PlayerRegistrationRow[] }) {
                   {r.registration_type}
                 </td>
                 <td className="px-4 py-3">
-                  <PaymentStatusBadge status={r.payment_status} />
+                  {/*
+                    Cancelled outranks the payment badge. "pending" beside a spot
+                    they gave up reads as money still owed, which is the one
+                    thing cancelling was supposed to settle.
+                  */}
+                  {r.cancelled_at ? (
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-zinc-500/20 text-zinc-400">
+                      <XCircle size={12} />
+                      cancelled
+                    </span>
+                  ) : (
+                    <PaymentStatusBadge status={r.payment_status} />
+                  )}
                 </td>
               </tr>
             ))}

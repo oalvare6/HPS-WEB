@@ -177,6 +177,19 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
+      // 23505 = `registrations_one_live_spot_idx`: this contact already holds a
+      // live spot on this event. Almost always a double submit. "Please try
+      // again" would be a lie — the insert can never succeed — so name it.
+      if (error.code === "23505") {
+        return NextResponse.json(
+          {
+            error:
+              "You're already signed up for this event. Check your email for the link, or open the event page to see where you stand.",
+            reason: "already_registered",
+          },
+          { status: 409 }
+        );
+      }
       console.error("Supabase registration insert failed:", error);
       return NextResponse.json(
         { error: "We couldn't save your registration right now. Please try again." },

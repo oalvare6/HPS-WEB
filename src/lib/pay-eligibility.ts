@@ -7,6 +7,7 @@ import {
 } from "@/lib/contacts";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { acceptsPayments } from "@/lib/tournament-state";
+import type { PaymentMethodChoice } from "@/lib/payment-method";
 import type {
   PayEligibilityStatus,
   PayEligibilitySuccessBody,
@@ -139,11 +140,33 @@ export type EnrollContactInTournamentInput = {
    * belongs to this event — see `resolveTeamIdForTournament`.
    */
   teamId?: string | null;
+  /**
+   * What the player said they'd pay with, written in the same insert.
+   *
+   * Omit it and the column stays NULL, which keeps meaning "they have not told
+   * us" — never "card". See lib/payment-method.ts. It is deliberately not a
+   * `payment_status`: a cash promise is not a payment, and the row is created
+   * `'pending'` either way.
+   */
+  paymentMethod?: PaymentMethodChoice | null;
 };
 
 export type EnrollContactInTournamentResult =
   | { ok: true; registrationId: string }
-  | { ok: false; reason: "missing_waiver" | "insert_failed" };
+  | {
+      ok: false;
+      /**
+       * `already_registered` is the unique index
+       * `registrations_one_live_spot_idx` firing (Postgres 23505). It is a
+       * different thing from a failure: the player *is* on the roster, so
+       * telling them to try again would be sending them at something that can
+       * never succeed. Callers must say so plainly.
+       */
+      reason: "missing_waiver" | "already_registered" | "insert_failed";
+    };
+
+/** Postgres unique-violation. */
+const UNIQUE_VIOLATION = "23505";
 
 /**
  * Create a pending registration row for a player whose contact already has a
@@ -192,11 +215,18 @@ export async function enrollContactInTournament(
       docuseal_status: "signed",
       docuseal_submission_id: contact.waiver_submission_id,
       payment_status: "pending",
+      payment_method: input.paymentMethod ?? null,
     })
     .select("id")
     .single();
 
   if (error || !inserted) {
+    // Somebody already holds a live spot on this event. Two taps on a phone at
+    // the field is the ordinary cause, and the honest answer is "you're already
+    // in", not an error.
+    if (error?.code === UNIQUE_VIOLATION) {
+      return { ok: false, reason: "already_registered" };
+    }
     console.error("[pay-eligibility] auto-enroll insert failed:", error?.message);
     return { ok: false, reason: "insert_failed" };
   }
@@ -269,6 +299,9 @@ async function findRegistrationForPayGate(
     .select(REGISTRATION_SELECT)
     .eq("tournament_id", tournamentId)
     .eq("contact_id", contactId)
+    // A cancelled spot must not be resurrected by the pay gate — that would
+    // take money for a place the player has given up.
+    .is("cancelled_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -291,6 +324,7 @@ async function findRegistrationForPayGate(
     .select(REGISTRATION_SELECT)
     .eq("tournament_id", tournamentId)
     .eq("email", email)
+    .is("cancelled_at", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -313,6 +347,13 @@ export type RunPayEligibilityCheckInput = {
   email: string;
   tournamentId: string;
   waiverType: PayEligibilityWaiverType;
+  /**
+   * Whether a valid-waiver contact with no registration for this event may be
+   * put on the roster as a side effect of this check.
+   *
+   * Required, not optional — see the note on `runPayEligibilityCheck`.
+   */
+  allowAutoEnroll: boolean;
 };
 
 export type RunPayEligibilityCheckResult =
@@ -321,6 +362,14 @@ export type RunPayEligibilityCheckResult =
 
 /**
  * Load contact + registration, resolve status, optionally sync waiver, mint pay token.
+ *
+ * `allowAutoEnroll` has **no default**, deliberately. It used to be unconditional
+ * behaviour: a recognised player with a valid waiver who so much as loaded
+ * `/pay?tournament=<slug>` had a roster row written for them before they pressed
+ * anything. The operator's rule is now the opposite — *"i dont want ppl to sign
+ * up if they havent commited"* — so both callers pass `false` and creating a
+ * registration is something only an explicit Confirm does. Making the parameter
+ * required means a future caller has to decide rather than inherit.
  */
 export async function runPayEligibilityCheck(
   input: RunPayEligibilityCheckInput
@@ -392,13 +441,19 @@ export async function runPayEligibilityCheck(
       };
     case "needs_registration": {
       // Valid waiver on file but no registration row for this tournament.
-      // The operator's rule: a signed facility waiver means the player should
-      // not have to "register" again per event — auto-create the pending
-      // registration and send them straight to pay. Only fall back to the
-      // `needs_registration` card when we can't enroll automatically (e.g. the
-      // contact is missing the emergency fields the registrations table
-      // requires NOT NULL, which the /register form collects).
-      if (contact) {
+      //
+      // This used to enroll them on the spot: a signed facility waiver meant the
+      // player never "registered" again per event, so loading the page was
+      // enough to put them on a roster. That is a signup nobody performed, and
+      // it is the quiet twin of the fault the confirm gate on `/register` fixes
+      // — so both callers now pass `allowAutoEnroll: false` and this falls
+      // through to the `needs_registration` card, which routes them to
+      // `/register` where confirming is an actual button.
+      //
+      // The branch is kept rather than deleted because the enrolment itself is
+      // still correct — a returning player really does not re-register — and a
+      // future caller that has just taken a confirmation can opt back into it.
+      if (contact && input.allowAutoEnroll) {
         const enroll = await enrollContactInTournament({
           contact,
           tournamentId: input.tournamentId,

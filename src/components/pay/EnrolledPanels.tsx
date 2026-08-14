@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CalendarClock, CheckCircle2 } from "lucide-react";
 import { PaymentChoice } from "@/components/register/PaymentChoice";
+import { CancelSpotButton } from "@/components/register/CancelSpotButton";
 
 /**
  * The two things a player needs to see on `/pay` that the payment form itself
@@ -70,6 +71,7 @@ export function PayLaterCard({
   registrationId,
   payToken,
   payingCash,
+  tournamentTitle,
 }: {
   /** Where the player checks their standing later. */
   statusHref: string;
@@ -78,6 +80,8 @@ export function PayLaterCard({
   registrationId: string | null;
   payToken: string | null;
   payingCash: boolean;
+  /** Named in the cancel confirm, so nobody drops the wrong event. */
+  tournamentTitle: string | null;
 }) {
   const canDeclare = Boolean(registrationId && payToken);
 
@@ -130,6 +134,25 @@ export function PayLaterCard({
       <p className="text-xs text-zinc-500 text-center">
         We&apos;ll keep your spot on the roster either way.
       </p>
+
+      {/*
+        The other answer to "not paying today" is "not coming at all", and this
+        screen is where a player who followed a texted pay link ends up. Without
+        it their only move from here is to close the tab, which tells the owner
+        nothing and leaves them counted for the night.
+
+        `CancelSpotButton` is a client component with no async children — see the
+        header of this file before adding anything else here.
+      */}
+      {canDeclare && (
+        <div className="border-t border-border-token pt-4">
+          <CancelSpotButton
+            registrationId={registrationId!}
+            payToken={payToken!}
+            eventTitle={tournamentTitle ?? "this event"}
+          />
+        </div>
+      )}
     </div>
   );
 }

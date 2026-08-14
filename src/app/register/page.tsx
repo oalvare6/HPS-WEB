@@ -23,6 +23,7 @@ import { isContactWaiverValid } from "@/lib/contacts";
 import { createPayResumeToken } from "@/lib/app-signing";
 import { buildPayResumePath, buildWaiverSignPath } from "@/lib/pay-resume-url";
 import { acceptsRegistrations } from "@/lib/tournament-state";
+import { eventKindCopy } from "@/lib/event-kind";
 import { reconcileIfUnsigned } from "@/lib/waiver-reconcile";
 import {
   findEventRegistration,
@@ -130,6 +131,8 @@ export default async function RegisterPage({
           tournamentId={event.id}
           teams={teams}
           teamId={state.teamId}
+          registrationId={state.registrationId}
+          payToken={createPayResumeToken(state.registrationId)}
         />
       )}
 
@@ -183,6 +186,15 @@ export default async function RegisterPage({
           playerName={displayName(contact)}
           waiverExpiresAt={contact?.waiver_expires_at ?? null}
           entryFeeLabel={entryFeeLabel}
+          /*
+            Kind only chooses words and panels here — never whether the event
+            sells or opens. "Door price" and no team picker on a Friday night
+            whose own page promises "sides made on the night"; "Entry fee" and
+            the picker on a season. See lib/event-kind.ts.
+          */
+          feeLabel={eventKindCopy(event).feeLabel}
+          showTeams={eventKindCopy(event).hasTeams}
+          whenLabel={eventWhenLabel(event)}
         />
       )}
 
@@ -241,6 +253,34 @@ function buildPrefill(
     hasAdultWaiverOnFile: isContactWaiverValid(c, "adult"),
     hasYouthWaiverOnFile: isContactWaiverValid(c, "youth"),
   };
+}
+
+/**
+ * "Friday, August 14 · 7:00 PM – 9:00 PM" — what the player is confirming.
+ *
+ * `recurrence` wins when set ("Games are every Friday, starting August 21st"),
+ * because for a season that is the honest answer and a single start date is not.
+ * Returns null when we have neither; the confirm card just omits the line rather
+ * than printing "Date TBA" over a spot somebody is committing to.
+ */
+function eventWhenLabel(event: Tournament): string | null {
+  const day = event.recurrence
+    ? event.recurrence
+    : event.start_date
+      ? new Date(event.start_date).toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        })
+      : null;
+
+  const time =
+    event.time_start && event.time_end
+      ? `${event.time_start} – ${event.time_end}`
+      : event.time_start || event.time_end || null;
+
+  if (day && time) return `${day} · ${time}`;
+  return day ?? time ?? null;
 }
 
 function eventSubtitle(event: Tournament): string {
