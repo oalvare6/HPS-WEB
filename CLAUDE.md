@@ -44,13 +44,18 @@ Stripe was audited and is fine. When an integration misbehaves, check the *sende
 URL and delivery log before testing the endpoint — testing the endpoint only proves what the
 endpoint does, not what the sender experiences.
 
-**Two rules that are easy to break:**
+**Three rules that are easy to break:**
 
 - **`/register` is the only front door to signing up.** `/pay` without a signed resume
   token redirects there. Do not add a second entry point — that was the bug (plan §A6).
 - **Signing in is not required to register or pay.** Sign-in is **Google only** (Apple was
   removed 2026-08-14 — never configured, so it failed every tap). Gating signup on sign-in
   would take the site offline for players (§A8, §9).
+- **Nothing reaches a roster without an explicit Confirm, and one live spot per person per
+  event is enforced in the database.** `registrations_one_live_spot_idx` will reject a second
+  insert with `23505` — report that as "you're already signed up," never a generic error.
+  Cancellation is `registrations.cancelled_at`, never `payment_status` (D17–D19, session log
+  below).
 
 **The auth trap that cost a week — FIXED 2026-08-14, but read it anyway.** Supabase's
 **Site URL and Redirect URLs** must list the real domain. They pointed at
@@ -70,8 +75,9 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/SESSION-LOG-2026-08-14-WAIVERS.md`](docs/SESSION-LOG-2026-08-14-WAIVERS.md) | **Most recent session.** The waiver round trip and pay-later. Read after the plan. |
-| [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) | Earlier the same day: auth URLs, one canonical host. |
+| [`docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md`](docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md) | **Most recent session.** Confirm-before-roster, self-cancel, and a 9-way duplicate-registration fix. Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-14-WAIVERS.md`](docs/SESSION-LOG-2026-08-14-WAIVERS.md) | Earlier the same day: the waiver round trip and pay-later. |
+| [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) | Earlier still: auth URLs, one canonical host. |
 | [`docs/SESSION-LOG-2026-08-13.md`](docs/SESSION-LOG-2026-08-13.md) | The session before it. |
 | [`FOLLOWUPS.md`](FOLLOWUPS.md) | Append-only log of known issues |
 | [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md) | Shipped status (pre-dates the rebuild plan) |
