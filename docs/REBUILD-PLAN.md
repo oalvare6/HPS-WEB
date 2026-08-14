@@ -257,10 +257,16 @@ link in the same statement as the signed flag. A waiver you cannot produce is no
 
 **Still to verify:** no DocuSeal call has ever been made by this code. All four `DOCUSEAL_*`
 vars are empty in `.env.local`, so nothing DocuSeal-dependent is reachable locally. Missing
-config degrades to a clean 503 and the modal shows it rather than breaking. **Also confirm
-`DOCUSEAL_WEBHOOK_SECRET` is set in production** — if it is not, the webhook has been
-returning 503 to every callback, which would be the second half of why no documents were ever
-captured.
+config degrades to a clean 503 and the modal shows it rather than breaking.
+
+> ✅ **Resolved 2026-08-14, and the guess above was half right.** `DOCUSEAL_WEBHOOK_SECRET`
+> was indeed unset — but the webhook had *also* been pointed at the **apex** domain the whole
+> time, which Vercel 307s at the edge and DocuSeal does not follow. So it had never delivered
+> anything, and the 503 was never even reached. Both fixed. Sync Waivers then recovered 7
+> stranded signatures and wrote the **first non-NULL `waiver_document_url` values this
+> project has ever held**. ⚠ **97 rows already marked `signed` still have no document** —
+> sync only scans `docuseal_status='sent'`. That is Track B4 and is still owed. See
+> [`docs/SESSION-LOG-2026-08-14-WAIVERS.md`](./SESSION-LOG-2026-08-14-WAIVERS.md) §7.
 
 ### A5. Legal pages (D10) — ✅ written and linked, ⚠ NOT yet reviewed
 `/privacy`, `/terms`, `/refunds`, `/cookies`, all four linked from the footer, and the public
@@ -566,9 +572,16 @@ worked in production.
 3. **Read the waiver text before the 21st** — `src/lib/waiver-text.ts`. It is written from
    what this business actually does, but it is the document players will legally sign, and
    nobody has reviewed it. Same standing as the A5 legal pages: not legal advice.
-4. **Confirm `DOCUSEAL_WEBHOOK_SECRET` is set in Vercel** *if and when* DocuSeal is
-   reconnected. While the `DOCUSEAL_*` vars are empty the app uses in-app signing and never
-   calls DocuSeal at all.
+4. ~~**Confirm `DOCUSEAL_WEBHOOK_SECRET` is set in Vercel.**~~ ✅ **DONE 2026-08-14.** It was
+   not set, and that was only half the problem — the webhook was also pointed at the **apex**
+   domain, which Vercel 307s to `www` at the edge, and DocuSeal does not follow redirects. It
+   had therefore **never delivered a single event**. Both fixed; 7 stranded signatures
+   recovered. The app no longer depends on the webhook either — see
+   [`docs/SESSION-LOG-2026-08-14-WAIVERS.md`](./SESSION-LOG-2026-08-14-WAIVERS.md).
+
+   **Note that `DOCUSEAL_*` is fully configured in production** — the "empty vars, in-app
+   signing" assumption elsewhere in this plan describes `.env.local` only. Production has
+   always used DocuSeal.
 5. **Create the remaining Community Cup teams.** 3rd Ward FC and Heights FC exist now;
    every signup picks one of those or "Not sure yet".
 6. **Get the legal pages reviewed.** They are published and live. The defaults chosen are

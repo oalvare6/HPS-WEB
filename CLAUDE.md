@@ -35,6 +35,15 @@ npx tsx scripts/test-canonical-host.ts
 npm run build
 ```
 
+**The webhook trap, found 2026-08-14.** The DocuSeal webhook had **never once delivered** to
+this app. It was pointed at the **apex** domain, Vercel 307s apex → www *at the edge*, and
+DocuSeal does not follow redirects — it logged every 307 as a success. Green checks on their
+side, no requests on ours, nobody alarmed for a month. **Any third-party webhook configured
+against `houstonpremiersoccer.com` instead of `www.houstonpremiersoccer.com` dies silently.**
+Stripe was audited and is fine. When an integration misbehaves, check the *sender's* configured
+URL and delivery log before testing the endpoint — testing the endpoint only proves what the
+endpoint does, not what the sender experiences.
+
 **Two rules that are easy to break:**
 
 - **`/register` is the only front door to signing up.** `/pay` without a signed resume
@@ -61,7 +70,8 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) | **Most recent session.** What shipped, what's live, what's still owed. Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-14-WAIVERS.md`](docs/SESSION-LOG-2026-08-14-WAIVERS.md) | **Most recent session.** The waiver round trip and pay-later. Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) | Earlier the same day: auth URLs, one canonical host. |
 | [`docs/SESSION-LOG-2026-08-13.md`](docs/SESSION-LOG-2026-08-13.md) | The session before it. |
 | [`FOLLOWUPS.md`](FOLLOWUPS.md) | Append-only log of known issues |
 | [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md) | Shipped status (pre-dates the rebuild plan) |
