@@ -404,3 +404,27 @@ havent commited."*
   distinct `already_registered`, and `/api/register/join` and `/api/register` both answer 409 with
   "you're already signed up" — "Please try again" would send a player at an insert that can never
   succeed. The index carries a `comment on index` saying so.
+
+## 2026-08-14 (fifth) — the team is stated, not re-asked; the exit is visible
+
+- **The team block only asks while the answer is NULL.** `SavedTeamPicker` renders a locked row
+  once `team_id` is set. Previously the card said "you're playing for Barcelona" and put a
+  Barcelona-shaped dropdown under it — the operator's words: *"it says the team I picked but then
+  it asks to pick team again."*
+- ⚠ **Players can no longer switch teams themselves — that is now the owner's job.**
+  `/api/register/join` answers **409 `team_locked`** to any request that would change a
+  `team_id` already set (a first assignment from NULL still writes). Switch requests arrive by
+  WhatsApp or at the field; the fix is the admin Roster, which still writes `team_id` freely
+  through `PATCH /api/admin/registrations/[id]`, including back to NULL. If the owner ever asks
+  "why can't a player move themselves", this is the decision, not a bug.
+- **"Not sure yet — assign me later" is now one-way.** Choosing a team is final for the player,
+  so they cannot clear it back to NULL either. Same 409, same remedy.
+- **Cancel is a full-width red-tinted button**, not an 11px grey link, on both `/register`'s
+  status cards and `/pay`'s pay-later card — the operator asked for it to "stand out a lot more".
+  Still outlined rather than filled, below a divider, and still behind a confirm step. Nothing
+  about the cancel *route* changed; it still refuses only when a real Stripe charge exists.
+- ⚠ **Verified by local render, not against a live signed-in session.** All three card states
+  (team set → locked row; no team → picker; paid + team → locked row) were rendered on a throwaway
+  route and read back from the DOM, and the confirm step was exercised. Pressing Confirm on a real
+  registration needs a Google session no automated check here can hold — the same limitation every
+  prior session recorded.
