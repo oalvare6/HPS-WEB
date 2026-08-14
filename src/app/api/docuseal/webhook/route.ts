@@ -53,7 +53,14 @@ export async function GET() {
       apiKeyConfigured: hasApiKey,
       note: hasSecret
         ? "Ready to accept DocuSeal deliveries."
-        : "DOCUSEAL_WEBHOOK_SECRET is not set — every delivery is being rejected with 503. Set it in Vercel, then redeploy.",
+        : "DOCUSEAL_WEBHOOK_SECRET is not set — any delivery that reaches this endpoint is rejected with 503. Set it in Vercel, then redeploy.",
+      // Says nothing about whether deliveries arrive at all. On 2026-08-14 they
+      // did not: DocuSeal was pointed at the apex domain, which Vercel 307s to
+      // www at the edge, and DocuSeal does not follow redirects — it logged
+      // each 307 as a success. A green light here is necessary, never
+      // sufficient. Check the sender's own delivery log too.
+      alsoCheck:
+        "This endpoint only sees requests that arrive. Confirm the sender's webhook URL uses the www host — an apex URL is 307'd at the edge and never reaches this app.",
     },
     { headers: { "Cache-Control": "no-store" } }
   );
