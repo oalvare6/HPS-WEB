@@ -4,40 +4,62 @@ Use this checklist when magic-link emails fail to arrive, OAuth redirects break,
 auth works locally but not on production. Pair with the live diagnostics page at
 `/admin/diagnostics` (admin login required).
 
-## 1. Site URL (Supabase Dashboard)
+## 1. Site URL (Supabase Dashboard) — READ THIS FIRST
 
 **Path:** Project → Authentication → URL Configuration → **Site URL**
 
-Set to the canonical production origin (no trailing slash):
+Set to the canonical production origin, **no trailing slash**:
 
 ```
-https://houstonpremiersoccer.com
+https://www.houstonpremiersoccer.com
 ```
 
-The Site URL is the default redirect target when `redirectTo` is missing or not on the
-allow list. Magic-link emails embed links derived from this setting.
-
-**Verify:** After saving, send a test magic link from `/login` and confirm the link
-host matches production, not `localhost` or a Supabase default.
+> ### ⚠ This setting broke sign-in for everyone, silently, for two days.
+>
+> Until 2026-08-14 the Site URL was `https://hps-web-oalvare6s-projects.vercel.app/`
+> and the Redirect URLs listed only `*.vercel.app` hosts. Nothing matched
+> `www.houstonpremiersoccer.com/auth/callback`.
+>
+> **Supabase does not error when `redirectTo` is not on the allow list. It
+> substitutes the Site URL and carries on.** So the OAuth code was delivered to
+> the wrong origin, `/auth/callback` never ran, and the PKCE verifier the
+> browser had stored for `www` did not exist on the `.vercel.app` origin — so
+> `exchangeCodeForSession` could never succeed. `.vercel.app` is also on the
+> Public Suffix List, so a cookie set there can never be read by
+> `houstonpremiersoccer.com` regardless.
+>
+> Evidence at the time: `auth.identities` had a `google` row created
+> 2026-08-13 23:44, but `auth.sessions` had **nothing newer than 2026-07-01**,
+> and the project reported **1 monthly active user**. An identity with no
+> session is the fingerprint of this exact misconfiguration.
+>
+> **Symptom to recognise:** sign-in "does nothing", or lands the player on an
+> unfamiliar hostname. Check this allow list before reading a line of code.
 
 ## 2. Redirect URLs (allow list)
 
 **Path:** Project → Authentication → URL Configuration → **Redirect URLs**
 
-Add every origin that will receive auth callbacks. Required entries:
+Every origin that will receive an auth callback must be listed. Current set:
 
-| URL | When |
-|-----|------|
-| `https://houstonpremiersoccer.com/auth/callback` | Production magic link + OAuth |
-| `http://localhost:3000/auth/callback` | Local `next dev` |
-| `https://*-your-vercel-team.vercel.app/auth/callback` | Vercel preview deploys (wildcard if supported) |
+```
+https://www.houstonpremiersoccer.com/**
+https://houstonpremiersoccer.com/**
+https://hps-web-oalvare6s-projects.vercel.app/**
+https://hps-web-*-oalvare6s-projects.vercel.app/**
+http://localhost:3000/**
+```
 
-The app passes `emailRedirectTo` / OAuth `redirectTo` as
-`<origin>/auth/callback` (optionally with `?next=`). Each origin you use in the
-browser must appear in this list or Supabase will reject the redirect.
+The app passes OAuth `redirectTo` as `<origin>/auth/callback` (optionally with
+`?next=`), so the `/**` suffix is what makes each entry cover it.
 
-**Common failure:** Production Site URL is correct but preview/staging URLs are
-missing — links work on prod, fail on previews.
+**Get the wildcard position right.** Vercel preview hostnames are
+`hps-web-<hash>-oalvare6s-projects.vercel.app`. An entry like
+`https://hps-*-web-oalvare6s-projects.vercel.app` — wildcard between `hps-` and
+`-web` — matches nothing at all. That typo was live until 2026-08-14.
+
+**Common failure:** production works but previews don't, because only the
+production origin is listed. Per §1, this fails *silently*.
 
 ## 3. Email template (magic link)
 
@@ -155,20 +177,21 @@ Set in Vercel (or `.env.local` for dev):
 4. Resend from `/login` success card after 60s cooldown.
 5. If link arrives but sign-in fails, check redirect URL allow list and
    `/auth/callback` logs.
-6. If "Continue with Google" or "Continue with Apple" fails, check the
-   provider redirect URIs are pointed at
-   `https://<project-ref>.supabase.co/auth/v1/callback` (section 8.1 / 9.1)
-   and that the Supabase provider tab has the latest Client ID + Client
-   Secret saved.
+6. If "Continue with Google" fails — or appears to succeed but leaves the
+   player signed out — check §1/§2 **first**. A `redirectTo` that is not on
+   the allow list fails silently. Then check the Google redirect URI points at
+   `https://<project-ref>.supabase.co/auth/v1/callback` (section 8.1) and that
+   the provider tab has the latest Client ID + Client Secret saved.
 
 ## 7. Identity merge (read first before enabling OAuth)
 
 **Path:** Project → Authentication → Providers → **Email** → "Confirm email"
 
 Leave **Confirm email = enabled**. With Confirm Email on, Supabase Auth merges
-identities for the same verified email automatically: the first time a magic-link
-or password user signs in with Google or Apple, Supabase links the new identity
-onto the existing `auth.users` row instead of creating a duplicate user.
+identities for the same verified email automatically: the first time a legacy
+magic-link or password user signs in with Google, Supabase links the new
+identity onto the existing `auth.users` row instead of creating a duplicate
+user.
 
 The HPS app **does not** implement custom merge logic. If you ever disable
 "Confirm email", a player who previously used magic link and then clicks
@@ -223,84 +246,30 @@ Use a Google account that has never signed in to this site before. Confirm
 `auth.users` shows exactly one row for that email with both `email` and
 `google` in `identities`.
 
-## 9. Apple provider setup
+## 9. Apple sign-in — REMOVED 2026-08-14
 
-**Path:** Project → Authentication → Providers → **Apple** → toggle on
+**Google is the only provider. Do not add Apple back without reading this.**
 
-Apple's "Sign in with Apple" requires an Apple Developer account
-(\$99/yr) and a few more moving parts than Google. Plan ~30 minutes for the
-first setup.
+Apple was offered on `/login` from 2026-08-12 to 2026-08-14 and **never worked
+once** — the provider was never enabled in Supabase, so every tap failed. It
+was removed rather than finished, for three reasons:
 
-### 9.1 Create the Service ID
+1. **$99/yr Apple Developer account**, required before any of it can be set up.
+2. **The client secret is a JWT with a 6-month maximum validity.** When it
+   expires, sign-in breaks for everyone with `invalid_client` and nothing in
+   the app can detect or prevent it. That is a recurring outage the owner has
+   to remember to head off, twice a year, forever.
+3. **Nobody was blocked by its absence.** Registration and payment both work
+   signed-out; sign-in only buys the one-tap returning-player path.
 
-1. [Apple Developer Console](https://developer.apple.com/account/resources/identifiers/list)
-   → **Identifiers** → `+` → **Services IDs** → continue.
-2. Description: `Houston Premier Soccer — Sign in with Apple`.
-3. Identifier (this is the `client_id` Apple expects): a reverse-DNS string
-   you control, e.g. `com.houstonpremiersoccer.web.signin`.
-4. Enable **Sign In with Apple** → **Configure**:
-   - Primary App ID: select an existing App ID, or create a new one tied to
-     the same team.
-   - Domains and Subdomains:
-     ```
-     <your-project-ref>.supabase.co
-     ```
-   - Return URLs:
-     ```
-     https://<your-project-ref>.supabase.co/auth/v1/callback
-     ```
-   - Save and continue → Save the Services ID.
+The Apple setup runbook was deleted with this change — recover it from git
+history (`git log -- docs/AUTH-CONFIG.md`) if it is ever wanted again.
 
-### 9.2 Create the Sign In With Apple key
-
-1. Apple Developer Console → **Keys** → `+`.
-2. Name: `HPS Sign In With Apple key`.
-3. Enable **Sign In with Apple** → **Configure** → select the same Primary
-   App ID from 9.1.
-4. Continue → Register → **Download** the `.p8` file (one-time download —
-   save it in a password manager).
-5. Note the **Key ID** (10 chars) and your **Team ID** (Apple Developer
-   account → Membership).
-
-### 9.3 Mint the OAuth client secret (JWT)
-
-Apple's client secret is a short-lived JWT signed with the `.p8` key. There
-are two paths:
-
-- **Recommended (Supabase-managed):** in Supabase → Authentication →
-  Providers → Apple, use the in-dashboard "Generate client secret" tool if
-  available for your project. Paste in Team ID, Service ID (= `client_id`
-  from 9.1), Key ID, and the contents of the `.p8` file. Supabase will
-  generate and rotate the JWT for you.
-- **Manual (script):** if the in-dashboard tool isn't available, generate
-  the JWT with a small Node script (see Apple's docs) and paste it as
-  Client Secret. The JWT expires in 6 months max — set a calendar reminder
-  to rotate.
-
-### 9.4 Paste credentials into Supabase
-
-| Field | Value |
-|-------|-------|
-| Client ID (for OAuth) | Services ID from 9.1 (e.g. `com.houstonpremiersoccer.web.signin`) |
-| Client Secret (for OAuth) | The JWT from 9.3 |
-| Callback URL (for OAuth) | (read-only — must match the Return URL in 9.1) |
-
-Save. The "Continue with Apple" button on `/login` should now succeed.
-
-### 9.5 Verify
-
-Use an Apple ID that has never signed in to this site. Confirm `/login` →
-Apple consent → `/me` works in one round-trip. On the very first sign-in
-Apple sends the player's name; subsequent sign-ins do **not** include a name
-payload (this is by Apple design — the `contacts` row is populated once on
-first sign-in).
-
-### 9.6 Operational notes
-
-- **Apple JWT rotation:** Apple client secrets are JWTs with a max validity
-  of 6 months. If "Continue with Apple" suddenly fails for everyone with
-  `invalid_client`, the secret has expired — regenerate per 9.3.
-- **Apple-private email relay:** Apple lets users sign in with a relay
-  address like `xxxx@privaterelay.appleid.com`. That address is treated as
-  the canonical email for the merge in section 7 — the player's "real"
-  Apple ID email is never delivered to us.
+If you do re-add Apple: the provider is still matched in
+`describeSignInMethods` (`src/app/me/page.tsx`), so an existing Apple identity
+would still display; you would need to restore the button in
+`src/components/auth/OAuthButtons.tsx` and re-add its callback to the redirect
+allow-list in §2. Also note Apple's private relay addresses
+(`xxxx@privaterelay.appleid.com`) become the canonical email for the §7 merge —
+the player's real address is never delivered to us, which quietly breaks
+matching against a `contacts` row keyed on their real email.

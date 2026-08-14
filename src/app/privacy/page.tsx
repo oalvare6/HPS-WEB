@@ -60,8 +60,8 @@ export default async function PrivacyPage() {
             </>,
             <>
               <strong className="text-white">If you create an account:</strong>{" "}
-              signing in with Google or Apple tells us your email address and an
-              account identifier. We do not receive your password.
+              signing in with Google tells us your email address and an account
+              identifier. We do not receive your password.
             </>,
             <>
               <strong className="text-white">While you play:</strong> which team

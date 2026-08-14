@@ -52,7 +52,7 @@ export default async function CookiesPage() {
                 <td className="px-4 py-3 font-mono text-xs">sb-…</td>
                 <td className="px-4 py-3">
                   Keeps you signed in to your player account after you sign in
-                  with Google or Apple.
+                  with Google.
                 </td>
                 <td className="px-4 py-3">
                   Until you sign out or it expires.

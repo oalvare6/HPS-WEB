@@ -94,10 +94,10 @@ export const getCurrentPlayer = cache(async (): Promise<CurrentPlayer | null> =>
   }
 
   // Name extraction handles the metadata shapes our auth surfaces deliver:
-  //   - magic link / password registration: first_name, last_name, full_name
   //   - Google OAuth: given_name, family_name, full_name (and `name` as alias)
-  //   - Apple OAuth: name (single string, only on the very first authorization
-  //     — Apple does NOT resend it on subsequent sign-ins, by design)
+  //   - legacy magic link / password rows: first_name, last_name, full_name
+  // The composite fallbacks below also cover a bare `name`, which is what a
+  // provider added later may send instead of split fields.
   const meta = (user.user_metadata ?? {}) as {
     full_name?: string;
     name?: string;
@@ -135,7 +135,7 @@ export const getCurrentPlayer = cache(async (): Promise<CurrentPlayer | null> =>
 /**
  * Does the given email already have an `auth.users` row? Used by `/pay/success`
  * to decide whether to offer a signed-out payer the "set up your account"
- * Google/Apple card, or stay quiet because they already have one.
+ * Google card, or stay quiet because they already have one.
  *
  * Implementation note: GoTrue's admin API doesn't expose a typed
  * `getUserByEmail` in supabase-js. We page through `listUsers` (capped at

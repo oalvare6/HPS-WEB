@@ -37,9 +37,17 @@ npm run build
 
 - **`/register` is the only front door to signing up.** `/pay` without a signed resume
   token redirects there. Do not add a second entry point — that was the bug (plan §A6).
-- **Signing in is not required to register or pay.** Sign-in is Google/Apple only and both
-  are still pending in the Supabase dashboard; gating signup on it would take the site
-  offline for players (§A8, §9).
+- **Signing in is not required to register or pay.** Sign-in is **Google only** (Apple was
+  removed 2026-08-14 — never configured, so it failed every tap). Gating signup on sign-in
+  would take the site offline for players (§A8, §9).
+
+**The auth trap that cost a week:** Supabase's **Site URL and Redirect URLs** must list the
+real domain. They pointed at `hps-web-oalvare6s-projects.vercel.app` until 2026-08-14, and
+`www.houstonpremiersoccer.com/auth/callback` matched none of them — so Supabase silently
+redirected to the Site URL instead of erroring, `/auth/callback` never ran, and **no player
+could complete a Google sign-in on the real domain** (1 MAU, zero `auth.sessions` after
+2026-07-01). If sign-in ever "does nothing" or lands on a strange hostname, check that
+allow-list *before* reading any code.
 
 | Doc | What |
 |---|---|

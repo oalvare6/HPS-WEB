@@ -6,13 +6,13 @@ import { OAuthButtons } from "@/components/auth/OAuthButtons";
  *
  * This replaces the old `ClaimAccountForm`, which emailed a magic link. That
  * link was the only way to redeem the account it created, so once sign-in
- * became Google/Apple only (D5) it would have produced accounts nobody could
+ * became provider-only (D5) it would have produced accounts nobody could
  * ever open again — the shape of the problem already in production, where 28
  * accounts exist and 5 have ever been used.
  *
  * The email is shown, not collected: Stripe already verified it, and it is the
- * address the player should use with Google or Apple so Supabase links them to
- * the same person rather than making a second one.
+ * address the player should use with Google so Supabase links them to the same
+ * person rather than making a second one.
  */
 export function ClaimAccountPrompt({ email }: { email: string }) {
   return (

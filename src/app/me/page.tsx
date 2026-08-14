@@ -396,12 +396,17 @@ function EmptyState({
 /**
  * Render the player's connected sign-in methods from `user.identities[]`.
  *
- * Sign-in is Google and Apple only now (D5). An account created before that —
- * every one of the 28 in production, all provider `email` — still shows its
- * email identity here, because it is genuinely still attached to the account
- * and is what Supabase matches on when the same person signs in with Google.
- * The description says so rather than offering a way to use it, since there no
- * longer is one.
+ * Sign-in is Google only now (D5, narrowed 2026-08-14). An account created
+ * before that — every one of the 28 in production, all provider `email` —
+ * still shows its email identity here, because it is genuinely still attached
+ * to the account and is what Supabase matches on when the same person signs in
+ * with Google. The description says so rather than offering a way to use it,
+ * since there no longer is one.
+ *
+ * Apple is still matched below even though the button is gone. Nobody in
+ * production has an Apple identity (the provider was never configured), but if
+ * one ever existed it is still a real way into the account and hiding it would
+ * make this list lie about how the account can be reached.
  */
 function describeSignInMethods(
   user: Awaited<ReturnType<typeof getCurrentAuthUser>>
@@ -432,15 +437,15 @@ function describeSignInMethods(
       key: "email-password",
       label: `Email (${user?.email ?? "on file"})`,
       description:
-        "Your account is linked to this address. Sign in with Google or Apple using the same address to reach it.",
+        "Your account is linked to this address. Sign in with Google using the same address to reach it.",
     });
   }
 
   if (methods.length === 0) {
     methods.push({
       key: "google",
-      label: "Google or Apple",
-      description: "Sign in with Google or Apple to connect a provider.",
+      label: "Google",
+      description: "Sign in with Google to connect a provider.",
     });
   }
 

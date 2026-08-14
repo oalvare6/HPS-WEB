@@ -23,18 +23,19 @@ const ERROR_MESSAGES: Record<string, string> = {
 const SAFE_DESCRIPTION_MAX = 200;
 
 /**
- * Player sign-in: Google and Apple only (D5).
+ * Player sign-in: Google only (D5, narrowed 2026-08-14).
  *
  * Magic link and password sign-in were removed here. They served two active
  * users between them (REBUILD-PLAN §2: 28 accounts, 5 ever signed in, 2 within
  * 60 days) while costing four pages, an SMTP dependency and a password-reset
- * flow to keep working.
+ * flow to keep working. Apple went the same way: never configured, so it
+ * failed every time it was tapped.
  *
  * The thing to understand before touching this page: **signing in is not
  * required to play.** Registration and payment both work signed-out, so a
- * player who cannot use Google or Apple is never blocked from an event — they
- * just don't get the one-tap returning-player path. That is what makes it safe
- * for this page to offer exactly two buttons.
+ * player who cannot use Google is never blocked from an event — they just
+ * don't get the one-tap returning-player path. That is what makes it safe for
+ * this page to offer a single button.
  *
  * Admin login is a separate flow at `/admin` and is unaffected.
  */
@@ -73,7 +74,7 @@ export default async function LoginPage({
             Sign in
           </h1>
           <p className="text-xl text-zinc-400 max-w-2xl">
-            One tap with Google or Apple. No password to remember.
+            One tap with Google. No password to remember.
           </p>
         </div>
       </section>
@@ -106,8 +107,8 @@ export default async function LoginPage({
               without one any time.
             </p>
             <p>
-              Signed in with a link or password before? Use Google or Apple with
-              that same email address and you&apos;ll land in the same account.
+              Signed in with a link or password before? Use Google with that
+              same email address and you&apos;ll land in the same account.
             </p>
           </div>
         </div>

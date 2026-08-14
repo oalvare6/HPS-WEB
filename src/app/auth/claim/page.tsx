@@ -62,8 +62,8 @@ export default async function AuthClaimPage() {
                 You&apos;re signed in
               </h2>
               <p className="text-sm text-zinc-400 mt-1">
-                Next time you visit, sign in with Google or Apple using this
-                same email address and you&apos;ll land right back here.
+                Next time you visit, sign in with Google using this same email
+                address and you&apos;ll land right back here.
               </p>
             </div>
           </div>

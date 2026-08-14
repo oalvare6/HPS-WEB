@@ -27,11 +27,11 @@ export async function POST(req: NextRequest) {
     // We used to email a Supabase invite here so the payer could "claim" an
     // account. That is gone with email sign-in (D5): the invite created an
     // email-identity account whose only key was the emailed link, so once
-    // sign-in became Google/Apple only it would have minted accounts nobody
+    // sign-in became Google only it would have minted accounts nobody
     // could open a second time. Production already has 28 accounts and 5 that
     // have ever been signed into; there was no case for manufacturing more.
     //
-    // `/pay/success` now offers Google/Apple directly instead, which links to
+    // `/pay/success` now offers Google directly instead, which links to
     // the same person by verified email with no dead-end row in between.
   }
 

@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase-server";
 
 /**
- * OAuth callback. Supabase Auth redirects the player here after they finish a
- * Google or Apple consent screen. We exchange the short-lived `code` for a real
- * session cookie via PKCE, then redirect to `next` (validated) or `/me`.
+ * OAuth callback. Supabase Auth redirects the player here after they finish the
+ * Google consent screen. We exchange the short-lived `code` for a real session
+ * cookie via PKCE, then redirect to `next` (validated) or `/me`.
+ *
+ * ⚠ This route only ever runs if its own URL is in the Supabase Redirect URLs
+ * allow-list. When it is not, Supabase sends the code to the Site URL instead
+ * and this handler is never reached — the symptom is a player landing on an
+ * unfamiliar hostname with no session and no error. See docs/AUTH-CONFIG.md §1.
  *
  * Recovery handling was removed with password sign-in (D5) — there is no
  * password to recover. A stray `type=recovery` link from before the change now
