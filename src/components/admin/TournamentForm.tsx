@@ -126,8 +126,6 @@ type FormState = {
   /** Dollar string. Only used when `offer_drop_in_tier` is true. */
   drop_in_fee: string;
   max_teams: string;
-  register_url: string;
-  pay_url: string;
   image_url: string | null;
   image_preset: string | null;
   display_order: string;
@@ -175,8 +173,6 @@ function fromInitial(t: Tournament | null): FormState {
     offer_drop_in_tier: offerDropInTier,
     drop_in_fee: dropInDollars,
     max_teams: t?.max_teams != null ? String(t.max_teams) : "",
-    register_url: t?.register_url ?? "",
-    pay_url: t?.pay_url ?? "",
     image_url: t?.image_url ?? null,
     image_preset: t?.image_preset ?? null,
     display_order: t?.display_order != null ? String(t.display_order) : "0",
@@ -192,7 +188,19 @@ function fromInitial(t: Tournament | null): FormState {
 /** The shortlist the free-entry picker offers. */
 type FreeEntryCandidate = { id: string; title: string; kind?: string | null };
 
-export function TournamentForm({ initial }: { initial: Tournament | null }) {
+export function TournamentForm({
+  initial,
+  onSaved,
+}: {
+  initial: Tournament | null;
+  /**
+   * When set, a successful save stays where the owner is working and calls
+   * this instead of navigating away to the events list. The old
+   * navigate-on-save threw people off the page mid-task — enter a score, fix
+   * a typo, save, gone.
+   */
+  onSaved?: () => void;
+}) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => fromInitial(initial));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -310,8 +318,8 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       }
     }
     setErrors(e);
-    // Slug and the URLs live behind the disclosure; a hidden error is a dead end.
-    if (e.slug || e.register_url || e.pay_url || e.display_order) setAdvancedOpen(true);
+    // Slug lives behind the disclosure; a hidden error is a dead end.
+    if (e.slug || e.display_order) setAdvancedOpen(true);
     return Object.keys(e).length === 0;
   };
 
@@ -365,11 +373,11 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
         }
         router.refresh();
         toast.success("Image saved", {
-          description: "Stored and linked to this tournament. Other edits still need Save Tournament.",
+          description: "Stored and linked to this event. Other edits still need Save event.",
         });
       } else {
         toast.success("Image uploaded", {
-          description: "File is in storage. Click Save Tournament to attach it to this event.",
+          description: "Click Save event to attach it to this event.",
         });
       }
     } catch {
@@ -460,8 +468,6 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
           : form.max_teams.trim()
             ? Number(form.max_teams)
             : null,
-      register_url: form.register_url.trim() || null,
-      pay_url: form.pay_url.trim() || null,
       image_url: form.image_url,
       image_preset: form.image_preset,
       display_order: form.display_order.trim() ? Number(form.display_order) : 0,
@@ -483,9 +489,15 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
         setSaving(false);
         return;
       }
-      toast.success(initial ? "Tournament updated." : "Tournament created.");
-      router.push("/admin/tournaments");
-      router.refresh();
+      toast.success(initial ? "Event saved." : "Event created.");
+      if (onSaved) {
+        setSaving(false);
+        router.refresh();
+        onSaved();
+      } else {
+        router.push("/admin/tournaments");
+        router.refresh();
+      }
     } catch {
       toast.error("Save failed.");
       setSaving(false);
@@ -947,7 +959,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
         </button>
         {!advancedOpen && (
           <p className="text-xs text-zinc-500">
-            Web address, link overrides and list order. You almost never need these.
+            Web address and list order. You almost never need these.
           </p>
         )}
         {advancedOpen && (
@@ -969,26 +981,13 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
                 placeholder="spring-classic-2026"
               />
             </Field>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Register URL" hint="Leave blank to use /register">
-                <input
-                  type="text"
-                  value={form.register_url}
-                  onChange={(e) => update("register_url", e.target.value)}
-                  className={inputCls("register_url")}
-                  placeholder="/register"
-                />
-              </Field>
-              <Field label="Pay URL" hint="Leave blank to use /pay">
-                <input
-                  type="text"
-                  value={form.pay_url}
-                  onChange={(e) => update("pay_url", e.target.value)}
-                  className={inputCls("pay_url")}
-                  placeholder="/pay"
-                />
-              </Field>
-            </div>
+            {/*
+              The Register URL / Pay URL overrides that used to live here are
+              gone on purpose. They could point an event's sign-up button
+              somewhere other than /register — the exact "second front door"
+              the plan's top rule (§A6) exists to prevent — and every event in
+              production had them blank. Do not bring them back.
+            */}
             <Field label="Display Order" hint="Lower numbers shown first">
               <input
                 type="number"
@@ -1004,7 +1003,7 @@ export function TournamentForm({ initial }: { initial: Tournament | null }) {
       <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border-token">
         <button type="submit" disabled={saving} className="btn-primary disabled:opacity-60">
           {saving ? <Loader2 size={16} className="animate-spin" /> : null}
-          {saving ? "Saving…" : "Save Tournament"}
+          {saving ? "Saving…" : "Save event"}
         </button>
         <button
           type="button"

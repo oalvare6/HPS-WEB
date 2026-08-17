@@ -136,13 +136,18 @@ function AdminTournamentsContent() {
     }
   };
 
-  const handleReorder = async (id: string, direction: "up" | "down") => {
+  const handleReorder = async (
+    id: string,
+    direction: "up" | "down",
+    swapWith: string
+  ) => {
     setBusyId(id);
     try {
       const res = await fetch(`/api/admin/tournaments/${id}/reorder`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction }),
+        // The neighbor within this row's own section — see the reorder route.
+        body: JSON.stringify({ direction, swap_with: swapWith }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -166,7 +171,7 @@ function AdminTournamentsContent() {
         toast.error(data.error || "Delete failed.");
         return;
       }
-      toast.success("Tournament deleted.");
+      toast.success("Event deleted.");
       setPendingDelete(null);
       await load();
       router.refresh();
@@ -203,15 +208,10 @@ function AdminTournamentsContent() {
               </span>
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/admin" className="text-sm text-zinc-400 hover:text-white transition-colors">
-              ← Admin Dashboard
-            </Link>
-            <Link href="/admin/tournaments/new" className="btn-primary">
-              <Plus size={16} />
-              Add event
-            </Link>
-          </div>
+          <Link href="/admin/tournaments/new" className="btn-primary">
+            <Plus size={16} />
+            Add event
+          </Link>
         </div>
       </section>
 
@@ -238,9 +238,10 @@ function AdminTournamentsContent() {
               undifferentiated list, so the owner had to read every title to
               work out which was which.
 
-              Reorder still works on the GLOBAL index — `display_order` is one
-              sequence across all events, and passing a per-section index here
-              would let the arrows swap the wrong pair.
+              The arrows swap with the neighbor IN THE SAME SECTION — the row
+              names its target via swap_with. The old global-index arrows made
+              "down" on the last tournament look broken: the change happened
+              invisibly in the other table.
             */
             <div className="space-y-8">
               {KIND_SECTIONS.map(({ kind, heading, blurb, rows }) =>
@@ -253,7 +254,6 @@ function AdminTournamentsContent() {
                     <EventTable
                       rows={rows}
                       kind={kind}
-                      total={tournaments.length}
                       busyId={busyId}
                       canFeatureMore={canFeatureMore}
                       pendingDelete={pendingDelete}
@@ -280,7 +280,6 @@ type IndexedEvent = { event: Tournament; index: number };
 function EventTable({
   rows,
   kind,
-  total,
   busyId,
   canFeatureMore,
   pendingDelete,
@@ -292,13 +291,11 @@ function EventTable({
 }: {
   rows: IndexedEvent[];
   kind: EventKind;
-  /** Count across every kind — the last row overall cannot move down. */
-  total: number;
   busyId: string | null;
   canFeatureMore: boolean;
   pendingDelete: string | null;
   onToggleFeatured: (t: Tournament) => void;
-  onReorder: (id: string, direction: "up" | "down") => void;
+  onReorder: (id: string, direction: "up" | "down", swapWith: string) => void;
   onDelete: (id: string) => void;
   onPendingDelete: (id: string | null) => void;
   onOpen: (id: string) => void;
@@ -321,9 +318,12 @@ function EventTable({
             </tr>
           </thead>
                   <tbody>
-                    {rows.map(({ event: t, index: i }) => {
+                    {rows.map(({ event: t }, pos) => {
                       const thumb = t.image_url || getPresetUrl(t.image_preset);
                       const openView = () => onOpen(t.id);
+                      const sectionPrev = pos > 0 ? rows[pos - 1].event.id : null;
+                      const sectionNext =
+                        pos < rows.length - 1 ? rows[pos + 1].event.id : null;
                       return (
                         <tr
                           key={t.id}
@@ -357,8 +357,7 @@ function EventTable({
                             </div>
                           </td>
                           <td className="px-4 py-3 text-white font-medium">
-                            <div>{t.title}</div>
-                            <div className="text-xs text-zinc-500 font-mono">{t.slug}</div>
+                            {t.title}
                           </td>
                           <td className="px-4 py-3 text-zinc-300 hidden md:table-cell">{t.format ?? "—"}</td>
                           <td className="px-4 py-3 text-zinc-400 hidden lg:table-cell">
@@ -398,25 +397,29 @@ function EventTable({
                                 />
                               </button>
                               <button
-                                onClick={() => onReorder(t.id, "up")}
-                                disabled={i === 0 || busyId === t.id}
+                                onClick={() =>
+                                  sectionPrev && onReorder(t.id, "up", sectionPrev)
+                                }
+                                disabled={!sectionPrev || busyId === t.id}
                                 className="p-1.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
                                 title="Move up"
                               >
                                 <ChevronUp size={16} />
                               </button>
                               <button
-                                onClick={() => onReorder(t.id, "down")}
-                                disabled={i === total - 1 || busyId === t.id}
+                                onClick={() =>
+                                  sectionNext && onReorder(t.id, "down", sectionNext)
+                                }
+                                disabled={!sectionNext || busyId === t.id}
                                 className="p-1.5 text-zinc-400 hover:text-white disabled:opacity-30 transition-colors"
                                 title="Move down"
                               >
                                 <ChevronDown size={16} />
                               </button>
                               <Link
-                                href={`/admin/tournaments/${t.id}/edit`}
+                                href={`/admin/tournaments/${t.id}?tab=settings`}
                                 className="p-1.5 text-zinc-400 hover:text-brand transition-colors"
-                                title="Edit"
+                                title="Event settings"
                               >
                                 <Pencil size={16} />
                               </Link>
@@ -425,22 +428,23 @@ function EventTable({
                                   <button
                                     onClick={() => onDelete(t.id)}
                                     disabled={busyId === t.id}
+                                    title="Permanently removes this event and takes it off the public site. Signups and payment records keep existing but lose their event."
                                     className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
                                   >
-                                    {busyId === t.id ? "…" : "Confirm"}
+                                    {busyId === t.id ? "…" : "Yes, delete this event"}
                                   </button>
                                   <button
                                     onClick={() => onPendingDelete(null)}
                                     className="text-xs px-2 py-1 rounded text-zinc-400 hover:text-white"
                                   >
-                                    Cancel
+                                    Keep it
                                   </button>
                                 </span>
                               ) : (
                                 <button
                                   onClick={() => onPendingDelete(t.id)}
                                   className="p-1.5 text-zinc-400 hover:text-red-400 transition-colors"
-                                  title="Delete"
+                                  title="Delete this event permanently"
                                 >
                                   <Trash2 size={16} />
                                 </button>

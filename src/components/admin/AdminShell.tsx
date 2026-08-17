@@ -11,7 +11,6 @@ import {
   Shield,
   Trophy,
   Users,
-  Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,8 +26,9 @@ const NAV_ITEMS: NavItem[] = [
   // "Events", not "Tournaments" — the same list now holds open play nights, and
   // the owner should not have to know they live under a tournaments URL.
   { href: "/admin/tournaments", label: "Events", icon: Trophy },
-  { href: "/admin/contacts", label: "Contacts", icon: Users },
-  { href: "/admin/drop-ins", label: "Drop-ins", icon: Ticket },
+  { href: "/admin/contacts", label: "People", icon: Users },
+  // No Drop-ins item: guests are rows on each event's Roster. The old page
+  // fronted a table that has held zero rows ever (B3 deletes it).
   { href: "/admin/site", label: "Site", icon: Settings },
 ];
 

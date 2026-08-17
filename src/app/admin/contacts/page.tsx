@@ -120,10 +120,10 @@ function AdminContactsContent() {
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-1">Contacts</h1>
+            <h1 className="text-3xl font-bold text-white mb-1">People</h1>
             <p className="text-zinc-400 text-sm">
-              The canonical people in your system. Every registration, drop-in,
-              and payment links to one of these.
+              Everyone who has ever signed up, paid, or been added by you. One
+              row per person — their signups and payments all connect here.
             </p>
           </div>
           <div className="flex gap-2">
@@ -143,7 +143,7 @@ function AdminContactsContent() {
               className="btn-primary text-sm inline-flex items-center gap-1.5"
             >
               <UserPlus size={14} />
-              New contact
+              Add person
             </button>
           </div>
         </div>
@@ -181,14 +181,17 @@ function AdminContactsContent() {
           <div className="dashboard-card p-4 border-brand/40 bg-brand/10 flex items-start gap-3">
             <GitMerge size={16} className="text-brand mt-0.5" />
             <div className="flex-1 text-sm text-zinc-200">
-              <p className="font-semibold mb-0.5">Merging into:</p>
-              <p className="text-zinc-300">
+              <p className="font-semibold mb-0.5">
+                Keeping{" "}
                 {contacts.find((c) => c.id === mergeWinner)
                   ? fullName(contacts.find((c) => c.id === mergeWinner)!)
-                  : mergeWinner}
+                  : "this person"}
+                .
               </p>
               <p className="text-xs text-zinc-400 mt-1">
-                Click the merge icon on a duplicate row to fold it into this one.
+                Now click &ldquo;This is the duplicate&rdquo; on the other copy
+                of the same person. Their signups and payments move onto the
+                one you&apos;re keeping.
               </p>
             </div>
             <button
@@ -240,8 +243,9 @@ function AdminContactsContent() {
                   onSelectWinner={() => setMergeWinner(c.id)}
                   onMergeInto={async (winnerId) => {
                     if (winnerId === c.id) return;
+                    const keeper = contacts.find((k) => k.id === winnerId);
                     const ok = confirm(
-                      `Merge "${fullName(c)}" INTO the selected winner? The loser row will be deleted.`
+                      `Combine these two entries for the same person?\n\nEverything on "${fullName(c)}" (signups, payments, waiver) moves onto "${keeper ? fullName(keeper) : "the one you're keeping"}", and the duplicate goes away.`
                     );
                     if (!ok) return;
                     const res = await fetch("/api/admin/contacts/merge", {
@@ -258,7 +262,7 @@ function AdminContactsContent() {
                       toast.error(data.error || "Merge failed.");
                       return;
                     }
-                    toast.success("Contacts merged.");
+                    toast.success("Done — they're one person now.");
                     setMergeWinner(null);
                     fetchContacts();
                   }}
@@ -269,9 +273,11 @@ function AdminContactsContent() {
           )}
         </div>
 
-        <p className="text-xs text-zinc-500">
-          Showing up to 100 results. Refine your search to narrow the list.
-        </p>
+        {contacts.length >= 100 && (
+          <p className="text-xs text-zinc-500">
+            Showing the first 100 — search to find anyone not listed.
+          </p>
+        )}
       </div>
 
       {showCreate && (
@@ -343,7 +349,7 @@ function ContactRow({
         </div>
         {mergeWinner === contact.id ? (
           <span className="text-xs font-mono text-brand uppercase tracking-wider">
-            Winner
+            Keeping
           </span>
         ) : mergeWinner ? (
           <button
@@ -353,10 +359,10 @@ function ContactRow({
               onMergeInto(mergeWinner);
             }}
             className="inline-flex items-center gap-1 text-xs text-yellow-400 hover:text-yellow-300"
-            title="Merge this contact INTO the selected winner"
+            title="This row is the extra copy — combine it into the person you're keeping"
           >
             <GitMerge size={12} />
-            Merge here
+            This is the duplicate
           </button>
         ) : (
           <button
@@ -366,10 +372,10 @@ function ContactRow({
               onSelectWinner();
             }}
             className="inline-flex items-center gap-1 text-xs text-zinc-400 hover:text-brand"
-            title="Use as merge target"
+            title="Two rows for the same person? Start here on the one to keep."
           >
             <GitMerge size={12} />
-            Merge…
+            Fix duplicate…
           </button>
         )}
       </div>
@@ -430,7 +436,12 @@ function ContactEditor({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Delete this contact? This cannot be undone.")) return;
+    if (
+      !confirm(
+        "Delete this person permanently? This cannot be undone. If they have any signups or payments, the delete will be refused — merge duplicates instead of deleting them."
+      )
+    )
+      return;
     setDeleting(true);
     try {
       const res = await fetch(`/api/admin/contacts/${contact.id}`, {

@@ -42,7 +42,15 @@ embeds `tournaments(...)` from `registrations` **must** name the constraint
 (`tournaments!registrations_tournament_id_fkey(...)`) or it answers PGRST201 at runtime. It
 will pass `tsc` and `npm run build` either way — the ambiguity lives in the database. Six
 call sites were rewritten when the column landed (`/pay`, `/me`, the waiver signing screen,
-admin Registrants, `/api/registrations/[id]`, captain paid-ack); add yours to that habit.
+the admin registrations API, `/api/registrations/[id]`, captain paid-ack); add yours to
+that habit.
+
+**Admin waiver state has exactly one computation** — `waiverStatusFor` in
+`src/lib/admin-roster.ts` — and one display policy, decided by the operator 2026-08-17: a
+covered person is a green ✓ whatever the paper trail; the missing-document case is a quiet
+tag, and "needs waiver" is reserved for genuinely missing or expired. Do not read
+`registrations.waiver_signed` directly in a UI again; that habit is what had the same
+person reading "signed" and "pending" on the same page.
 
 **And note what that migration did to the code already running.** It only *added* things, so it
 looked backward compatible — but the second FK breaks every existing unqualified embed the
@@ -93,7 +101,8 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md`](docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md) | **Most recent session.** D7 free entry, the guest list, the two-FK deploy trap, and why "correct" wasn't "delivered". Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md`](docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md) | **Most recent session.** Production data cleanup (B1 done), the four-way waiver-display contradiction, and the B6 admin consolidation (one page per event). Read after the plan. |
+| [`docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md`](docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md) | D7 free entry, the guest list, the two-FK deploy trap, and why "correct" wasn't "delivered". |
 | [`docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md`](docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md) | Earlier the same day: confirm-before-roster, self-cancel, and a 9-way duplicate-registration fix. |
 | [`docs/SESSION-LOG-2026-08-14-WAIVERS.md`](docs/SESSION-LOG-2026-08-14-WAIVERS.md) | Earlier the same day: the waiver round trip and pay-later. |
 | [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) | Earlier still: auth URLs, one canonical host. |

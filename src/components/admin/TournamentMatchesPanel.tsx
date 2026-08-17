@@ -28,7 +28,6 @@ import {
 } from "@/lib/types";
 import {
   fetchTeamsForTournament,
-  createTeam,
   type AdminTeamRow,
 } from "@/lib/admin-teams";
 
@@ -145,9 +144,6 @@ export function TournamentMatchesPanel({ tournamentId }: { tournamentId: string 
   const [editForm, setEditForm] = useState<MatchFormState>(emptyMatchForm());
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const [newTeamName, setNewTeamName] = useState("");
-  const [creatingTeam, setCreatingTeam] = useState(false);
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -179,25 +175,6 @@ export function TournamentMatchesPanel({ tournamentId }: { tournamentId: string 
   useEffect(() => {
     load();
   }, [load]);
-
-  const handleCreateTeam = async () => {
-    const name = newTeamName.trim();
-    if (!name) return;
-    setCreatingTeam(true);
-    try {
-      const res = await createTeam({ tournament_id: tournamentId, name });
-      if (res.error) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success(`Team "${name}" added.`);
-      setNewTeamName("");
-      const teamsResult = await fetchTeamsForTournament(tournamentId);
-      setTeams(teamsResult.data ?? []);
-    } finally {
-      setCreatingTeam(false);
-    }
-  };
 
   const validate = (f: MatchFormState): string | null => {
     const homeName = f.home_team_id ? "" : f.home_label.trim();
@@ -519,57 +496,18 @@ export function TournamentMatchesPanel({ tournamentId }: { tournamentId: string 
         )}
       </div>
 
-      {/* Teams quick-add */}
-      <div className="rounded-lg border border-border-token bg-surface-2/30 p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Users size={14} className="text-brand" />
-          <span className="text-xs font-mono text-zinc-400 uppercase tracking-wide">
-            Teams ({teams.length})
-          </span>
-        </div>
-        {teams.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {teams.map((t) => (
-              <span
-                key={t.id}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-2 text-sm text-zinc-200 border border-border-token"
-              >
-                {t.color && (
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: t.color }}
-                  />
-                )}
-                {t.name}
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={newTeamName}
-            onChange={(e) => setNewTeamName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleCreateTeam();
-              }
-            }}
-            placeholder="Add a team (e.g. Brazil)"
-            className={inputCls}
-          />
-          <button
-            type="button"
-            onClick={handleCreateTeam}
-            disabled={creatingTeam || !newTeamName.trim()}
-            className="inline-flex items-center gap-1 text-xs btn-primary !px-3 !py-2 disabled:opacity-50 flex-shrink-0"
-          >
-            {creatingTeam ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-            Add
-          </button>
-        </div>
-      </div>
+      {/*
+        No team creation here. It used to have a name-only "Teams quick-add"
+        that duplicated the Teams tab (which can also set colors, captains and
+        members) — two places to make a team, one of them half-featured. Teams
+        are made on the Teams tab, one click away on this same page.
+      */}
+      {teams.length === 0 && (
+        <p className="text-xs text-zinc-500">
+          No teams yet — create them on the Teams tab, then pick them here for
+          fixtures.
+        </p>
+      )}
 
       {/* Composer */}
       {composerOpen && (

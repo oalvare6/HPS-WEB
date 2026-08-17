@@ -465,3 +465,38 @@ Full detail in
 - ⚠ **Never verified: the rendered free-entry card, and a completed open-play signup.** No row
   exists yet with `payment_status = 'waived'` + `free_entry_tournament_id` set. Highest-value
   check remaining, and it needs a human with a Google session.
+
+## 2026-08-17 — data cleanup + admin consolidation
+
+Full detail in [`docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md`](docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md).
+
+- **Production data is clean as of this session**: 3 typo-duplicate people merged (their
+  better DocuSeal evidence promoted onto the keepers), 6 test contacts + team RED deleted,
+  `Spring Classic 2026` and `Memorial Day Open Play` recreated as archive events and every
+  orphaned registration (36) and payment (6) re-homed. **Zero rows without an event remain.**
+  Backup: schema `backup_2026_08_17` on the production DB (full copy of all 13 tables).
+- **Waiver display policy changed by operator decision**: covered people show a green ✓
+  whatever the evidence; a small "no doc" tag marks override/undocumented rows; "Sign now"
+  is loud only for genuinely missing/expired. One shared computation (`waiverStatusFor` in
+  `src/lib/admin-roster.ts`) feeds every admin surface — the four contradictory
+  per-screen computations are gone.
+- ⚠ **The B4 document backfill is coded but unexercised**: `/api/admin/sync-waivers` now
+  also scans `signed` rows with no `waiver_document_url` (97 of them). The Roster toolbar's
+  file-check button runs it. Needs one press in production where `DOCUSEAL_API_KEY` exists.
+- **Admin consolidated (B6)**: one page per event (Roster/Teams/Schedule & scores/
+  Announcements/Settings tabs; `/edit` redirects), `RegistrationsList` deleted, Drop-ins
+  page + nav deleted, hub cards deleted, Overview leads with correct on-load money,
+  winner/loser merge language replaced, People not Contacts, per-section reorder arrows,
+  Register/Pay URL overrides removed from the form (the §A6 second-front-door hazard).
+- **Correctness**: admin registrations API excludes cancelled by default; Stripe email
+  fallback can't pay a cancelled row; drop-in pay-link gates on `acceptsPayments`;
+  override-waiver goes through `recordSignedWaiver` (and no longer destroys a contact's
+  real document link); merge resolves one-live-spot collisions first and repoints
+  `waiver_signatures`; admin Unregister is a soft-cancel; diagnostics asserts the www host.
+- ⚠ **Deliberately NOT touched**: World Cup branches in `/api/stripe/checkout`/`PayForm`
+  (unreachable but public-facing, 4 days before Community Cup), `drop_ins`/`team_members`
+  tables + remaining API routes (B3), phone E.164 normalization + unique index (B1
+  remainder), D2 owner-changeable password. `/api/admin/registrations/[id]/resend-waiver`
+  kept but has no UI caller since RegistrationsList died — rewire or delete in B-track.
+- Operator declined paid plans for now (no Supabase Pro backups, no Vercel Pro). Vercel has
+  two projects (`hpsweb`, `hps-web`) — one is a stale duplicate to confirm and remove.

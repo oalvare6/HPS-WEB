@@ -1,26 +1,21 @@
 "use client";
 
-import { Suspense, useEffect, useState, use } from "react";
-import Link from "next/link";
-import Image from "next/image";
+import { Suspense, useCallback, useEffect, useState, use } from "react";
 import {
-  Pencil,
   CalendarRange,
   Clock,
   MapPin,
-  Trophy,
+  DollarSign,
   Users,
   UsersRound,
   CreditCard,
-  DollarSign,
   ReceiptText,
   Star,
-  Hash,
-  Repeat,
-  Layers,
+  ListOrdered,
+  Megaphone,
+  Settings,
 } from "lucide-react";
 import { Section } from "@/components/shared/section";
-import { getPresetUrl } from "@/lib/tournament-image-presets";
 import type { Tournament } from "@/lib/types";
 import { EventStateBadge } from "@/components/admin/EventStateBadge";
 import {
@@ -30,18 +25,35 @@ import {
   formatTournamentDateRange,
   type TournamentStats,
 } from "@/lib/admin-tournaments";
-import RegistrationsList from "@/components/admin/RegistrationsList";
 import RosterScreen from "@/components/admin/RosterScreen";
 import TournamentTeamsPanel from "@/components/admin/TournamentTeamsPanel";
+import { TournamentForm } from "@/components/admin/TournamentForm";
+import { TournamentRoundsPanel } from "@/components/admin/TournamentRoundsPanel";
+import { TournamentMatchesPanel } from "@/components/admin/TournamentMatchesPanel";
+import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { eventKindCopy } from "@/lib/event-kind";
 import { useQueryParam } from "@/lib/admin-url-state";
 import { TournamentDetailSkeleton } from "@/components/shared/skeleton";
 
-type RosterTab = "roster" | "registrants" | "teams";
+/**
+ * ONE page per event (B6). Everything the owner does to an event happens in
+ * these tabs — the old split, where team assignment lived on the view page
+ * but scores and announcements lived behind an "Edit" button on a different
+ * page, had to simply be memorized. The old "Details" tab (a second, older
+ * list of the same people with its own vocabulary) is gone; the Roster is
+ * the one list of people.
+ */
+type EventTab = "roster" | "teams" | "schedule" | "updates" | "settings";
 
-function isRosterTab(value: string): value is RosterTab {
-  return value === "roster" || value === "registrants" || value === "teams";
+function isEventTab(value: string): value is EventTab {
+  return (
+    value === "roster" ||
+    value === "teams" ||
+    value === "schedule" ||
+    value === "updates" ||
+    value === "settings"
+  );
 }
 
 export default function AdminTournamentViewPage({
@@ -62,53 +74,45 @@ function ViewContent({ id }: { id: string }) {
   const [stats, setStats] = useState<TournamentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  // The Roster screen (A3) is the default view — it is what the owner opens
-  // this page for. "Registrants" keeps the older detailed list available.
-  const [rosterParam, setRosterParam] = useQueryParam("roster", "roster");
-  const rosterTab: RosterTab = isRosterTab(rosterParam) ? rosterParam : "roster";
-  const setRosterTab = (next: RosterTab) => {
-    setRosterParam(next === "roster" ? null : next);
+  // Old ?roster= links (bookmarks, back buttons) still resolve: "registrants"
+  // is not a tab any more and falls through to the roster.
+  const [tabParam, setTabParam] = useQueryParam("tab", "roster");
+  const tab: EventTab = isEventTab(tabParam) ? tabParam : "roster";
+  const setTab = (next: EventTab) => {
+    setTabParam(next === "roster" ? null : next);
   };
 
   const kindCopy = eventKindCopy(tournament);
-  // `?roster=teams` survives in the URL (a bookmark, a back button, or an event
-  // switched to open play while the tab was selected). Fall back rather than
-  // render a Teams panel with no tab to leave it by.
-  const effectiveRosterTab: RosterTab =
-    rosterTab === "teams" && !kindCopy.hasTeams ? "roster" : rosterTab;
+  // A tab that doesn't apply to this event kind (teams on an open-play
+  // night) falls back rather than rendering an empty screen.
+  const effectiveTab: EventTab =
+    tab === "teams" && !kindCopy.hasTeams ? "roster" : tab;
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-
-    Promise.all([fetchTournamentById(id), fetchTournamentStats(id)])
-      .then(([tournamentRes, statsRes]) => {
-        if (cancelled) return;
+  const load = useCallback(() => {
+    return Promise.all([fetchTournamentById(id), fetchTournamentStats(id)]).then(
+      ([tournamentRes, statsRes]) => {
         if (tournamentRes.error || !tournamentRes.data) {
-          setError(tournamentRes.error ?? "Failed to load tournament.");
+          setError(tournamentRes.error ?? "Failed to load this event.");
           setTournament(null);
         } else {
           setTournament(tournamentRes.data);
           setError("");
         }
-        if (statsRes.data) {
-          setStats(statsRes.data);
-        } else {
-          setStats(null);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        setStats(statsRes.data ?? null);
+      }
+    );
+  }, [id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    load().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
-  }, [id]);
-
-  const thumb =
-    tournament &&
-    (tournament.image_url || getPresetUrl(tournament.image_preset));
+  }, [load]);
 
   return (
     <>
@@ -117,29 +121,27 @@ function ViewContent({ id }: { id: string }) {
           <Breadcrumbs
             items={[
               { label: "Admin", href: "/admin" },
-              { label: "Tournaments", href: "/admin/tournaments" },
-              { label: tournament?.title ?? "Tournament" },
+              { label: "Events", href: "/admin/tournaments" },
+              { label: tournament?.title ?? "Event" },
             ]}
           />
           <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-                {tournament?.title ?? "Tournament"}
+                {tournament?.title ?? "Event"}
               </h1>
-              {tournament?.slug && (
-                <p className="mt-1 text-sm text-zinc-500 font-mono">
-                  {tournament.slug}
-                </p>
-              )}
+              {tournament && <MetaLine tournament={tournament} />}
             </div>
             {tournament && (
-              <Link
-                href={`/admin/tournaments/${tournament.id}/edit`}
-                className="btn-primary"
-              >
-                <Pencil size={16} />
-                Edit tournament
-              </Link>
+              <div className="flex items-center gap-2 shrink-0">
+                <EventStateBadge tournament={tournament} />
+                {tournament.is_featured && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-brand/20 text-brand">
+                    <Star size={12} className="fill-current" />
+                    On homepage
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -157,107 +159,50 @@ function ViewContent({ id }: { id: string }) {
 
           {!loading && tournament && (
             <>
-              <StatusPills tournament={tournament} />
-
               <StatsCards stats={stats} />
 
-              <div className="grid gap-6 md:grid-cols-3">
-                <div className="md:col-span-2 dashboard-card p-6">
-                  <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-4">
-                    Details
-                  </h2>
-                  <DetailGrid tournament={tournament} />
-                  {tournament.description && (
-                    <div className="mt-6">
-                      <p className="data-label mb-2">Description</p>
-                      <p className="text-zinc-300 whitespace-pre-wrap">
-                        {tournament.description}
-                      </p>
-                    </div>
-                  )}
-                </div>
+              <EventTabs
+                value={effectiveTab}
+                onChange={setTab}
+                showTeams={kindCopy.hasTeams}
+                rosterLabel={kindCopy.rosterHeading}
+              />
 
-                <div className="dashboard-card p-4 flex flex-col gap-3">
-                  <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider px-2 pt-2">
-                    Image
-                  </h2>
-                  <div className="relative w-full aspect-[16/7] rounded-lg overflow-hidden bg-surface-2 border border-border-token">
-                    {thumb ? (
-                      <Image
-                        src={thumb}
-                        alt={tournament.title}
-                        fill
-                        className="object-cover"
-                        sizes="(min-width: 768px) 320px, 100vw"
-                      />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center text-zinc-500">
-                        <Trophy size={24} />
-                      </div>
-                    )}
-                  </div>
-                  <dl className="text-sm px-2 pb-2 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <dt className="text-zinc-400">Display order</dt>
-                      <dd className="text-zinc-200 font-mono">
-                        {tournament.display_order}
-                      </dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-zinc-400">Created</dt>
-                      <dd className="text-zinc-200">
-                        {formatTimestamp(tournament.created_at)}
-                      </dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-zinc-400">Updated</dt>
-                      <dd className="text-zinc-200">
-                        {formatTimestamp(tournament.updated_at)}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              </div>
+              {effectiveTab === "roster" && (
+                <RosterScreen
+                  tournamentId={tournament.id}
+                  showTeams={kindCopy.hasTeams}
+                />
+              )}
 
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
-                    {kindCopy.rosterHeading}
-                  </h2>
-                  {/*
-                    An open play night has no teams, so it gets no Teams tab.
-                    Offering one would be an empty screen inviting the owner to
-                    build a squad for a single Friday evening.
-                  */}
-                  <RosterTabs
-                    value={effectiveRosterTab}
-                    onChange={setRosterTab}
-                    showTeams={kindCopy.hasTeams}
-                    rosterLabel={kindCopy.rosterHeading}
+              {effectiveTab === "teams" && kindCopy.hasTeams && (
+                <TournamentTeamsPanel
+                  tournamentId={tournament.id}
+                  maxTeams={tournament.max_teams}
+                />
+              )}
+
+              {effectiveTab === "schedule" && (
+                <div className="space-y-6">
+                  <TournamentRoundsPanel tournamentId={tournament.id} />
+                  <TournamentMatchesPanel tournamentId={tournament.id} />
+                </div>
+              )}
+
+              {effectiveTab === "updates" && (
+                <TournamentUpdatesPanel tournamentId={tournament.id} />
+              )}
+
+              {effectiveTab === "settings" && (
+                <div className="max-w-4xl">
+                  <TournamentForm
+                    initial={tournament}
+                    onSaved={() => {
+                      void load();
+                    }}
                   />
                 </div>
-
-                {effectiveRosterTab === "roster" && (
-                  <RosterScreen
-                    tournamentId={tournament.id}
-                    showTeams={kindCopy.hasTeams}
-                  />
-                )}
-
-                {/* Keep Registrants mounted to preserve internal filter/sort
-                    state when toggling tabs; matches the pattern used on the
-                    Overview page (Phase 2). */}
-                <div className={effectiveRosterTab === "registrants" ? "" : "hidden"}>
-                  <RegistrationsList tournamentId={tournament.id} />
-                </div>
-
-                {effectiveRosterTab === "teams" && kindCopy.hasTeams && (
-                  <TournamentTeamsPanel
-                    tournamentId={tournament.id}
-                    maxTeams={tournament.max_teams}
-                  />
-                )}
-              </div>
+              )}
             </>
           )}
         </div>
@@ -266,47 +211,95 @@ function ViewContent({ id }: { id: string }) {
   );
 }
 
-function RosterTabs({
+/** Dates · time · place · price, in one quiet line under the title. */
+function MetaLine({ tournament }: { tournament: Tournament }) {
+  const parts: { icon: React.ReactNode; text: string }[] = [];
+  const dates = formatTournamentDateRange(
+    tournament.start_date,
+    tournament.end_date
+  );
+  if (dates && dates !== "—") {
+    parts.push({ icon: <CalendarRange size={13} />, text: dates });
+  }
+  if (tournament.time_start) {
+    parts.push({
+      icon: <Clock size={13} />,
+      text: tournament.time_end
+        ? `${tournament.time_start} – ${tournament.time_end}`
+        : tournament.time_start,
+    });
+  }
+  if (tournament.location) {
+    parts.push({ icon: <MapPin size={13} />, text: tournament.location });
+  }
+  const fee = tournament.entry_fee_cents;
+  if (typeof fee === "number" && Number.isFinite(fee) && fee > 0) {
+    parts.push({
+      icon: <DollarSign size={13} />,
+      text: new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(fee / 100),
+    });
+  }
+  if (parts.length === 0) return null;
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-zinc-400">
+      {parts.map((p, i) => (
+        <span key={i} className="inline-flex items-center gap-1.5">
+          {p.icon}
+          {p.text}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+function EventTabs({
   value,
   onChange,
   showTeams,
   rosterLabel,
 }: {
-  value: RosterTab;
-  onChange: (next: RosterTab) => void;
+  value: EventTab;
+  onChange: (next: EventTab) => void;
   showTeams: boolean;
   rosterLabel: string;
 }) {
-  const tabs: { id: RosterTab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: EventTab; label: string; icon: React.ReactNode }[] = [
     { id: "roster", label: rosterLabel, icon: <Users size={14} /> },
-    { id: "registrants", label: "Details", icon: <ReceiptText size={14} /> },
     ...(showTeams
       ? [{ id: "teams" as const, label: "Teams", icon: <UsersRound size={14} /> }]
       : []),
+    {
+      id: "schedule",
+      label: "Schedule & scores",
+      icon: <ListOrdered size={14} />,
+    },
+    { id: "updates", label: "Announcements", icon: <Megaphone size={14} /> },
+    { id: "settings", label: "Settings", icon: <Settings size={14} /> },
   ];
   return (
     <div
       role="tablist"
-      aria-label="Tournament roster view"
-      className="inline-flex gap-1 bg-surface-2 rounded-lg p-1"
+      aria-label="Event sections"
+      className="inline-flex flex-wrap gap-1 bg-surface-2 rounded-lg p-1"
     >
-      {tabs.map((tab) => {
-        const active = value === tab.id;
+      {tabs.map((t) => {
+        const active = value === t.id;
         return (
           <button
-            key={tab.id}
+            key={t.id}
             type="button"
             role="tab"
             aria-selected={active}
-            onClick={() => onChange(tab.id)}
+            onClick={() => onChange(t.id)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
-              active
-                ? "bg-base text-white"
-                : "text-zinc-400 hover:text-zinc-200"
+              active ? "bg-base text-white" : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            {tab.icon}
-            {tab.label}
+            {t.icon}
+            {t.label}
           </button>
         );
       })}
@@ -314,27 +307,12 @@ function RosterTabs({
   );
 }
 
-function StatusPills({ tournament }: { tournament: Tournament }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <EventStateBadge tournament={tournament} />
-      <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
-          tournament.is_featured
-            ? "bg-brand/20 text-brand"
-            : "bg-surface-2 text-zinc-400 border border-border-token"
-        }`}
-      >
-        <Star
-          size={12}
-          className={tournament.is_featured ? "fill-current" : ""}
-        />
-        {tournament.is_featured ? "Featured" : "Not featured"}
-      </span>
-    </div>
-  );
-}
-
+/**
+ * "Paid" (a status the owner sets, cash included) and "Card payments" (rows
+ * Stripe recorded) are different measurements and routinely differ — cash
+ * marked paid creates no card payment. The labels now say which is which
+ * instead of presenting two unexplained disagreeing numbers.
+ */
 function StatsCards({ stats }: { stats: TournamentStats | null }) {
   const registrantCount = stats?.registrantCount ?? 0;
   const paidCount = stats?.paidRegistrantCount ?? 0;
@@ -347,22 +325,22 @@ function StatsCards({ stats }: { stats: TournamentStats | null }) {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         icon={<Users size={16} />}
-        label="Registrants"
+        label="Signed up"
         value={String(registrantCount)}
       />
       <StatCard
         icon={<CreditCard size={16} />}
-        label="Paid registrants"
+        label="Paid (cash or card)"
         value={`${paidCount} / ${registrantCount}`}
       />
       <StatCard
         icon={<ReceiptText size={16} />}
-        label="Payments succeeded"
+        label="Card payments"
         value={String(paymentCount)}
       />
       <StatCard
         icon={<DollarSign size={16} />}
-        label="Payment total"
+        label="Collected by card"
         value={totalLabel}
       />
     </div>
@@ -387,120 +365,4 @@ function StatCard({
       <p className="data-display text-2xl">{value}</p>
     </div>
   );
-}
-
-function DetailGrid({ tournament }: { tournament: Tournament }) {
-  return (
-    <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-      <DetailItem
-        icon={<Layers size={14} />}
-        label="Format"
-        value={tournament.format ?? "—"}
-      />
-      <DetailItem
-        icon={<CalendarRange size={14} />}
-        label="Dates"
-        value={formatTournamentDateRange(
-          tournament.start_date,
-          tournament.end_date
-        )}
-      />
-      <DetailItem
-        icon={<Clock size={14} />}
-        label="Time window"
-        value={formatTimeRange(tournament.time_start, tournament.time_end)}
-      />
-      <DetailItem
-        icon={<Repeat size={14} />}
-        label="Recurrence"
-        value={tournament.recurrence ?? "—"}
-      />
-      <DetailItem
-        icon={<MapPin size={14} />}
-        label="Location"
-        value={tournament.location ?? "—"}
-      />
-      <DetailItem
-        icon={<DollarSign size={14} />}
-        label="Entry fee"
-        value={formatEntryFee(tournament)}
-      />
-      <DetailItem
-        icon={<Users size={14} />}
-        label="Max teams"
-        value={
-          tournament.max_teams === null ? "—" : String(tournament.max_teams)
-        }
-      />
-      <DetailItem
-        icon={<Hash size={14} />}
-        label="Tournament id"
-        value={tournament.id}
-        mono
-      />
-    </dl>
-  );
-}
-
-function DetailItem({
-  icon,
-  label,
-  value,
-  mono,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div>
-      <dt className="flex items-center gap-1.5 text-zinc-400 text-xs uppercase tracking-wider font-medium mb-1">
-        {icon}
-        {label}
-      </dt>
-      <dd
-        className={`text-zinc-100 ${mono ? "font-mono text-xs break-all" : ""}`}
-      >
-        {value}
-      </dd>
-    </div>
-  );
-}
-
-function formatTimeRange(start: string | null, end: string | null): string {
-  if (!start && !end) return "—";
-  if (start && end) return `${start} – ${end}`;
-  return start ?? end ?? "—";
-}
-
-function formatEntryFee(tournament: Tournament): string {
-  const cents = tournament.entry_fee_cents;
-  if (typeof cents === "number" && Number.isFinite(cents)) {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(cents / 100);
-  }
-  if (typeof tournament.entry_fee === "number") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(tournament.entry_fee);
-  }
-  return "—";
-}
-
-function formatTimestamp(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
 }

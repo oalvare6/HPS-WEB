@@ -12,14 +12,16 @@ export default function NewTournamentPage() {
           <Breadcrumbs
             items={[
               { label: "Admin", href: "/admin" },
-              { label: "Tournaments", href: "/admin/tournaments" },
+              { label: "Events", href: "/admin/tournaments" },
               { label: "New" },
             ]}
           />
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight mt-3 mb-2">
-            New Tournament
+            New event
           </h1>
-          <p className="text-zinc-400">Create a new tournament or event.</p>
+          <p className="text-zinc-400">
+            A tournament season or an open play night.
+          </p>
         </div>
       </section>
 
