@@ -11,10 +11,11 @@ import {
   UserPlus,
   Loader2,
   AlertTriangle,
-  ShieldAlert,
   RefreshCw,
   PenLine,
   ExternalLink,
+  FileCheck,
+  Download,
 } from "lucide-react";
 import {
   progressByTeam,
@@ -65,6 +66,7 @@ export default function RosterScreen({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [signing, setSigning] = useState<RosterRow | null>(null);
+  const [checkingWaivers, setCheckingWaivers] = useState(false);
   /** `undefined` = no team filter; `null` = the unassigned bucket. */
   const [teamFilter, setTeamFilter] = useState<string | null | undefined>(undefined);
 
@@ -195,6 +197,67 @@ export default function RosterScreen({
     }));
   };
 
+  /**
+   * Ask DocuSeal for anything we're missing: signatures the webhook never
+   * delivered, and documents for waivers recorded signed without a stored
+   * link (the B4 backfill). Site-wide, not just this event — one honest
+   * button beats making the owner learn which screen fixes which gap.
+   */
+  const checkWaivers = async () => {
+    setCheckingWaivers(true);
+    try {
+      const res = await fetch("/api/admin/sync-waivers", { method: "POST" });
+      const body = (await res.json()) as {
+        synced?: number;
+        withDocument?: number;
+        total?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        toast.error(body.error ?? "Could not reach DocuSeal.");
+        return;
+      }
+      if ((body.total ?? 0) === 0) {
+        toast.success("Nothing to fetch — every waiver we know about is already recorded.");
+      } else {
+        toast.success(
+          `Checked ${body.total} waiver(s): recovered ${body.synced ?? 0}, ${body.withDocument ?? 0} with the signed document.`
+        );
+      }
+      await load({ quiet: true });
+    } catch {
+      toast.error("Could not reach DocuSeal.");
+    } finally {
+      setCheckingWaivers(false);
+    }
+  };
+
+  /** The roster as a spreadsheet — name, phone, team, waiver, payment. */
+  const downloadCsv = () => {
+    const headers = ["First name", "Last name", "Phone", "Email", "Team", "Role", "Waiver", "Paid", "Payment note"];
+    const csvRows = rows.map((r) => [
+      r.firstName,
+      r.lastName,
+      r.phone ?? "",
+      r.email ?? "",
+      r.teamName ?? "",
+      r.role === "guest" ? "Guest" : "Player",
+      r.waiverOk ? "On file" : "Needed",
+      r.paid ? "Yes" : "No",
+      r.freeEntryVia ? `Free via ${r.freeEntryVia}` : r.paymentMethod === "cash" && !r.paid ? "Bringing cash" : "",
+    ]);
+    const csv = [headers, ...csvRows]
+      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `roster-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-4">
       <TotalsBar totals={data?.totals} loading={loading} />
@@ -247,6 +310,27 @@ export default function RosterScreen({
             title="Refresh"
           >
             <RefreshCw size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => void checkWaivers()}
+            disabled={checkingWaivers}
+            className="p-2 text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
+            title="Check DocuSeal for signed waivers and documents we haven't recorded yet"
+          >
+            {checkingWaivers ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <FileCheck size={15} />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={downloadCsv}
+            className="p-2 text-zinc-400 hover:text-white transition-colors"
+            title="Download this roster as a spreadsheet"
+          >
+            <Download size={15} />
           </button>
           <button
             type="button"
@@ -580,21 +664,36 @@ function RosterTable({
               <td className="py-2.5 px-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   <WaiverCell row={r} />
-                  {r.role === "player" && r.waiverEvidence !== "document" && (
+                  {/*
+                    Loud only when the person actually needs one. A covered
+                    row keeps the pen as a quiet icon so real signatures can
+                    still be collected at the field without the screen
+                    nagging people who are already cleared.
+                  */}
+                  {r.role === "player" && !r.waiverOk && (
                     <button
                       type="button"
                       onClick={() => onSignWaiver(r)}
-                      title={
-                        r.waiverOk
-                          ? "Replace this with a real signed document"
-                          : "Sign the waiver here, now, on this laptop"
-                      }
+                      title="Sign the waiver here, now, on this laptop"
                       className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/10 transition-colors"
                     >
                       <PenLine size={11} />
                       Sign now
                     </button>
                   )}
+                  {r.role === "player" &&
+                    r.waiverOk &&
+                    r.waiverEvidence !== "document" && (
+                      <button
+                        type="button"
+                        onClick={() => onSignWaiver(r)}
+                        title="Collect a real signed document to replace the hand-recorded one"
+                        aria-label="Collect a real signature"
+                        className="p-1 text-zinc-500 hover:text-brand transition-colors"
+                      >
+                        <PenLine size={11} />
+                      </button>
+                    )}
                 </div>
               </td>
 
@@ -662,23 +761,19 @@ function RosterTable({
   );
 }
 
+/**
+ * A covered person reads as covered — a green check — whatever the paper
+ * trail looks like (owner's decision, 2026-08-17). The audit's trigger case:
+ * the operator himself, waiver valid through 2027, shown as "needs to sign"
+ * because his record was an admin tick. Coverage and evidence are different
+ * questions, so the evidence gap is a quiet tag, not an alarm.
+ */
 function WaiverCell({ row }: { row: RosterRow }) {
   if (!row.waiverOk) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-zinc-400">
         <X size={12} className="text-red-400" />
-        Missing
-      </span>
-    );
-  }
-  if (row.waiverEvidence === "override") {
-    return (
-      <span
-        title="Marked signed by an admin. There is no signed document on file."
-        className="inline-flex items-center gap-1.5 text-xs text-yellow-400"
-      >
-        <ShieldAlert size={12} />
-        Override
+        Needs waiver
       </span>
     );
   }
@@ -689,13 +784,27 @@ function WaiverCell({ row }: { row: RosterRow }) {
         year: "numeric",
       })
     : null;
+  const noDocument = row.waiverEvidence !== "document";
+  const noDocumentHint =
+    row.waiverEvidence === "override"
+      ? "Covered — but recorded by hand, so there is no signed document to produce. Use the pen to collect a real signature when convenient."
+      : "Covered — signed, but the document link was never stored. The document backfill can recover it.";
   return (
     <span
-      title={expires ? `Good through ${expires}` : undefined}
+      title={
+        noDocument
+          ? noDocumentHint
+          : expires
+            ? `Good through ${expires}`
+            : undefined
+      }
       className="inline-flex items-center gap-1.5 text-xs text-green-400"
     >
       <Check size={12} />
       {expires ? `to ${expires}` : "On file"}
+      {noDocument && (
+        <span className="text-[10px] text-zinc-500 normal-case">no doc</span>
+      )}
     </span>
   );
 }
@@ -726,7 +835,43 @@ function SignWaiverModal({
   const [starting, setStarting] = useState(false);
   const [checking, setChecking] = useState(false);
   const [signed, setSigned] = useState(false);
+  const [marking, setMarking] = useState(false);
   const [error, setError] = useState("");
+
+  /**
+   * The paper escape hatch: a physically-signed waiver is real coverage the
+   * system cannot see. This records it as covered WITHOUT a document — the
+   * roster will show the quiet "no doc" tag, not a green lie.
+   */
+  const markSignedOnPaper = async () => {
+    if (
+      !window.confirm(
+        `Mark ${rosterFullName(row) || "this player"} as covered without a signed document in the system? Only do this if you're holding their real signed paper waiver.`
+      )
+    ) {
+      return;
+    }
+    setMarking(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/override-waiver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registrationId: row.id }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(body.error ?? "Could not record that.");
+        return;
+      }
+      setSigned(true);
+      toast.success(`${rosterFullName(row)} marked as covered.`);
+    } catch {
+      setError("Could not record that.");
+    } finally {
+      setMarking(false);
+    }
+  };
 
   const start = async () => {
     setStarting(true);
@@ -861,6 +1006,17 @@ function SignWaiverModal({
               )}
               {starting ? "Opening…" : "Start signing"}
             </button>
+            <p className="text-xs text-zinc-500 pt-1">
+              Signed a paper waiver instead?{" "}
+              <button
+                type="button"
+                onClick={() => void markSignedOnPaper()}
+                disabled={marking}
+                className="underline underline-offset-2 hover:text-zinc-300 disabled:opacity-50"
+              >
+                {marking ? "Recording…" : "Mark as covered without a document"}
+              </button>
+            </p>
           </div>
         ) : (
           <div className="space-y-3">

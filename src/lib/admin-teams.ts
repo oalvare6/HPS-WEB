@@ -28,7 +28,12 @@ export type AdminTeamRegistration = {
   email: string;
   registration_type: string;
   payment_status: string;
-  waiver_signed: boolean;
+  /**
+   * Server-computed by the one shared waiver function. The raw
+   * `waiver_signed` column is deliberately not carried here — reading it
+   * directly is how this panel used to contradict the Roster one tab over.
+   */
+  waiver_ok: boolean;
 };
 
 export type TeamUpdateInput = {

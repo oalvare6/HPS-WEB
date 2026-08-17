@@ -16,18 +16,51 @@ export async function POST() {
   }
 
   try {
-    const { data: pending, error: fetchErr } = await supabaseAdmin
-      .from("registrations")
-      .select("id, contact_id, waiver_type, docuseal_submission_id, first_name, last_name")
-      .eq("docuseal_status", "sent")
-      .not("docuseal_submission_id", "is", null);
+    /*
+      Two populations, one pass:
 
+      1. `sent` — the player has an outstanding DocuSeal form; if they
+         finished it and the webhook missed it, this records the signature.
+      2. `signed` with NO stored document — the B4 backfill. 97 production
+         rows were marked signed while `waiver_document_url` stayed NULL
+         (the old sync never wrote it); their PDFs still exist in DocuSeal
+         and only need fetching. A waiver you cannot produce is not a waiver.
+    */
+    const [pendingRes, missingDocRes] = await Promise.all([
+      supabaseAdmin
+        .from("registrations")
+        .select(
+          "id, contact_id, waiver_type, docuseal_submission_id, first_name, last_name"
+        )
+        .eq("docuseal_status", "sent")
+        .not("docuseal_submission_id", "is", null),
+      supabaseAdmin
+        .from("registrations")
+        .select(
+          "id, contact_id, waiver_type, docuseal_submission_id, first_name, last_name"
+        )
+        .eq("docuseal_status", "signed")
+        .is("waiver_document_url", null)
+        .not("docuseal_submission_id", "is", null),
+    ]);
+
+    const fetchErr = pendingRes.error ?? missingDocRes.error;
     if (fetchErr) {
-      console.error("Sync: failed to fetch pending registrations", fetchErr);
+      console.error("Sync: failed to fetch registrations", fetchErr);
       return NextResponse.json({ error: "Database query failed." }, { status: 500 });
     }
 
-    if (!pending || pending.length === 0) {
+    const seen = new Set<string>();
+    const pending = [
+      ...(pendingRes.data ?? []),
+      ...(missingDocRes.data ?? []),
+    ].filter((reg) => {
+      if (seen.has(reg.id)) return false;
+      seen.add(reg.id);
+      return true;
+    });
+
+    if (pending.length === 0) {
       return NextResponse.json({ synced: 0, total: 0 });
     }
 

@@ -151,9 +151,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 /**
  * DELETE /api/admin/registrations/[id]
  *
- * Hard-deletes the registration row. The associated contact and any linked
- * payment rows remain so we keep an audit trail. Used by the admin
- * Registrations list's "Unregister" row action.
+ * Removes a person from the roster the same way a player cancel does: stamps
+ * `cancelled_at` and keeps the row. This used to hard-delete — the only
+ * writer in the system that destroyed registration history while everything
+ * else (player cancel, the dedupe cleanup) records it, and one click away
+ * from actions that don't. Reversible with a single UPDATE if the person is
+ * re-added.
  */
 export async function DELETE(_req: NextRequest, { params }: Ctx) {
   const unauthorized = await verifyAdmin();
@@ -165,10 +168,21 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   }
 
   try {
+    const { data: existing } = await supabaseAdmin
+      .from("registrations")
+      .select("notes")
+      .eq("id", id)
+      .maybeSingle();
+    const note = "Removed from the roster by an admin.";
+    const notes = existing?.notes?.trim()
+      ? `${existing.notes.trim()}\n${note}`
+      : note;
+
     const { error } = await supabaseAdmin
       .from("registrations")
-      .delete()
-      .eq("id", id);
+      .update({ cancelled_at: new Date().toISOString(), notes })
+      .eq("id", id)
+      .is("cancelled_at", null);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

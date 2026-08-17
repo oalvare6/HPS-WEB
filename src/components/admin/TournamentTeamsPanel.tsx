@@ -447,7 +447,7 @@ function TeamCard({
                   {fullName(m)}
                 </span>
                 <PaymentDot status={m.payment_status} />
-                <WaiverDot signed={m.waiver_signed} />
+                <WaiverDot ok={m.waiver_ok} />
                 {isCaptain ? (
                   <button
                     type="button"
@@ -593,7 +593,7 @@ function UnassignedRow({
         {registration.email}
       </span>
       <PaymentDot status={registration.payment_status} />
-      <WaiverDot signed={registration.waiver_signed} />
+      <WaiverDot ok={registration.waiver_ok} />
       <div className="relative" ref={wrapperRef}>
         <button
           type="button"
@@ -658,15 +658,20 @@ function PaymentDot({ status }: { status: string }): React.ReactElement {
   );
 }
 
-function WaiverDot({ signed }: { signed: boolean }): React.ReactElement {
+/**
+ * Fed by the server-computed `waiver_ok` — the same shared answer the Roster
+ * uses — never by the raw `waiver_signed` column, which knows nothing about
+ * the contact's valid waiver and told the owner a covered person was unsigned.
+ */
+function WaiverDot({ ok }: { ok: boolean }): React.ReactElement {
   return (
     <span
-      title={`Waiver: ${signed ? "signed" : "unsigned"}`}
+      title={`Waiver: ${ok ? "on file" : "needed"}`}
       className={`inline-flex items-center justify-center w-4 h-4 rounded-full ${
-        signed ? "bg-brand/20 text-brand" : "bg-base text-zinc-500"
+        ok ? "bg-brand/20 text-brand" : "bg-base text-zinc-500"
       }`}
     >
-      {signed ? <CheckCircle size={10} /> : <XCircle size={10} />}
+      {ok ? <CheckCircle size={10} /> : <XCircle size={10} />}
     </span>
   );
 }

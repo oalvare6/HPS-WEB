@@ -88,7 +88,7 @@ export function isHappeningToday(
   return day === todayInHouston(now);
 }
 
-type StatefulTournament = DatedTournament & {
+export type StatefulTournament = DatedTournament & {
   status: TournamentStatus;
   is_draft: boolean;
   registration_open: boolean;

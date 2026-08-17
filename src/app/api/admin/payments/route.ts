@@ -1,8 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET() {
   const unauthorized = await verifyAdmin();
@@ -39,53 +37,6 @@ export async function GET() {
   }
 }
 
-/**
- * Bulk link unmatched payments to a tournament. Useful right after the
- * Phase 0 backfill leaves rows with tournament_id = null.
- *
- * Body: { tournament_id: string, payment_ids: string[] }
- */
-export async function PATCH(req: NextRequest) {
-  const unauthorized = await verifyAdmin();
-  if (unauthorized) return unauthorized;
-
-  try {
-    const body = (await req.json()) as {
-      tournament_id?: string;
-      payment_ids?: string[];
-    };
-    const tournamentId = body.tournament_id ?? "";
-    const ids = Array.isArray(body.payment_ids) ? body.payment_ids : [];
-
-    if (!UUID_RE.test(tournamentId)) {
-      return NextResponse.json(
-        { error: "tournament_id is required." },
-        { status: 400 }
-      );
-    }
-    const valid = ids.filter((id) => UUID_RE.test(id));
-    if (valid.length === 0) {
-      return NextResponse.json(
-        { error: "payment_ids must be a non-empty array of UUIDs." },
-        { status: 400 }
-      );
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from("payments")
-      .update({ tournament_id: tournamentId })
-      .in("id", valid)
-      .select("id");
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    return NextResponse.json({ updated: data?.length ?? 0 });
-  } catch (err) {
-    console.error("Admin payments PATCH error:", err);
-    return NextResponse.json(
-      { error: "Unexpected server error." },
-      { status: 500 }
-    );
-  }
-}
+// (No PATCH: the bulk "link payments to a tournament" handler had no UI
+// caller, and the 2026-08-17 data cleanup re-homed every unlinked payment —
+// zero rows with tournament_id NULL remain.)

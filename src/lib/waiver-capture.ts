@@ -94,8 +94,10 @@ export type RecordSignedWaiverInput = {
    * How we learned about the signature. Must be one of the values allowed by
    * `contacts_waiver_source_check` — see
    * supabase/migrations/20260812210000_create_waiver_signatures.sql.
+   * `admin_override` is an admin's word with no document behind it; it goes
+   * through here too so there is exactly ONE writer of waiver state.
    */
-  source?: "docuseal" | "in_app";
+  source?: "docuseal" | "in_app" | "admin_override";
 };
 
 export type RecordSignedWaiverResult = {

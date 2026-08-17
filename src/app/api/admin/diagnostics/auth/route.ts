@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-const PRODUCTION_ORIGIN = "https://houstonpremiersoccer.com";
+/**
+ * The WWW host, never the apex. One host serves this site
+ * (src/lib/canonical-host.ts); the apex 307s at Vercel's edge, and a
+ * third-party webhook pointed at it dies silently — that exact mistake cost
+ * a month of DocuSeal deliveries. This screen previously asserted the apex
+ * as the expected value, teaching the owner the failure mode.
+ */
+const PRODUCTION_ORIGIN = "https://www.houstonpremiersoccer.com";
 const LOCAL_CALLBACK = "http://localhost:3000/auth/callback";
 
 type CheckStatus = "ok" | "warn" | "fail" | "manual";
@@ -134,7 +141,7 @@ function buildChecks(input: {
     status: input.supabaseUrlSet ? "ok" : "fail",
     detail: input.supabaseUrlSet
       ? "Present in server environment."
-      : "Missing — magic link and session refresh will fail.",
+      : "Missing — Google sign-in and session refresh will fail.",
   });
 
   checks.push({
@@ -211,20 +218,18 @@ function buildChecks(input: {
       "Must include every /auth/callback origin you use (production, localhost, previews). Listed under redirectUrlsExpected in this response.",
   });
 
+  // Magic-link and SMTP checks were removed with the sign-in methods they
+  // served (A8: Google-only). What replaced them is the check this app has
+  // actually been burned by: a webhook configured against the apex domain.
   checks.push({
-    id: "dashboard_smtp",
-    label: "Custom SMTP + DNS (SPF/DKIM)",
+    id: "webhook_host_rule",
+    label: "Third-party webhooks must use the www host",
     status: "manual",
     detail:
-      "Enable custom SMTP in Supabase for reliable production delivery. See docs/AUTH-CONFIG.md section 4.",
-  });
-
-  checks.push({
-    id: "dashboard_email_template",
-    label: "Magic Link email template uses {{ .ConfirmationURL }}",
-    status: "manual",
-    detail:
-      "Authentication → Email Templates → Magic Link. See docs/AUTH-CONFIG.md section 3.",
+      `Any webhook (Stripe, DocuSeal) must point at ${PRODUCTION_ORIGIN}, ` +
+      "never the bare houstonpremiersoccer.com — the apex silently redirects " +
+      "and senders that don't follow redirects will report success while " +
+      "delivering nothing. Check the sender's own delivery log, not just this app.",
   });
 
   return checks;

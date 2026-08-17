@@ -13,7 +13,10 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (unauthorized) return unauthorized;
 
   const { id } = await ctx.params;
-  const { direction } = (await request.json()) as { direction?: "up" | "down" };
+  const { direction, swap_with } = (await request.json()) as {
+    direction?: "up" | "down";
+    swap_with?: string;
+  };
   if (direction !== "up" && direction !== "down") {
     return NextResponse.json({ error: "Invalid direction." }, { status: 400 });
   }
@@ -32,9 +35,26 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (idx === -1) {
     return NextResponse.json({ error: "Tournament not found." }, { status: 404 });
   }
-  const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= rows.length) {
-    return NextResponse.json({ ok: true, noop: true });
+
+  /*
+    The admin list shows tournaments and open-play nights as separate
+    sections, so "move up" must swap with the neighbor IN THAT SECTION —
+    the client names it via `swap_with`. Without it (older callers), fall
+    back to the adjacent row in the one global display_order sequence.
+    Pressing "down" on the last tournament used to silently swap it with the
+    first open-play night in the other table.
+  */
+  let swapIdx: number;
+  if (typeof swap_with === "string" && swap_with.length > 0) {
+    swapIdx = rows.findIndex((r) => r.id === swap_with);
+    if (swapIdx === -1) {
+      return NextResponse.json({ error: "Swap target not found." }, { status: 404 });
+    }
+  } else {
+    swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= rows.length) {
+      return NextResponse.json({ ok: true, noop: true });
+    }
   }
 
   const a = rows[idx];

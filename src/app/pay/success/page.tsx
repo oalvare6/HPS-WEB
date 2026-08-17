@@ -36,10 +36,10 @@ type VerifyState =
  *     registrations" / nothing) based on the player session and whether the
  *     email already has an `auth.users` row.
  *
- * Analytics still fire client-side via `<PaySuccessTracker />`. The
- * `/api/stripe/verify-session` route is intentionally left untouched —
- * other entry points may still call it, and the webhook is the
- * authoritative recorder.
+ * Analytics still fire client-side via `<PaySuccessTracker />`. This page
+ * records the payment itself via `recordCheckoutSessionPayment`; the old
+ * `/api/stripe/verify-session` fallback route was deleted 2026-08-17 after
+ * two audits found zero callers.
  */
 export default async function PaySuccessPage({
   searchParams,

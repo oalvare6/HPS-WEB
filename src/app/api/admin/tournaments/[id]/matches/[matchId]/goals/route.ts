@@ -29,20 +29,8 @@ async function resolveMatch(
   return { slug: (tournament?.slug as string | undefined) ?? "" };
 }
 
-export async function GET(_request: Request, ctx: Ctx) {
-  const unauthorized = await verifyAdmin();
-  if (unauthorized) return unauthorized;
-
-  const { matchId } = await ctx.params;
-  const { data, error } = await supabaseAdmin
-    .from("match_scorers")
-    .select("*")
-    .eq("match_id", matchId)
-    .order("sort_order", { ascending: true });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ scorers: data ?? [] });
-}
+// (No GET: scorers arrive embedded in the matches list; nothing ever called
+// a standalone goals GET.)
 
 export async function POST(request: Request, ctx: Ctx) {
   const unauthorized = await verifyAdmin();

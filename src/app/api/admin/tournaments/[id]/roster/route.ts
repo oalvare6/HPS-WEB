@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { normalizePhone } from "@/lib/contacts";
 import {
-  isWaiverDateValid,
+  waiverStatusFor,
   totalsFromRows,
   walkInEmailForPhone,
   isPlaceholderEmail,
@@ -11,7 +11,7 @@ import {
   type RosterPayload,
   type RosterRow,
   type RosterTeam,
-  type WaiverEvidence,
+  type WaiverStatus,
 } from "@/lib/admin-roster";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -55,35 +55,20 @@ function embeddedTitle(value: unknown): string | null {
   return typeof title === "string" ? title : null;
 }
 
-/**
- * How solid this person's waiver is.
- *
- * The distinction matters: production has 39 of 57 contact waivers recorded as
- * `admin_override` — a ticked box with no signature behind it. A roster that
- * shows those as a plain ✓ hides real legal exposure, so an override is
- * reported as its own evidence level and the screen marks it.
- */
+/** One shared answer for the whole admin — see waiverStatusFor in admin-roster. */
 function waiverEvidenceFor(
   contact: ContactJoin,
   regSignedAt: string | null,
   regDocumentUrl: string | null
-): { ok: boolean; evidence: WaiverEvidence; expiresAt: string | null } {
-  const contactValid =
-    Boolean(contact?.waiver_expires_at) &&
-    Date.parse(contact!.waiver_expires_at!) > Date.now();
-  const regValid = isWaiverDateValid(regSignedAt);
-
-  if (!contactValid && !regValid) {
-    return { ok: false, evidence: "none", expiresAt: null };
-  }
-
-  const expiresAt = contactValid ? contact!.waiver_expires_at : null;
-  const documentUrl = contact?.waiver_document_url ?? regDocumentUrl;
-  if (documentUrl) return { ok: true, evidence: "document", expiresAt };
-  if (contact?.waiver_source === "admin_override") {
-    return { ok: true, evidence: "override", expiresAt };
-  }
-  return { ok: true, evidence: "signed", expiresAt };
+): WaiverStatus {
+  return waiverStatusFor({
+    contactSignedAt: contact?.waiver_signed_at,
+    contactExpiresAt: contact?.waiver_expires_at,
+    contactDocumentUrl: contact?.waiver_document_url,
+    contactSource: contact?.waiver_source,
+    regSignedAt,
+    regDocumentUrl,
+  });
 }
 
 /**
@@ -341,16 +326,20 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       email = created.email;
     }
 
-    // Don't add the same person to the same event twice.
-    const { data: dupe } = await supabaseAdmin
+    // Don't add the same person to the same event twice. Only LIVE rows count:
+    // a cancelled row means they gave up the spot and may absolutely re-join
+    // (the old maybeSingle() with no filter refused those people, and threw on
+    // anyone with a cancelled row plus a live one).
+    const { data: dupes } = await supabaseAdmin
       .from("registrations")
       .select("id")
       .eq("tournament_id", id)
       .eq("contact_id", contactId)
-      .maybeSingle();
-    if (dupe) {
+      .is("cancelled_at", null)
+      .limit(1);
+    if (dupes && dupes.length > 0) {
       return NextResponse.json(
-        { error: "That person is already on this roster.", id: dupe.id },
+        { error: "That person is already on this roster.", id: dupes[0].id },
         { status: 409 }
       );
     }
@@ -379,9 +368,18 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       .single();
 
     if (error || !inserted) {
+      // The one-live-spot index is the last line of defense against a race
+      // between the check above and this insert. Its 23505 means "already on
+      // the roster", and must never surface as a generic failure (CLAUDE.md).
+      if (error?.code === "23505") {
+        return NextResponse.json(
+          { error: "That person is already on this roster." },
+          { status: 409 }
+        );
+      }
       console.error("[roster] walk-in insert failed:", error?.message);
       return NextResponse.json(
-        { error: error?.message ?? "Could not add this player." },
+        { error: "Could not add this player." },
         { status: 500 }
       );
     }

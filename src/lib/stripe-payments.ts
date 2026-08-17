@@ -73,10 +73,15 @@ export async function recordCheckoutSessionPayment(
 
   let registrationId: string | null = registrationIdMeta;
   if (!registrationId) {
+    // Live rows only. Without the cancelled_at filter a late webhook could
+    // mark a row the player had already given up as 'paid' while their real
+    // re-signup stayed pending — the exact ghost-roster state the dedupe
+    // migration existed to kill.
     let query = supabaseAdmin
       .from("registrations")
       .select("id")
       .eq("email", email)
+      .is("cancelled_at", null)
       .order("created_at", { ascending: false })
       .limit(1);
     if (tournamentId) {

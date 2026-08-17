@@ -131,6 +131,56 @@ export function isWaiverDateValid(
   return signedMs + WAIVER_VALIDITY_DAYS * 24 * 60 * 60 * 1000 > now;
 }
 
+/** The waiver columns a status decision needs, from either table's shape. */
+export type WaiverStatusInput = {
+  contactSignedAt?: string | null;
+  contactExpiresAt?: string | null;
+  contactDocumentUrl?: string | null;
+  contactSource?: string | null;
+  regSignedAt?: string | null;
+  regDocumentUrl?: string | null;
+};
+
+export type WaiverStatus = {
+  ok: boolean;
+  evidence: WaiverEvidence;
+  expiresAt: string | null;
+};
+
+/**
+ * THE one answer to "is this person's waiver good, and how good is the
+ * evidence". Every admin surface must call this — the audit found four
+ * screens computing it four different ways, which is how the same person
+ * read "signed" on one tab and "pending" on the next.
+ *
+ * A person is covered when either the contact's stored expiry is in the
+ * future or the registration's own signature date is inside the 365-day
+ * window. Evidence grades the paper trail: `document` (a signed file we can
+ * produce), `signed` (recorded signed, link never stored), `override` (an
+ * admin's tick, nothing behind it). Coverage and evidence are separate on
+ * purpose: an override still clears someone to play — the owner decided a
+ * covered person shows a green check — but the evidence level survives so
+ * the field workflow can still collect a real signature.
+ */
+export function waiverStatusFor(input: WaiverStatusInput): WaiverStatus {
+  const contactValid =
+    Boolean(input.contactExpiresAt) &&
+    Date.parse(input.contactExpiresAt!) > Date.now();
+  const regValid = isWaiverDateValid(input.regSignedAt);
+
+  if (!contactValid && !regValid) {
+    return { ok: false, evidence: "none", expiresAt: null };
+  }
+
+  const expiresAt = contactValid ? input.contactExpiresAt ?? null : null;
+  const documentUrl = input.contactDocumentUrl ?? input.regDocumentUrl;
+  if (documentUrl) return { ok: true, evidence: "document", expiresAt };
+  if (input.contactSource === "admin_override") {
+    return { ok: true, evidence: "override", expiresAt };
+  }
+  return { ok: true, evidence: "signed", expiresAt };
+}
+
 export function emptyTotals(): RosterTotals {
   return {
     signedUp: 0,

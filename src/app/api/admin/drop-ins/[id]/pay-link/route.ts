@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { getStripe } from "@/lib/stripe";
+import { acceptsPayments, type StatefulTournament } from "@/lib/tournament-state";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       .from("drop_ins")
       .select(
         `id, amount_cents, payment_status, tournament_id, contact_id, paid_by_contact_id,
-         tournament:tournaments ( id, title, payments_open ),
+         tournament:tournaments ( id, title, slug, status, registration_open, payments_open, is_draft, start_date, end_date ),
          contact:contacts ( id, email, first_name, last_name ),
          paid_by:contacts!drop_ins_paid_by_contact_id_fkey ( id, email )`
       )
@@ -48,9 +49,12 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const tournament = Array.isArray(data.tournament)
       ? data.tournament[0]
       : data.tournament;
-    if (tournament && !tournament.payments_open) {
+    // acceptsPayments, not raw payments_open: the audit found this was the
+    // ONE remaining checkout path missing the Phase-1a calendar backstop, so
+    // a past event with the flag left on could still sell entry here.
+    if (tournament && !acceptsPayments(tournament as StatefulTournament)) {
       return NextResponse.json(
-        { error: "Tournament is not currently accepting payments." },
+        { error: "This event is not currently accepting payments." },
         { status: 400 }
       );
     }

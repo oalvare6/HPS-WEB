@@ -130,27 +130,6 @@ export async function getPaymentsOpenTournaments(): Promise<PublicTournamentsRes
 }
 
 /**
- * Fetch a single tournament by id.
- */
-export async function getTournamentById(id: string): Promise<Tournament | null> {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from("tournaments")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-    if (error) {
-      console.error("[tournaments] by-id failed:", error.message);
-      return null;
-    }
-    return (data as Tournament) ?? null;
-  } catch (err) {
-    console.error("[tournaments] by-id failed:", err);
-    return null;
-  }
-}
-
-/**
  * Returns up to 3 tournaments to show in the homepage hero carousel:
  *   1. Admin-pinned (`is_featured = true`), in display_order/start_date order.
  *   2. Fallback when nothing is pinned: the next single tournament with
