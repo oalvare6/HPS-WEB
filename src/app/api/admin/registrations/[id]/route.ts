@@ -29,9 +29,14 @@ function isPaymentStatus(value: unknown): value is RegistrationPaymentStatus {
  *  - payment_status: one of RegistrationPaymentStatus
  *  - team_id: uuid or null. When non-null, the team's tournament_id must match
  *    the registration's tournament_id (no cross-tournament rosters).
+ *  - emergency_name / emergency_phone: filled in from the Roster when a
+ *    player has none on file. Written to the person as well as this row —
+ *    an emergency contact belongs to the human, not to one signup, and the
+ *    quick-join path copies it from the person's record, so filling it here
+ *    stops the same gap reappearing at the next event.
  *
- * Used by the admin Registrations list's "Mark as Paid" row action and by the
- * Phase 3 Teams tab on the tournament view (assign / unassign a registrant).
+ * Used by the admin Roster (paid toggle, team picker, emergency contact) and
+ * by the Teams tab (assign / unassign a player).
  */
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const unauthorized = await verifyAdmin();
@@ -58,6 +63,29 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       );
     }
     patch.payment_status = body.payment_status;
+  }
+
+  let emergencyName: string | undefined;
+  let emergencyPhone: string | undefined;
+  if ("emergency_name" in body) {
+    if (typeof body.emergency_name !== "string") {
+      return NextResponse.json(
+        { error: "Invalid emergency_name." },
+        { status: 400 }
+      );
+    }
+    emergencyName = body.emergency_name.trim().slice(0, 120);
+    patch.emergency_name = emergencyName;
+  }
+  if ("emergency_phone" in body) {
+    if (typeof body.emergency_phone !== "string") {
+      return NextResponse.json(
+        { error: "Invalid emergency_phone." },
+        { status: 400 }
+      );
+    }
+    emergencyPhone = body.emergency_phone.trim().slice(0, 40);
+    patch.emergency_phone = emergencyPhone;
   }
 
   let teamIdToSet: string | null | undefined = undefined;
@@ -123,7 +151,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       .from("registrations")
       .update(patch)
       .eq("id", id)
-      .select("id, payment_status, team_id")
+      .select("id, payment_status, team_id, contact_id")
       .single();
 
     if (error || !data) {
@@ -132,6 +160,28 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         { error: error?.message ?? "Update failed." },
         { status }
       );
+    }
+
+    /*
+      Promote the emergency contact to the person. Best-effort: the row the
+      owner is looking at is already correct, and a failure here only means
+      the next signup asks again. Deliberately last so a contacts hiccup
+      cannot fail a paid/team change.
+    */
+    if (data.contact_id && (emergencyName !== undefined || emergencyPhone !== undefined)) {
+      const contactPatch: Record<string, string> = {};
+      if (emergencyName !== undefined) contactPatch.emergency_name = emergencyName;
+      if (emergencyPhone !== undefined) contactPatch.emergency_phone = emergencyPhone;
+      const { error: contactErr } = await supabaseAdmin
+        .from("contacts")
+        .update(contactPatch)
+        .eq("id", data.contact_id);
+      if (contactErr) {
+        console.warn(
+          "[admin registrations] emergency contact promotion failed:",
+          contactErr.message
+        );
+      }
     }
 
     return NextResponse.json({

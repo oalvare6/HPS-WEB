@@ -176,11 +176,20 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         */
         freeEntryVia: embeddedTitle(r.free_entry_tournament),
         needsReview: r.needs_admin_review === true,
-        // A walk-in added from this screen still owes us the real details.
-        incomplete:
-          isPlaceholderEmail(email) ||
-          r.dob === WALK_IN_PLACEHOLDER.dob ||
-          !r.emergency_name,
+        /*
+          Named gaps, not a mystery flag. The emergency contact is the one
+          that actually matters on a pitch, and it goes missing for two
+          reasons: a walk-in added at the field (D8), and the one-tap
+          returning-player join, which copies it from the person's record
+          and writes nothing when that is blank too.
+        */
+        missing: [
+          !r.emergency_name?.trim() ? "emergency contact" : null,
+          r.dob === WALK_IN_PLACEHOLDER.dob ? "date of birth" : null,
+          isPlaceholderEmail(email) ? "email" : null,
+        ].filter((m): m is string => m !== null),
+        emergencyName: r.emergency_name?.trim() || null,
+        emergencyPhone: r.emergency_phone?.trim() || null,
         createdAt: r.created_at,
       };
     });
@@ -209,7 +218,10 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         // definition, so there is no intent to record.
         paymentMethod: null,
         needsReview: false,
-        incomplete: false,
+        // A one-night guest is not asked for a season's worth of detail.
+        missing: [],
+        emergencyName: null,
+        emergencyPhone: null,
         createdAt: d.created_at,
       };
     });

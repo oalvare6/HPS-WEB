@@ -58,8 +58,20 @@ export type RosterRow = {
   freeEntryVia?: string | null;
   /** Flagged by `linkRegistrationToContact` when email and phone disagree. */
   needsReview: boolean;
-  /** True for a walk-in added from this screen with details still missing. */
-  incomplete: boolean;
+  /**
+   * What this person still owes us, already in the owner's words — e.g.
+   * `["emergency contact"]`. Empty when the record is complete.
+   *
+   * Named rather than a bare `incomplete` boolean because the tag has to be
+   * actionable: "needs details" told the owner something was wrong and left
+   * him to guess what. Walk-ins start out missing things by design (D8),
+   * but so does anyone who joined through the one-tap returning-player flow,
+   * which never asks for an emergency contact.
+   */
+  missing: string[];
+  /** Emergency contact as it stands, so the row can offer to fill it in. */
+  emergencyName: string | null;
+  emergencyPhone: string | null;
   createdAt: string;
 };
 

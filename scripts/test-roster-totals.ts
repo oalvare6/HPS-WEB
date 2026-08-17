@@ -43,7 +43,9 @@ function row(over: Partial<RosterRow>): RosterRow {
     paymentStatus: "pending",
     paymentMethod: null,
     needsReview: false,
-    incomplete: false,
+    missing: [],
+    emergencyName: null,
+    emergencyPhone: null,
     createdAt: new Date(0).toISOString(),
     ...over,
   };

@@ -28,7 +28,13 @@ import {
 } from "@/lib/admin-roster";
 import { showsCashPending } from "@/lib/payment-method";
 
-type Filter = "all" | "unpaid" | "paying-cash" | "waiver-missing" | "no-team";
+type Filter =
+  | "all"
+  | "unpaid"
+  | "paying-cash"
+  | "waiver-missing"
+  | "no-emergency"
+  | "no-team";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "Everyone" },
@@ -36,6 +42,8 @@ const FILTERS: { id: Filter; label: string }[] = [
   // The collection list for match night: everyone who told us they'd bring it.
   { id: "paying-cash", label: "Paying cash" },
   { id: "waiver-missing", label: "No waiver" },
+  // The list to clear before the first whistle — nobody to call if they're hurt.
+  { id: "no-emergency", label: "No emergency contact" },
   { id: "no-team", label: "No team" },
 ];
 
@@ -66,6 +74,7 @@ export default function RosterScreen({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [signing, setSigning] = useState<RosterRow | null>(null);
+  const [fixing, setFixing] = useState<RosterRow | null>(null);
   const [checkingWaivers, setCheckingWaivers] = useState(false);
   /** `undefined` = no team filter; `null` = the unassigned bucket. */
   const [teamFilter, setTeamFilter] = useState<string | null | undefined>(undefined);
@@ -127,6 +136,12 @@ export default function RosterScreen({
         return false;
       }
       if (filter === "waiver-missing" && r.waiverOk) return false;
+      if (
+        filter === "no-emergency" &&
+        !r.missing.includes("emergency contact")
+      ) {
+        return false;
+      }
       if (filter === "no-team" && (r.teamId || r.role === "guest")) return false;
       if (!q) return true;
       return (
@@ -373,6 +388,7 @@ export default function RosterScreen({
             onTogglePaid={togglePaid}
             onChangeTeam={changeTeam}
             onSignWaiver={setSigning}
+            onFixDetails={setFixing}
           />
         )}
 
@@ -381,6 +397,16 @@ export default function RosterScreen({
             row={signing}
             onClose={async (changed) => {
               setSigning(null);
+              if (changed) await load({ quiet: true });
+            }}
+          />
+        )}
+
+        {fixing && (
+          <EmergencyContactModal
+            row={fixing}
+            onClose={async (changed) => {
+              setFixing(null);
               if (changed) await load({ quiet: true });
             }}
           />
@@ -576,6 +602,7 @@ function RosterTable({
   onTogglePaid,
   onChangeTeam,
   onSignWaiver,
+  onFixDetails,
 }: {
   rows: RosterRow[];
   teams: RosterTeam[];
@@ -584,6 +611,7 @@ function RosterTable({
   onTogglePaid: (r: RosterRow) => void;
   onChangeTeam: (r: RosterRow, teamId: string) => void;
   onSignWaiver: (r: RosterRow) => void;
+  onFixDetails: (r: RosterRow) => void;
 }) {
   return (
     <div className="overflow-x-auto -mx-4 px-4">
@@ -623,13 +651,19 @@ function RosterTable({
                       Check
                     </span>
                   )}
-                  {r.incomplete && (
-                    <span
-                      title="Missing an emergency contact or a real date of birth. Walk-ins start this way; older signups can be missing them too."
-                      className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-surface-2 text-zinc-400 border border-dashed border-border-token"
+                  {r.missing.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onFixDetails(r)}
+                      title={
+                        r.missing.includes("emergency contact")
+                          ? "No emergency contact on file — nobody to call if they get hurt. Click to add one."
+                          : `Still needed: ${r.missing.join(", ")}. Click to fill in.`
+                      }
+                      className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-surface-2 text-zinc-400 border border-dashed border-border-token hover:text-white hover:border-zinc-500 transition-colors"
                     >
-                      Needs details
-                    </span>
+                      No {r.missing[0]}
+                    </button>
                   )}
                 </div>
                 <div className="text-xs text-zinc-500">
@@ -1059,6 +1093,143 @@ function SignWaiverModal({
 
         {error && <p className="text-sm text-red-400">{error}</p>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Fill in an emergency contact from the Roster.
+ *
+ * This exists because "who do we call" goes missing silently: a walk-in is
+ * added with a name and a phone (D8), and the one-tap returning-player join
+ * copies the field from the person's record, writing nothing when that is
+ * blank. Both are reasonable at the moment they happen and both leave a
+ * player on a pitch with nobody to call.
+ *
+ * Saves to the person as well as this signup, so it is asked once ever
+ * rather than once per event.
+ */
+function EmergencyContactModal({
+  row,
+  onClose,
+}: {
+  row: RosterRow;
+  onClose: (changed: boolean) => void | Promise<void>;
+}) {
+  const [name, setName] = useState(row.emergencyName ?? "");
+  const [phone, setPhone] = useState(row.emergencyPhone ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/registrations/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emergency_name: name.trim(),
+          emergency_phone: phone.trim(),
+        }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(body.error ?? "That didn't save.");
+        return;
+      }
+      toast.success(`Emergency contact saved for ${rosterFullName(row)}.`);
+      await onClose(true);
+    } catch {
+      setError("That didn't save.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputCls =
+    "w-full px-3 py-2 bg-surface-2 border border-border-token text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/50";
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Emergency contact for ${rosterFullName(row)}`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+    >
+      <form
+        onSubmit={save}
+        className="w-full max-w-md dashboard-card p-5 space-y-4"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white">
+              Emergency contact
+            </h3>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              For {rosterFullName(row) || "this player"} — who we call if
+              something happens at the field. Saved to them permanently, so
+              you&apos;ll never be asked for it again.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void onClose(false)}
+            className="text-zinc-400 hover:text-white transition-colors"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm text-zinc-300 mb-1">Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Maria Alvarez"
+              autoFocus
+              required
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-zinc-300 mb-1">
+              Phone number
+            </label>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(832) 555-0123"
+              type="tel"
+              required
+              className={inputCls}
+            />
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-red-400">{error}</p>}
+
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={saving || !name.trim() || !phone.trim()}
+            className="btn-primary disabled:opacity-60"
+          >
+            {saving ? <Loader2 size={15} className="animate-spin" /> : null}
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void onClose(false)}
+            className="text-sm text-zinc-400 hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
