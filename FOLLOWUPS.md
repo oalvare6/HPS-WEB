@@ -500,3 +500,26 @@ Full detail in [`docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md`](docs/SESSIO
   kept but has no UI caller since RegistrationsList died — rewire or delete in B-track.
 - Operator declined paid plans for now (no Supabase Pro backups, no Vercel Pro). Vercel has
   two projects (`hpsweb`, `hps-web`) — one is a stale duplicate to confirm and remove.
+
+## 2026-08-18 — Community Cup Round 1 fixtures
+
+- **Round 1 is on the public page.** `Round 1` (Fri 2026-08-21, 7:00 PM–10:05 PM) plus three
+  fixtures seeded onto `community-cup-fall-2026`: Bellaire FC v Hiram Clarke FC 7:00 PM,
+  Post Oak FC v 3rd Ward FC 8:05 PM, Townwood FC v Sunnyside FC 9:10 PM. Kickoffs are 65
+  minutes apart (25 + 5 + 25 of football, 10 to turn the field over).
+- **The section did not exist before this.** `hasHub` in `src/app/events/[slug]/page.tsx` is
+  `matches.length > 0`, so with zero match rows the event page rendered no schedule at all —
+  a registration form and no answer to "what time do I play?". Applied directly to the
+  production DB; the page is `force-dynamic`, so it needed no deploy.
+- `scripts/seed-community-cup-schedule.mjs` reproduces it. Unlike the World Cup seeder it
+  **never deletes**: matches are keyed by `match_number` and only missing ones are inserted,
+  because the owner enters scores from the admin and a delete-and-rebuild re-run would wipe
+  a night of results. Teams are resolved by name and never created — a typo stops the script
+  instead of quietly adding a seventh team nobody can pick.
+- ⚠ **Seven teams, six playing.** `Heights FC` (created 08-12, no colour, 0 live registrations)
+  has no Round 1 fixture. The event description promises an 8-team format. Either it sits out
+  Round 1 and the page should say so, or it is a leftover that should be deleted — a player who
+  picked it in the team picker currently sees a schedule with no game for their team.
+  Operator decision needed before Friday.
+- ⚠ **Rounds 2+ are not entered.** Only Round 1 exists. Add the rest via the Schedule tab in
+  admin, or extend `ROUNDS`/`MATCHES` in the seed script and re-run.
