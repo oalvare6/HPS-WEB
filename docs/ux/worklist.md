@@ -83,7 +83,7 @@ Line numbers are as of commit `f8639b5`.
 | Measured observation | File | What's actually there |
 |---|---|---|
 | Times render inconsistently: "6:55 – 11:00" vs "7:00 PM – 9:00 PM" vs "7:00 PM – 10:05 PM" | `src/app/events/[slug]/page.tsx:356-358` and `:617-619` | **Root cause found.** `` `${tournament.time_start} – ${tournament.time_end}` `` — there is **no formatter at all**. The string is whatever was typed into the admin form. So this is a data-entry inconsistency exposed by a missing formatter, not a formatting bug. Fix is normalize-on-save, format-on-render, or both — and note the normalize path touches **live tournament data**. STRUCTURAL. |
-| "Real grass field" vs "turf" | `src/app/events/[slug]/page.tsx:75-76,115-116,239,241` vs `src/app/facility/page.tsx:23,35,41,125-126` | Event pages: "Real grass field", "Natural turf under the lights". Facility page: "Quality turf", "Dedicated 7v7 turf fields", "Professional-grade turf", "No metal cleats on turf". `src/app/layout.tsx:42,59` (OG description) says "Quality grass field". **Only the operator can say which is true.** Copy decision, not a code fix. |
+| "Real grass field" vs "turf" | `src/app/events/[slug]/page.tsx:75-76,115-116,239,241` vs `src/app/facility/page.tsx:23,35,41,125-126` and `src/app/about/page.tsx:34` | Event pages: "Real grass field", "Natural turf under the lights". Facility page: "Quality turf", "Dedicated 7v7 turf fields", "Professional-grade turf", "No metal cleats on turf". `src/app/layout.tsx:42,59` (OG description) says "Quality grass field". **Only the operator can say which is true.** Copy decision, not a code fix. Expanded in §4.1 — it reaches link previews. |
 | Event detail has exactly ONE "Sign up to play", 300x44, at y2565 of a 3990-tall page | `src/app/events/[slug]/page.tsx:708-717`; label computed in `src/lib/event-standing.ts` via `loadEventStanding` | ⚠ **The single, personalised CTA is a documented decision, not an oversight.** The comment at `:328-341` records the operator's own bug report — *"it still says register even though I am registered"* — and the choice to answer the CTA for *this visitor*. A critique item proposing "add a second CTA higher up" collides with that. The **position** (y2565 of 3990, i.e. ~64% down) is fair game; the **count** is a decision to be re-opened deliberately, not quietly. |
 | /events prints each event's full description inline | `src/components/shared/TournamentCard.tsx:97-98` | `<p className="text-zinc-400 mb-4">{tournament.description}</p>` — no `line-clamp`. The idiom already exists in the codebase: `src/app/events/page.tsx:55` uses `line-clamp-3`. MECHANICAL. |
 | /register: 12px labels on text inputs, 14px on three others | `src/components/register/RegistrationForm.tsx:90` vs `:319,372,560,651,706` | `labelClass = "block text-xs font-medium text-zinc-400 mb-1.5"` (12px) at `:667,:684`; group headings use `block text-sm font-semibold text-zinc-200` (14px). Two label idioms in one form — matches the measured 12/14 split exactly. MECHANICAL. |
@@ -181,10 +181,98 @@ excludes a large surface.
 
 ---
 
-## 4. Numbered worklist
+## 4. Later intake — reviewer observations, 2026-08-26
+
+Three observations arrived after the measurements, from a reviewer reading the live site. They
+are **not** part of the ranked critique and are **not** numbered worklist entries — the ranked
+walk still needs the critique. Each was checked against the code and the measurements before
+filing. Two of the three need correcting.
+
+### 4.1 Turf vs grass — CONFIRMED, and wider than reported
+
+Reported as an About-page-vs-event-page mismatch. It is five surfaces:
+
+| File | Says |
+|---|---|
+| `src/app/about/page.tsx:34` | "Quality turf sized for…" |
+| `src/app/facility/page.tsx:23,35,41,125-126` | "Quality turf", "Dedicated 7v7 turf fields", "Professional-grade turf", "No metal cleats on turf" |
+| `src/app/events/[slug]/page.tsx:75-76,115-116` | "Real grass field" / "Natural turf under the lights" — visible body copy |
+| `src/app/events/[slug]/page.tsx:239,241` | "Real grass field…" — **the metadata description fallback, not body copy** |
+| `src/app/layout.tsx:42,59` | "Quality grass field" — OG/Twitter description |
+
+**The part that was not previously noticed:** `:239,241` is the OG description used when an event
+has no description of its own. So the contradiction **propagates into WhatsApp and iMessage link
+previews** — which matters more here than it would elsewhere, because this community runs on
+WhatsApp. A player sharing an open-play night pushes "Real grass field" into the chat while the
+About page they land on says turf.
+
+Also worth noting: "Natural turf under the lights" (`:76`) is self-ambiguous. *Natural turf*
+means grass, but sitting beside a facility page promising *professional-grade turf* it reads as
+the opposite of what it says.
+
+**MECHANICAL** as a code change — these are string edits. The *decision* is the operator's.
+
+**DONE WHEN:** one vocabulary appears in all five locations above, and a `grep -rniE
+"turf|grass" src/` shows no two files making opposite claims about the playing surface.
+
+### 4.2 Policy vs flow — CONTRADICTED on the half that was diagnosed
+
+The claim: Terms state the one-registration and waiver rules clearly, but the site relies on
+players reading policy rather than a guided funnel, and that is why the owner chases people on
+match night.
+
+**The one-registration-per-player rule is not policy-only. It is a hard database constraint.**
+`registrations_one_live_spot_idx`
+(`supabase/migrations/20260815001500_dedupe_registrations_and_guard.sql:85`) rejects a second
+live spot with Postgres `23505`, handled at `src/app/api/register/route.ts:180-183`. CLAUDE.md
+records the rule that it must surface as *"you're already signed up"*, never a generic error.
+Nobody can double-register by failing to read `/terms:37`.
+
+**The waiver is gated too, and it is working.** The running tournament measures "Waiver on file
+32" against "Signed up 33" — 97%.
+
+**What actually leaks is money.** The same tile row reads "Signed up 33 / Paid 21 / Still owes
+12", with the sub-line "7 bringing cash". Of the 12 outstanding, 7 have deliberately chosen to
+pay at the field — that is a payment method, not a funnel failure. **The real match-night chase
+list is about 5 people out of 33.**
+
+That reframes the item entirely. The match-night problem is not a policy-reading problem and not
+a waiver problem; it is ~5 unpaid players, and the tool for it is the admin roster's payment
+view, not a new player-side funnel.
+
+**DONE WHEN:** *cannot be reduced to a checkable page condition.* This is a question about what
+the owner physically does at the field on match night, and it needs the operator to describe
+that routine before any UI is designed. Stating that rather than inventing a measurement.
+
+### 4.3 Mobile priority — half CONFIRMED, half CONTRADICTED
+
+The claim: the homepage *and* event pages push "Sign up to play" too far below the fold.
+
+**Event detail page — CONFIRMED.** One CTA, 300x44, at **y2565 of a 3990-tall document** at 390:
+about 64% down the page (measurements, P3). This is the strongest mobile item in the file.
+
+**Homepage — CONTRADICTED by the measurements.** At 390 the CTA stack sits at **y588.1 in an
+844-tall viewport**; "Sign up to play" (342x50.4) occupies roughly y588–638 and is **above the
+fold with no scrolling** (measurements, P1).
+
+These must stay separate items. "Fix the mobile signup CTA" as a single entry would send
+somebody to rework a homepage that already does the right thing.
+
+One caveat from §3.b: the homepage figure is the one fold measurement taken at a real device
+height (844). The event-page figure does not depend on viewport height at all — y2565 is below
+any phone fold.
+
+**DONE WHEN (event page only):** at 390, a sign-up control is reachable without scrolling past
+the fold — either a second entry point above y844, or the existing CTA made persistent.
+**STRUCTURAL** either way, and both collide with the documented single-personalised-CTA decision
+in §2.3. That decision has to be re-opened deliberately, not routed around.
+
+---
+
+## 5. Numbered worklist
 
 **Not written.** Requires `docs/ux/critique-2026-08-26.md`. See the status header.
 
-## 5. CLAIMS I COULD NOT VERIFY
+## 6. CLAIMS I COULD NOT VERIFY
 
 **Not written.** Requires the critique. The test to apply is §3.
