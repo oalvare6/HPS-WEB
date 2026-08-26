@@ -16,6 +16,17 @@ clarifying questions from the code.
 misattributed, or unsupported, and two of the prescriptions will cause damage if taken
 literally.
 
+**Operator decisions recorded so far** (each is marked ✅ inside its item):
+
+| Date | Decision | Effect |
+|---|---|---|
+| 2026-08-26 | The field is **real grass**, and it is a selling point. | Item 9 unblocked — unify on grass and lead with it. Split into 9a (copy) and 9b (the cleats rule). |
+| 2026-08-26 | The **bilingual audience is real.** | Item 3's premise confirmed. Rank 3 stands; my objection withdrawn. |
+
+**One decision still open:** item 9b — Field Rule 01 bans metal cleats and prescribes turf shoes.
+That is wrong guidance for a grass field, and it is a rule players follow, not marketing copy.
+Somebody has to say whether metal studs are allowed before that line is touched.
+
 All of it is reference material. No application code has been changed.
 
 ---
@@ -164,7 +175,8 @@ excludes a large surface.
 
 ### 3.d Judgments no measurement will ever settle — route these to the operator, not to code
 
-- Whether "grass" or "turf" is the truth about the field.
+- Whether "grass" or "turf" is the truth about the field. *(Answered 2026-08-26: grass. The
+  follow-on question — what footwear rule that implies — is still open. See item 9b.)*
 - Whether the "Need a website?" vendor badge should be on a customer-facing site.
 - Whether `/admin/diagnostics` should exist for a non-technical owner, or move behind a flag.
 - Whether the event page should have more than one sign-up CTA (see §2.3 — there is a documented
@@ -307,13 +319,17 @@ choice persists across those three pages.
 **Files:** app-wide. Entry points: `src/app/layout.tsx` (`lang` attribute is hard-coded `"en"`),
 the 10 `toLocaleDateString("en-US")` call sites, `src/lib/waiver-text.ts`.
 
-**⚠ On the ranking — the one placement I would genuinely argue with.** This is ranked above six
-items that are measured, and it is the only item in the critique whose premise appears nowhere in
-the evidence file. *"Your heavily bilingual audience"* is an assertion; the measurements contain
-no language data, no audience data and no analytics. It may well be true — the operator would
-know, and if it is true this belongs at the top. But it is ranked third on a claim the evidence
-cannot support, ahead of items 4, 5 and 6, which are measured, cheap and certain. **Confirm the
-premise before funding the build.**
+**✅ OPERATOR DECISION, 2026-08-26: the bilingual audience is real.** I had this filed as the one
+ranking I would argue with, on the grounds that *"your heavily bilingual audience"* appears
+nowhere in the measurements — no language data, no audience data, no analytics. The operator has
+confirmed the premise directly, so **the objection is withdrawn and rank 3 stands.** The evidence
+gap was in the measurement method, not in the claim.
+
+What does not change is the size. This remains the largest build in the list by an order of
+magnitude, and the only one that touches legal text: `src/lib/waiver-text.ts` carries the waiver
+a player signs, so a Spanish version is a **legal** translation, not a UI string. Scope
+deliberately — the funnel (`/register` → waiver → `/pay`) is a defensible first cut and is what
+the DONE WHEN above describes.
 
 ---
 
@@ -535,13 +551,49 @@ Cleats are the practical edge: `/facility` says "No metal cleats on turf" while 
 says "Cleats required" on a "real grass field" — a player can follow both and still turn up with
 the wrong footwear.
 
-**Type:** MECHANICAL as a code change (string edits). The decision is the operator's — nobody but
-you knows which is true.
+**✅ OPERATOR DECISION, 2026-08-26: it is real grass — and it is a selling point.** *"ppl love
+real grass."* That settles the vocabulary and changes the item: this is no longer "pick one and be
+consistent," it is "unify on grass, and lead with it." Everything that currently says turf is both
+wrong and burying an advantage. Note `src/app/layout.tsx:42,59` already says "Quality grass field"
+— the site-wide OG description is the one surface that is already correct.
 
-**DONE WHEN:** One vocabulary appears in all five locations above, and
-`grep -rniE "turf|grass" src/` shows no two files making opposite claims about the surface.
+The item splits, because one of the five surfaces is not marketing copy.
 
-**Files:** the five in the table.
+#### 9a — Unify the vocabulary on grass
+
+**Type:** MECHANICAL — string edits across four of the five surfaces.
+
+**DONE WHEN:** All five locations in the table describe the surface as grass; `grep -rni "turf"
+src/` returns nothing in user-visible text **except** Field Rule 01, which is held by 9b. Also
+retire the phrase "Natural turf under the lights" (`events/[slug]/page.tsx:76`) — *natural turf*
+does mean grass, but it is the exact phrasing that made the site read as contradicting itself.
+
+**Files:** `src/app/about/page.tsx:34`, `src/app/facility/page.tsx:23,35,41`,
+`src/app/events/[slug]/page.tsx:75-76,115-116,239,241`.
+
+#### 9b — Field Rule 01 is a rule, not copy. Do not find-and-replace it.
+
+**⚠ BLOCKED — needs a second decision from the operator.**
+
+`src/app/facility/page.tsx:125-126` is Field Rule 01: **"No metal cleats on turf"**, with the
+sub-line **"Molded rubber or turf shoes only."** The event pages say only **"Cleats required"**
+(`events/[slug]/page.tsx:90,130`) and specify nothing further.
+
+On real grass that rule is wrong in both halves. Turf shoes are the wrong footwear for natural
+grass, and metal or screw-in studs — the thing the rule bans — are normally *fine* on it, often
+preferred. A blind `turf` → `grass` replacement produces *"No metal cleats on grass / Molded
+rubber or turf shoes only"*, which is internally incoherent and still tells players to bring turf
+shoes to a grass field.
+
+This is not a copy fix. It is a rule players follow, it determines what they physically bring to
+the field, and it has a safety dimension. **The question for the operator: are metal or screw-in
+studs actually allowed on your grass, or is the ban a house rule you want to keep?** Until that
+is answered, leave Field Rule 01 alone — a wrong rule is worse than an inconsistent one.
+
+**DONE WHEN:** Field Rule 01 and the event pages' "Cleats required" state the same footwear rule,
+and that rule is correct for grass. Cannot be checked until the operator answers.
+
+**Files:** `src/app/facility/page.tsx:125-126`, `src/app/events/[slug]/page.tsx:90,130`.
 
 **⚠ The part the critique missed:** `events/[slug]/page.tsx:239,241` is the **OG description
 fallback**, used when an event has no description of its own. So the contradiction propagates
@@ -594,11 +646,12 @@ These are wrong, not merely unsupported.
 Not necessarily false — but nothing in the evidence file supports them, so do not treat them as
 established.
 
-6. **"Your heavily bilingual audience."** (item 3) The measurements contain no language data, no
-   audience data and no analytics of any kind. This is the sole premise under the third-ranked
-   item and the largest build proposed. **You are the only person who can confirm it.** If it is
-   true, the item is probably ranked too low rather than too high. If it is assumed, the item
-   should not be third.
+6. **~~"Your heavily bilingual audience."~~ (item 3) — RESOLVED 2026-08-26.** The measurements
+   contain no language data, no audience data and no analytics, so this could not be checked
+   against the evidence file. **The operator has confirmed it directly.** The claim was sound and
+   the measurement method simply had no way to see it. Rank 3 stands; my objection is withdrawn.
+   Left in this list as a record of what the evidence could and could not decide, not as an open
+   doubt.
 
 7. **"Directly sabotaging conversions"; "causing drop-offs"; "triggering the manual chasing."**
    (framing, items 1 and 3) There is no conversion data, funnel data or analytics in the
@@ -627,7 +680,12 @@ established.
     standing at a field is a judgment — and it may be moot if sorting by "still owes" solves the
     actual job.
 
-12. **Whether the surface is turf or grass.** (item 9) The code cannot know. You can.
+12. **~~Whether the surface is turf or grass.~~ (item 9) — RESOLVED 2026-08-26: real grass, and
+    the operator wants it led with rather than merely corrected.** Correctly routed here: no
+    measurement could ever have settled it. **It surfaced a second question of the same kind,
+    still open** — Field Rule 01 bans metal cleats and prescribes turf shoes, which is wrong
+    guidance for grass. Whether metal studs are allowed on your field is a rules-and-safety
+    decision, not a copy edit. See 9b.
 
 13. **Whether `/admin/diagnostics` should exist for a non-technical owner at all**, or move behind
     a flag. (item 8) Rewriting the vocabulary assumes the page should stay.
