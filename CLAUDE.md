@@ -120,9 +120,9 @@ touching anything visual.
 
 | File | What |
 |---|---|
-| `docs/ux/critique-2026-08-26.md` | Third-party UI/UX critique, ranked by impact. Opinion, not measurement. **Not yet filed — see the header of `worklist.md`.** |
+| [`docs/ux/critique-2026-08-26.md`](docs/ux/critique-2026-08-26.md) | Third-party UI/UX critique (Gemini), ranked by impact. Opinion, not measurement — four of its nine items contain a claim that does not survive checking. |
 | [`docs/ux/measurements-2026-08-26.md`](docs/ux/measurements-2026-08-26.md) | Computed values read off the live site at 390/768/1440. The evidence. |
-| [`docs/ux/worklist.md`](docs/ux/worklist.md) | The critique turned into checkable items, in the critique's own order. Start here. |
+| [`docs/ux/worklist.md`](docs/ux/worklist.md) | The critique turned into checkable items, in the critique's own order, plus the audit of what did not hold up. **Start here, and read §5 before building anything.** |
 
 **This is live production and a tournament is running.** Real players, real waivers, real
 payments, right now. Assume every screen you are looking at has somebody's actual money and
