@@ -112,3 +112,33 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | [`docs/AUTH.md`](docs/AUTH.md), [`docs/AUTH-RUNBOOK.md`](docs/AUTH-RUNBOOK.md) | Auth config + triage |
 | [`docs/PAY-GATE-ACCEPTANCE.md`](docs/PAY-GATE-ACCEPTANCE.md) | Pay gate regression checklist |
 | [`.cursor/rules/hps-phases.mdc`](.cursor/rules/hps-phases.mdc) | Conventions (phase list is stale) |
+
+## UX work
+
+Reference material and the work plan live in [`docs/ux/`](docs/ux/). Read those before
+touching anything visual.
+
+| File | What |
+|---|---|
+| `docs/ux/critique-2026-08-26.md` | Third-party UI/UX critique, ranked by impact. Opinion, not measurement. **Not yet filed — see the header of `worklist.md`.** |
+| [`docs/ux/measurements-2026-08-26.md`](docs/ux/measurements-2026-08-26.md) | Computed values read off the live site at 390/768/1440. The evidence. |
+| [`docs/ux/worklist.md`](docs/ux/worklist.md) | The critique turned into checkable items, in the critique's own order. Start here. |
+
+**This is live production and a tournament is running.** Real players, real waivers, real
+payments, right now. Assume every screen you are looking at has somebody's actual money and
+actual emergency contact on it. Nothing goes to `main` without review.
+
+**Tailwind config is stock apart from added colors and fonts.** `tailwind.config.ts` extends
+exactly two things — the `brand`/`base`/`surface`/`border-token` colors (all wired to CSS
+variables) and the three font families. No custom spacing, no custom breakpoints, no plugins.
+So `sm`/`md`/`lg` are the stock 640/768/1024. **Fixes go in markup, not in
+`tailwind.config`** — if a fix seems to need a config change, the markup is wrong.
+
+**Dark-only is the design.** `<html lang="en" className="dark">` in
+[`src/app/layout.tsx`](src/app/layout.tsx) is hard-coded on purpose. There is no theme
+toggle, no light palette, and no `prefers-color-scheme` handling to add. Do not "fix" it.
+
+**Three widths matter: 390, 768, 1440.** Every measurement in `docs/ux/` was taken at those
+three. 768 is the one that bites — it is exactly Tailwind's `md` breakpoint, so it is the
+first width where `hidden md:flex` content appears and the last where it has no room. Check
+767 and 768 separately; several problems exist only *at* 768.
