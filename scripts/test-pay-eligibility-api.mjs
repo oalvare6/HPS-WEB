@@ -1,24 +1,25 @@
 /**
- * Manual helper for Phase T1 — POST /api/pay/eligibility
+ * Manual helper — POST /api/pay/eligibility (resume-link request)
  *
  * Usage:
- *   node --env-file=.env.local scripts/test-pay-eligibility-api.mjs <email> [adult|youth]
+ *   node --env-file=.env.local scripts/test-pay-eligibility-api.mjs <email>
  *
  * Requires dev server: npm run dev (default base http://localhost:3000)
  * Override: PAY_ELIGIBILITY_TEST_BASE_URL
+ *
+ * Since the F-01 remediation this endpoint answers every caller with the same
+ * neutral body and never returns a token, an id or a status. Run it twice with
+ * a known and an unknown email: both responses must be byte-identical.
  */
 import { createClient } from "@supabase/supabase-js";
 
 const email = process.argv[2];
-const waiverType = process.argv[3] === "youth" ? "youth" : "adult";
 const base =
   process.env.PAY_ELIGIBILITY_TEST_BASE_URL?.replace(/\/$/, "") ||
   "http://localhost:3000";
 
 if (!email) {
-  console.error(
-    "Usage: node --env-file=.env.local scripts/test-pay-eligibility-api.mjs <email> [adult|youth]"
-  );
+  console.error("Usage: node --env-file=.env.local scripts/test-pay-eligibility-api.mjs <email>");
   process.exit(1);
 }
 
@@ -42,14 +43,9 @@ if (error || !tournament) {
   process.exit(1);
 }
 
-const body = {
-  email,
-  tournamentId: tournament.id,
-  waiverType,
-};
+const body = { email, tournamentId: tournament.id };
 
 console.log(`POST ${base}/api/pay/eligibility`);
-console.log("Body:", JSON.stringify(body, null, 2));
 console.log(`Tournament: ${tournament.title} (${tournament.slug})\n`);
 
 const res = await fetch(`${base}/api/pay/eligibility`, {
@@ -59,12 +55,9 @@ const res = await fetch(`${base}/api/pay/eligibility`, {
 });
 
 const text = await res.text();
-let json;
-try {
-  json = JSON.parse(text);
-} catch {
-  json = text;
-}
-
 console.log(`Status: ${res.status}`);
-console.log(JSON.stringify(json, null, 2));
+console.log(text);
+if (/token|registrationId|firstName|"status"/.test(text)) {
+  console.error("\nFAIL: response leaks a capability or status.");
+  process.exit(1);
+}

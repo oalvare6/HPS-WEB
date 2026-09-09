@@ -554,3 +554,23 @@ See `docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md` and `docs/COMMUNITY-CUP-ACCEP
   at-a-glance card uses `nextMatchday()` instead. Left for a later pass — discovered 2026-09-08.
 - Not built, by decision: assists and cards, round-robin generator, CSV import UI, homepage
   score strip, "your next match" on /me, forfeit status, head-to-head tiebreak.
+
+## 2026-09-09 — F-01 / F-02 remediation (branch `claude/hps-remediation-stage-1-2`)
+
+See `remediation_stage_1_2_report.md`. Not deployed; migrations not applied.
+
+- **`POST /api/pay/eligibility` no longer returns a token or a status.** It answers every
+  caller with one neutral body and emails a one-time 20-minute link; the only signed-out
+  capability is the HttpOnly `hps_resume` cookie backed by `registration_sessions`.
+- **Email delivery is a deployment prerequisite.** No transactional provider exists in the
+  repo; `src/lib/email/resume-link-sender.ts` refuses loudly until one is wired. The
+  logged-out `/pay` flow is dead in production until then (signed-in and own-link paths work).
+- **Stripe settlement is one transaction** — `finalize_checkout_payment` — with amount /
+  currency / event re-validated from the rows. The webhook now 5xx's on local failure so
+  Stripe retries. Replays converge. Refund events are still unhandled.
+- **Two new forward migrations** (`20260909120000_*`, `20260909120100_*`) are additive and
+  must be applied by hand (not `db push`) before the code ships. Neither has been executed on
+  any Postgres yet — no local daemon here; verify on a branch first (report §17).
+- **The known $80 row** (`803e3697-…` / `bbd7fa9b-…`) is documented, not fixed. Converge it
+  with `scripts/reconcile-payments.ts --apply` (dry run first) or a Stripe event replay.
+- **Credential rotation** for F-00 is planned in `credential_containment_plan.md`; not done.

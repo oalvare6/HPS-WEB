@@ -1,13 +1,9 @@
 "use client";
 
-import { useCallback, useState, type FormEvent } from "react";
-import { AlertCircle, Calendar, Clock, Loader2, Mail, MapPin, Users } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { AlertCircle, Calendar, Clock, Loader2, Mail, MailCheck, MapPin, Users } from "lucide-react";
+import Link from "next/link";
 import { WhatsAppCommunityLink } from "@/components/shared/WhatsAppCommunityLink";
-import { PayGateResultCard } from "@/components/pay/PayGateResultCard";
-import type {
-  PayEligibilitySuccessBody,
-  PayEligibilityWaiverType,
-} from "@/lib/pay-eligibility-types";
 
 export type PayEmailGateTournament = {
   id: string;
@@ -53,13 +49,11 @@ function TournamentSummary({ tournament }: { tournament: PayEmailGateTournament 
   );
 }
 
-type GateStep = "form" | "checking" | "result";
+type GateStep = "form" | "sending" | "sent";
 
 type PayEmailGateProps = {
   tournament: PayEmailGateTournament;
   whatsappUrl: string;
-  defaultWaiverType?: PayEligibilityWaiverType;
-  onReadyToPay: (registrationId: string, payToken: string) => void;
 };
 
 const inputClass =
@@ -67,150 +61,101 @@ const inputClass =
 
 const labelClass = "block text-xs font-medium text-zinc-400 mb-1.5";
 
-function WaiverTypePicker({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: PayEligibilityWaiverType;
-  onChange: (v: PayEligibilityWaiverType) => void;
-  disabled?: boolean;
-}) {
-  const options: { id: PayEligibilityWaiverType; label: string; hint: string }[] = [
-    { id: "adult", label: "Adult (18+)", hint: "Adult waiver template" },
-    { id: "youth", label: "Youth (under 18)", hint: "Parent/guardian youth waiver" },
-  ];
-
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {options.map((opt) => {
-        const selected = value === opt.id;
-        return (
-          <button
-            key={opt.id}
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange(opt.id)}
-            className={`text-left rounded-lg border p-4 transition-colors disabled:opacity-60 ${
-              selected
-                ? "border-brand bg-brand/10 ring-1 ring-brand/40"
-                : "border-border-token bg-surface-2 hover:border-zinc-500"
-            }`}
-          >
-            <span className="block text-sm font-medium text-white">{opt.label}</span>
-            <span className="block text-xs text-zinc-500 mt-1">{opt.hint}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
- * Logged-out pay gate: collect email + waiver type, hit the eligibility API,
- * either redirect to PayForm (ready_to_pay) or render a result card. Logged-in
- * users are resolved server-side in `/pay/page.tsx` and never see this gate.
+ * Logged-out pay gate.
+ *
+ * It used to check the email against the roster and hand the browser a
+ * token on the spot, which meant anyone who knew your email could act on your
+ * registration (backend_audit_v1.md F-01). Now it only asks the server to
+ * email a personal link; the screen looks the same whether or not a
+ * registration exists, so it cannot be used to look people up.
  */
-export function PayEmailGate({
-  tournament,
-  whatsappUrl,
-  defaultWaiverType = "adult",
-  onReadyToPay,
-}: PayEmailGateProps) {
+export function PayEmailGate({ tournament, whatsappUrl }: PayEmailGateProps) {
   const [step, setStep] = useState<GateStep>("form");
   const [email, setEmail] = useState("");
-  const [waiverType, setWaiverType] = useState<PayEligibilityWaiverType>(defaultWaiverType);
-  const [result, setResult] = useState<PayEligibilitySuccessBody | null>(null);
   const [error, setError] = useState("");
 
-  const runEligibility = useCallback(
-    async (emailValue: string, waiver: PayEligibilityWaiverType) => {
-      setError("");
-      setStep("checking");
-
-      try {
-        const res = await fetch("/api/pay/eligibility", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: emailValue.trim(),
-            tournamentId: tournament.id,
-            waiverType: waiver,
-          }),
-        });
-
-        const data = (await res.json()) as PayEligibilitySuccessBody & { error?: string };
-
-        if (!res.ok) {
-          setError(data.error ?? "We could not verify eligibility. Please try again.");
-          setStep("form");
-          return;
-        }
-
-        if (data.status === "ready_to_pay") {
-          onReadyToPay(data.registrationId, data.payToken);
-          return;
-        }
-
-        setResult(data);
-        setStep("result");
-      } catch {
-        setError("Network error. Please check your connection and try again.");
-        setStep("form");
-      }
-    },
-    [onReadyToPay, tournament.id]
-  );
-
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed || !trimmed.includes("@")) {
       setError("Enter a valid email address.");
       return;
     }
-    void runEligibility(trimmed, waiverType);
-  };
-
-  const retryDifferentType = () => {
-    setResult(null);
-    setStep("form");
+    setError("");
+    setStep("sending");
+    try {
+      const res = await fetch("/api/pay/eligibility", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, tournamentId: tournament.id }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(data.error ?? "We couldn't send a link right now. Please try again.");
+        setStep("form");
+        return;
+      }
+      setStep("sent");
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+      setStep("form");
+    }
   };
 
   const title = tournament.title;
 
-  if (step === "checking") {
+  if (step === "sending") {
     return (
       <div className="max-w-lg mx-auto px-6 py-16 text-center">
         <Loader2 className="w-8 h-8 text-brand animate-spin mx-auto mb-4" aria-hidden />
-        <p className="text-zinc-300">Checking your registration for {title}...</p>
+        <p className="text-zinc-300">One moment…</p>
       </div>
     );
   }
 
-  if (step === "result" && result) {
+  if (step === "sent") {
     return (
-      <PayGateResultCard
-        result={result}
-        tournament={tournament}
-        whatsappUrl={whatsappUrl}
-        waiverType={waiverType}
-        onRetryType={retryDifferentType}
-        isLoggedIn={false}
-      />
+      <div className="max-w-lg mx-auto px-6 py-10 md:py-14">
+        <div className="rounded-xl border border-border-token bg-surface-2 p-6 md:p-8 space-y-5">
+          <MailCheck className="w-10 h-10 text-emerald-400" aria-hidden />
+          <h2 className="text-xl font-semibold text-white">Check your email</h2>
+          <p className="text-sm text-zinc-400 leading-relaxed">
+            If you have a pending registration for {title} under that address, we&apos;ve
+            emailed you a personal link to pay, sign your waiver, or cancel. It works
+            once and expires in twenty minutes.
+          </p>
+          <p className="text-sm text-zinc-400 leading-relaxed">
+            Nothing arrived? Check spam, or if you haven&apos;t signed up yet,{" "}
+            <Link
+              href={`/register?tournament=${encodeURIComponent(tournament.slug)}`}
+              className="text-white underline underline-offset-2"
+            >
+              sign up for {title}
+            </Link>
+            .
+          </p>
+          <WhatsAppCommunityLink href={whatsappUrl} variant="button" />
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="max-w-lg mx-auto px-6 py-10 md:py-14">
       <div className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-wider text-brand mb-2">
-          {title}
-        </p>
-        <h2 className="text-xl font-semibold text-white mb-2">Join this event</h2>
+        <p className="text-xs font-medium uppercase tracking-wider text-brand mb-2">{title}</p>
+        <h2 className="text-xl font-semibold text-white mb-2">Already signed up?</h2>
         <p className="text-sm text-zinc-400">
-          Enter the email you used to register. We&apos;ll check your waiver and registration,
-          then take you to payment.
+          Enter the email you registered with and we&apos;ll send you a personal link to
+          finish paying. New here?{" "}
+          <Link
+            href={`/register?tournament=${encodeURIComponent(tournament.slug)}`}
+            className="text-white underline underline-offset-2"
+          >
+            Sign up first
+          </Link>
+          .
         </p>
       </div>
 
@@ -232,10 +177,7 @@ export function PayEmailGate({
             Email address
           </label>
           <div className="relative">
-            <Mail
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"
-              aria-hidden
-            />
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" aria-hidden />
             <input
               id="pay-gate-email"
               type="email"
@@ -249,13 +191,8 @@ export function PayEmailGate({
           </div>
         </div>
 
-        <div>
-          <p className={labelClass}>Waiver type</p>
-          <WaiverTypePicker value={waiverType} onChange={setWaiverType} />
-        </div>
-
         <button type="submit" className="btn-primary w-full justify-center h-12">
-          Continue to payment check
+          Email me my link
         </button>
       </form>
 

@@ -1,17 +1,12 @@
 "use client";
 
-import { useCallback } from "react";
 import Link from "next/link";
 import { PayEmailGate } from "@/components/pay/PayEmailGate";
 import type { TournamentPayOption } from "@/components/pay/PayForm";
-import type { PayEligibilityWaiverType } from "@/lib/pay-eligibility-types";
-import { buildPayResumePath } from "@/lib/pay-resume-url";
 
 type PayPageClientProps = {
-  tournamentSlug: string | null;
   initialTournament: TournamentPayOption | null;
   whatsappUrl: string;
-  defaultWaiverType: PayEligibilityWaiverType;
   tournamentMissing: boolean;
 };
 
@@ -20,29 +15,14 @@ type PayPageClientProps = {
  * `pay/page.tsx` and either land directly on `<PayForm/>` (via redirect) or
  * see a server-rendered result card — they never mount this client tree.
  *
- * `onReadyToPay` does a hard navigation (`window.location.assign`) rather
- * than `router.replace` so the next render is a guaranteed-fresh server pass
- * with the token in the URL — no soft-nav remount edge cases.
+ * A logged-out player is offered an emailed link (F-01); the browser is never
+ * handed a token here.
  */
 export function PayPageClient({
-  tournamentSlug,
   initialTournament,
   whatsappUrl,
-  defaultWaiverType,
   tournamentMissing,
 }: PayPageClientProps) {
-  const handleReadyToPay = useCallback(
-    (registrationId: string, payToken: string) => {
-      const target = buildPayResumePath({
-        registrationId,
-        payToken,
-        tournamentSlug,
-      });
-      window.location.assign(target);
-    },
-    [tournamentSlug]
-  );
-
   if (tournamentMissing || !initialTournament) {
     return (
       <div className="max-w-lg mx-auto px-6 py-16 text-center">
@@ -71,8 +51,6 @@ export function PayPageClient({
         format: initialTournament.format,
       }}
       whatsappUrl={whatsappUrl}
-      defaultWaiverType={defaultWaiverType}
-      onReadyToPay={handleReadyToPay}
     />
   );
 }

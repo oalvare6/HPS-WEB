@@ -189,6 +189,16 @@ async function verifyStripeSession(
         message: "We couldn't fully record this payment internally.",
       };
     }
+    if (outcome.status === "needs_review") {
+      // Money moved, but the amount or event did not match the registration
+      // (or there was no registration to match). Recorded and flagged for the
+      // owner; the player is told the truth rather than "You're in".
+      return {
+        status: "verify_error",
+        message:
+          "We're matching this payment to your registration. If it doesn't show as paid within a day, message us.",
+      };
+    }
 
     const email = normalizeEmail(
       session.metadata?.email ?? session.customer_email ?? ""

@@ -40,6 +40,11 @@ export async function POST() {
         continue;
       }
 
+      if (outcome.status === "needs_review") {
+        errors.push(`Recorded but NOT confirmed ${session.id}: ${outcome.reason}`);
+        continue;
+      }
+
       if (outcome.status === "error") {
         errors.push(`Insert failed for session ${session.id}: ${outcome.error}`);
         continue;
