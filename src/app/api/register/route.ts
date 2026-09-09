@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
-import { createPayResumeToken } from "@/lib/app-signing";
 import { supabaseAdmin } from "@/lib/supabase-admin";
-import {
-  getWaiverExpiryIso,
-  isContactWaiverValid,
-  normalizeEmail,
-  normalizePhone,
-  upsertContactByEmail,
-} from "@/lib/contacts";
+import { normalizeEmail, normalizePhone, upsertContactByEmail } from "@/lib/contacts";
 import { linkRegistrationToContact } from "@/lib/registration-contact-linking";
 import { acceptsRegistrations } from "@/lib/tournament-state";
 import { resolveTeamIdForTournament } from "@/lib/tournaments";
-import { buildPayResumeUrl, buildWaiverSignPath } from "@/lib/pay-resume-url";
 import { isDocuSealConfigured } from "@/lib/waiver-capture";
+import { getCurrentPlayer } from "@/lib/player-auth";
+import { planRegistrationWaiver } from "@/lib/registration-waiver-plan";
+import { syncRegistrationWaiverFromContact } from "@/lib/pay-eligibility";
+import { issueRegistrationSession, type ResumeScope } from "@/lib/resume-access";
+import { getResumeStore } from "@/lib/resume-store-supabase";
+import { serializeResumeCookie } from "@/lib/resume-session";
+import { RESUME_PAGE_PATH, RESUME_WAIVER_PAGE_PATH } from "@/lib/resume-routes";
+import { resumeSignedRedirectUrl } from "@/lib/resume-ops-supabase";
+import { siteBaseUrl } from "@/lib/resume-deps";
+import type { WaiverReuseLinkage } from "@/lib/waiver-reuse";
+
+export const dynamic = "force-dynamic";
 
 type RegistrationType = "adult" | "youth";
 
@@ -97,6 +101,26 @@ async function resolveTournament(
   return null;
 }
 
+/**
+ * POST /api/register — the one front door.
+ *
+ * ## What changed in Stage 1.3
+ *
+ * 1. **No email-only waiver inheritance.** The route used to mark the new row
+ *    signed whenever the typed email matched a contact with a valid waiver —
+ *    anyone who knew a returning player's address registered under their
+ *    document. Reuse now goes through `planRegistrationWaiver`, which allows
+ *    it only for a caller whose SUPABASE SESSION resolves to that same contact,
+ *    and only for an adult waiver. Everyone else signs. Registration itself
+ *    never fails because reuse was refused.
+ *
+ * 2. **No 90-day HMAC token.** The browser that has just created this row is
+ *    handed a server-side session scoped to exactly this registration (the
+ *    same `hps_resume` cookie a magic link produces), and every later step —
+ *    DocuSeal's return, paying, declaring cash, cancelling — runs on
+ *    `/pay/resume` against that session. The URL never carries a credential or
+ *    an id.
+ */
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<RegistrationPayload>;
@@ -152,7 +176,6 @@ export async function POST(request: Request) {
     const resolvedTournament = await resolveTournament(payload.tournamentId);
     const tournamentId = resolvedTournament?.id ?? null;
     const tournamentTitle = resolvedTournament?.title ?? null;
-    const tournamentSlug = resolvedTournament?.slug ?? null;
     const teamId = await resolveTeamIdForTournament(payload.teamId, tournamentId);
 
     const { data: inserted, error } = await supabaseAdmin
@@ -201,96 +224,97 @@ export async function POST(request: Request) {
     // contact_id to the email-canonical contact; this catches the case where a
     // different contact owns the same phone number and flags the registration
     // for admin review. Failure here must not break the registration flow.
+    let rowContactId: string | null = contact.id;
     try {
-      await linkRegistrationToContact({
+      const link = await linkRegistrationToContact({
         registrationId: inserted.id,
         email: payload.email,
         phone: payload.phone,
       });
+      if (link?.contactId) rowContactId = link.contactId;
     } catch (linkErr) {
       console.warn("[register] post-insert contact link failed:", linkErr);
     }
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      `https://${request.headers.get("host")}`;
-
-    let payToken: string;
+    /*
+      Who is asking? A Supabase session whose contact is the one the form
+      resolved to is the only identity that can reuse a waiver. A typed email
+      — even one that matches a contact with a valid waiver — proves nothing
+      (SEC-01, docs/waiver_identity_model.md). `getCurrentPlayer` is null for
+      the ordinary anonymous signup.
+    */
+    let linkage: WaiverReuseLinkage = "anonymous_email";
     try {
-      payToken = createPayResumeToken(inserted.id);
-    } catch (e) {
-      console.error("Pay resume token signing failed:", e);
-      return NextResponse.json(
-        { error: "Registration could not be completed (server signing misconfiguration)." },
-        { status: 500 }
-      );
+      const player = await getCurrentPlayer();
+      if (player && player.contact.id === contact.id) linkage = "authenticated_contact";
+    } catch (authErr) {
+      console.warn("[register] session lookup failed; treating as anonymous:", authErr);
     }
 
-    const completedRedirectUrl = buildPayResumeUrl(baseUrl, {
-      registrationId: inserted.id,
-      payToken,
-      tournamentSlug,
+    const docusealConfigured = isDocuSealConfigured(waiverType);
+    const plan = planRegistrationWaiver({
+      contact,
+      waiverType,
+      linkage,
+      registrationContactId: rowContactId,
+      docusealConfigured,
     });
-    const canSkipWaiver = isContactWaiverValid(contact, waiverType);
 
-    if (canSkipWaiver) {
-      const canonicalSignedAt = contact.waiver_signed_at ?? new Date().toISOString();
-      const canonicalExpiresAt =
-        contact.waiver_expires_at ?? getWaiverExpiryIso(canonicalSignedAt);
+    let mode: "reuse" | "docuseal" | "in_app" = plan.mode;
+    let waiverSignedAt: string | null = null;
 
-      const { error: markSignedErr } = await supabaseAdmin
-        .from("registrations")
-        .update({
-          waiver_signed: true,
-          waiver_signed_at: canonicalSignedAt,
-          waiver_document_url: contact.waiver_document_url,
-          docuseal_status: "signed",
-          docuseal_submission_id: contact.waiver_submission_id,
-        })
-        .eq("id", inserted.id);
+    if (plan.mode === "reuse") {
+      const sync = await syncRegistrationWaiverFromContact(
+        { id: inserted.id, contact_id: rowContactId },
+        contact,
+        waiverType,
+        linkage
+      );
+      if (sync.ok) {
+        waiverSignedAt = plan.decision.signedAt;
+      } else {
+        // Refused or failed: the row exists and the waiver stays required.
+        console.warn("[register] waiver reuse not applied:", sync.refusal ?? sync.message);
+        mode = docusealConfigured ? "docuseal" : "in_app";
+      }
+    }
 
-      if (markSignedErr) {
-        console.error("Registration waiver-skip update failed:", markSignedErr);
-        return NextResponse.json(
-          { error: "We couldn't finalize your registration right now. Please try again." },
-          { status: 500 }
-        );
-      }
+    // The browser that just created this row gets a session bound to it. The
+    // scope list depends on the FINAL mode: `waiver:sign` only when the
+    // typed-name fallback is what the player is about to use.
+    const scopes: readonly ResumeScope[] =
+      mode === "in_app"
+        ? planRegistrationWaiver({ contact, waiverType, linkage: "anonymous_email", docusealConfigured: false }).scopes
+        : plan.scopes.filter((s) => s !== "waiver:sign");
 
-      const contactPatch: Record<string, unknown> = {};
-      if (!contact.waiver_signed_at) {
-        contactPatch.waiver_signed_at = canonicalSignedAt;
-      }
-      if (!contact.waiver_expires_at && canonicalExpiresAt) {
-        contactPatch.waiver_expires_at = canonicalExpiresAt;
-      }
-      if (!contact.waiver_source) {
-        contactPatch.waiver_source = "import";
-      }
-      if (!contact.waiver_type) {
-        contactPatch.waiver_type = waiverType;
-      }
-      if (Object.keys(contactPatch).length > 0) {
-        const { error: contactPatchErr } = await supabaseAdmin
-          .from("contacts")
-          .update(contactPatch)
-          .eq("id", contact.id);
-        if (contactPatchErr) {
-          console.warn("Contact canonical waiver patch failed:", contactPatchErr.message);
-        }
-      }
-
-      return NextResponse.json({
-        success: true,
-        signUrl: completedRedirectUrl,
-        waiverSkipped: true,
-        waiverSignedAt: canonicalSignedAt,
-        tournamentTitle,
-        // The confirmation screen offers card-or-cash, and declaring a method
-        // needs the same signed token the pay link carries. Handed over
-        // directly rather than parsed back out of `signUrl`.
+    let cookie: string | null = null;
+    try {
+      const issued = await issueRegistrationSession(getResumeStore(), {
         registrationId: inserted.id,
-        payToken,
+        scopes,
+      });
+      cookie = serializeResumeCookie(issued.sessionSecret, issued.maxAgeSeconds);
+    } catch (sessionErr) {
+      // The registration stands; the player can still get a magic link from
+      // the pay page. Loud, because every self-service step depends on this.
+      console.error("[register] could not issue the registration session:", sessionErr);
+    }
+
+    const respond = (payloadBody: Record<string, unknown>, status = 200) =>
+      NextResponse.json(payloadBody, {
+        status,
+        headers: cookie
+          ? { "Set-Cookie": cookie, "Cache-Control": "no-store" }
+          : { "Cache-Control": "no-store" },
+      });
+
+    if (mode === "reuse") {
+      return respond({
+        success: true,
+        waiverSkipped: true,
+        waiverSignedAt,
+        tournamentTitle,
+        next: `${RESUME_PAGE_PATH}?registered=1`,
       });
     }
 
@@ -299,7 +323,7 @@ export async function POST(request: Request) {
     // code posted to DocuSeal regardless, so every signup ended on "Registration
     // saved but waiver could not be created." A player who cannot sign cannot
     // play, so the fallback is the signing screen, not an error.
-    if (!isDocuSealConfigured(waiverType)) {
+    if (mode === "in_app") {
       const { error: markPendingErr } = await supabaseAdmin
         .from("registrations")
         .update({ docuseal_status: "sent" })
@@ -311,17 +335,16 @@ export async function POST(request: Request) {
         );
       }
 
-      return NextResponse.json({
+      return respond({
         success: true,
-        signUrl: buildWaiverSignPath({
-          registrationId: inserted.id,
-          payToken,
-          tournamentSlug,
-        }),
         waiverMode: "in_app",
+        next: RESUME_WAIVER_PAGE_PATH,
+        tournamentTitle,
       });
     }
 
+    const baseUrl = siteBaseUrl(request);
+    const completedRedirectUrl = resumeSignedRedirectUrl(baseUrl);
     const templateId = getTemplateId(waiverType);
 
     const dsPayload = {
@@ -355,9 +378,14 @@ export async function POST(request: Request) {
     if (!dsResponse.ok) {
       const dsErr = await dsResponse.text();
       console.error("DocuSeal submission creation failed:", dsErr);
-      return NextResponse.json(
-        { error: "Registration saved but waiver could not be created. Please contact us." },
-        { status: 500 }
+      // The cookie still goes out: the player can open /pay/resume and press
+      // "Sign my waiver", which creates the submission again.
+      return respond(
+        {
+          error: "Registration saved but waiver could not be created. Please contact us.",
+          next: RESUME_PAGE_PATH,
+        },
+        500
       );
     }
 
@@ -384,9 +412,11 @@ export async function POST(request: Request) {
       console.error("DocuSeal column update failed (run migration?):", updateErr.message);
     }
 
-    return NextResponse.json({
+    return respond({
       success: true,
+      waiverMode: "docuseal",
       signUrl: directSignUrl,
+      tournamentTitle,
     });
   } catch (error) {
     console.error("Registration API error:", error);

@@ -19,9 +19,7 @@ import {
   getTournamentBySlug,
 } from "@/lib/tournaments";
 import { getCurrentPlayer } from "@/lib/player-auth";
-import { isContactWaiverValid } from "@/lib/contacts";
-import { createPayResumeToken } from "@/lib/app-signing";
-import { buildPayResumePath, buildWaiverSignPath } from "@/lib/pay-resume-url";
+import { decideWaiverReuse } from "@/lib/waiver-reuse";
 import { acceptsRegistrations } from "@/lib/tournament-state";
 import { eventKindCopy, isOpenPlay, resolveEventKind } from "@/lib/event-kind";
 import { reconcileIfUnsigned } from "@/lib/waiver-reconcile";
@@ -156,7 +154,6 @@ export default async function RegisterPage({
           teamId={state.teamId}
           teamName={teamName}
           registrationId={state.registrationId}
-          payToken={createPayResumeToken(state.registrationId)}
           eventKind={resolveEventKind(event)}
         />
       )}
@@ -169,15 +166,11 @@ export default async function RegisterPage({
             one. Creating a fresh DocuSeal submission on every visit is how a
             player ends up with three half-signed documents and we still can't
             tell whether they signed. Falls back to in-app signing when this
-            registration never got a DocuSeal submission at all.
+            registration never got a DocuSeal submission at all — that page is
+            authorised by the same Supabase session that rendered this card.
           */
           waiverHref={
-            resumeSignUrl ??
-            buildWaiverSignPath({
-              registrationId: state.registrationId,
-              payToken: createPayResumeToken(state.registrationId),
-              tournamentSlug: event.slug,
-            })
+            resumeSignUrl ?? `/register/waiver/${encodeURIComponent(state.registrationId)}`
           }
           isExternalWaiver={Boolean(resumeSignUrl)}
           recheckHref={`/register?tournament=${encodeURIComponent(event.slug)}`}
@@ -195,13 +188,7 @@ export default async function RegisterPage({
           teamName={teamName}
           payingCash={state.payingCash}
           registrationId={state.registrationId}
-          payToken={createPayResumeToken(state.registrationId)}
           eventKind={resolveEventKind(event)}
-          payHref={buildPayResumePath({
-            registrationId: state.registrationId,
-            payToken: createPayResumeToken(state.registrationId),
-            tournamentSlug: event.slug,
-          })}
         />
       )}
 
@@ -242,8 +229,6 @@ export default async function RegisterPage({
             preselectedSlug={event.slug}
             preselectedType={typeParam === "youth" ? "youth" : typeParam === "adult" ? "adult" : null}
             prefill={buildPrefill(player)}
-            entryFeeLabel={entryFeeLabel}
-            eventKind={resolveEventKind(event)}
             lockedToEvent
           />
         </div>
@@ -266,6 +251,12 @@ function displayName(
   return `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim();
 }
 
+/**
+ * The waiver flags come from the same rule `/api/register` applies, with the
+ * same `authenticated_contact` linkage (this IS the signed-in player's contact),
+ * so the form never promises a skip the server will refuse. Youth is always
+ * false: a youth waiver is signed per registration.
+ */
 function buildPrefill(
   player: Awaited<ReturnType<typeof getCurrentPlayer>>
 ): RegistrationPrefill | null {
@@ -279,8 +270,16 @@ function buildPrefill(
     dob: c.dob ?? "",
     emergencyName: c.emergency_name ?? "",
     emergencyPhone: c.emergency_phone ?? "",
-    hasAdultWaiverOnFile: isContactWaiverValid(c, "adult"),
-    hasYouthWaiverOnFile: isContactWaiverValid(c, "youth"),
+    hasAdultWaiverOnFile: decideWaiverReuse({
+      contact: c,
+      waiverType: "adult",
+      linkage: "authenticated_contact",
+    }).allowed,
+    hasYouthWaiverOnFile: decideWaiverReuse({
+      contact: c,
+      waiverType: "youth",
+      linkage: "authenticated_contact",
+    }).allowed,
   };
 }
 

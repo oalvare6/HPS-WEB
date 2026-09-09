@@ -293,7 +293,16 @@ export async function createInPersonSubmission(opts: {
   email: string;
   name: string;
   metadata: Record<string, string>;
+  /**
+   * Where DocuSeal sends the signer once they finish. Always a clean URL on
+   * our own host that carries no token or id — the browser's session cookie is
+   * what identifies the registration when it lands.
+   */
+  completedRedirectUrl?: string;
 }): Promise<{ submissionId: number | null; signUrl: string | null; embedSrc: string | null }> {
+  const redirect = opts.completedRedirectUrl
+    ? { completed_redirect_url: opts.completedRedirectUrl }
+    : {};
   const res = await fetch(`${DOCUSEAL_API}/submissions`, {
     method: "POST",
     headers: {
@@ -303,12 +312,14 @@ export async function createInPersonSubmission(opts: {
     body: JSON.stringify({
       template_id: opts.templateId,
       send_email: false,
+      ...redirect,
       submitters: [
         {
           role: "First Party",
           email: opts.email,
           name: opts.name,
           metadata: opts.metadata,
+          ...redirect,
         },
       ],
     }),

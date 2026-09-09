@@ -15,7 +15,7 @@
  * Kept pure and separate from the page so the branch table can be tested without
  * a database — see scripts/test-signup-state.ts.
  */
-import { isContactWaiverValid } from "@/lib/contacts";
+import { decideWaiverReuse } from "@/lib/waiver-reuse";
 import { isPayingCash } from "@/lib/payment-method";
 import type { Contact, RegistrationPaymentStatus } from "@/lib/types";
 
@@ -32,10 +32,25 @@ export type SignupRegistrationSnapshot = {
    * NULL must keep meaning "they have not told us", not "card".
    */
   payment_method?: string | null;
+  /**
+   * Who the row belongs to. `findEventRegistration` looks rows up BY the
+   * contact, so this is normally the contact's own id; it is carried so a row
+   * that somehow is not (a legacy null, a phone relink) is never rescued by
+   * that contact's waiver.
+   */
+  contact_id?: string | null;
 };
 
 export type SignupStateInput = {
-  /** Null when the visitor is signed out or we have never seen this person. */
+  /**
+   * Null when the visitor is signed out or we have never seen this person.
+   *
+   * When present this is the SIGNED-IN player's own contact row, resolved from
+   * the Supabase session by `getCurrentPlayer` — every caller passes exactly
+   * that. That is what lets the waiver-reuse decision below run with
+   * `authenticated_contact` linkage; a contact found by a typed email must
+   * never be passed here.
+   */
   contact: Pick<
     Contact,
     "id" | "waiver_type" | "waiver_signed_at" | "waiver_expires_at"
@@ -100,11 +115,22 @@ export function resolveSignupState(input: SignupStateInput): SignupState {
       };
     }
 
-    // Waiver outstanding on the row itself. A valid contact-level waiver still
-    // rescues this — the registration just has not caught up yet — so check the
-    // person before sending them back to sign something they already signed.
-    if (!registration.waiver_signed && !isContactWaiverValid(contact, waiverType)) {
-      return { kind: "needs_waiver", registrationId: registration.id };
+    // Waiver outstanding on the row itself. A valid ADULT contact-level waiver on
+    // the signed-in person's own row still rescues this — the registration just
+    // has not caught up yet, and the account routes converge it before taking
+    // money. Anything the reuse rule refuses (youth, another contact's row,
+    // expired) is sent to sign.
+    if (!registration.waiver_signed) {
+      const reuse = decideWaiverReuse({
+        contact,
+        waiverType,
+        linkage: "authenticated_contact",
+        registrationContactId:
+          registration.contact_id === undefined ? contact?.id ?? null : registration.contact_id,
+      });
+      if (!reuse.allowed) {
+        return { kind: "needs_waiver", registrationId: registration.id };
+      }
     }
 
     return {
@@ -115,9 +141,14 @@ export function resolveSignupState(input: SignupStateInput): SignupState {
     };
   }
 
-  // Not on this roster yet. A valid waiver means we already have everything we
-  // legally need, so the only question left is which team.
-  if (contact && isContactWaiverValid(contact, waiverType) && canRegister) {
+  // Not on this roster yet. A reusable waiver means we already have everything
+  // we legally need, so the only question left is which team. Youth never
+  // qualifies (a fresh youth waiver per registration — see lib/waiver-reuse.ts).
+  if (
+    contact &&
+    canRegister &&
+    decideWaiverReuse({ contact, waiverType, linkage: "authenticated_contact" }).allowed
+  ) {
     return {
       kind: "quick_join",
       contactId: contact.id,

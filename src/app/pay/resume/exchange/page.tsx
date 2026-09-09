@@ -7,6 +7,16 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Opening your registration | Houston Premier Soccer",
   robots: { index: false, follow: false },
+  /*
+    The token is in this page's URL. `strict-origin` means no request this
+    page makes — same-origin or not — ever carries more than the bare origin as
+    a Referer, so the token cannot leak through one. It is deliberately NOT
+    `no-referrer`: per the Fetch standard ("append a request Origin header"),
+    a same-origin form POST from a `no-referrer` document is sent with
+    `Origin: null`, which would make the exchange POST fail the same-origin
+    check. `next.config.ts` sets the matching response header.
+  */
+  referrer: "strict-origin" as const,
 };
 
 type SearchParams = Promise<{ t?: string }>;
@@ -19,6 +29,11 @@ type SearchParams = Promise<{ t?: string }>;
  * would arrive at a dead link. So this page does nothing but render a form
  * that POSTs the token to /pay/resume/api/exchange — the consume is a POST, and
  * the token never survives into the final URL.
+ *
+ * Hardening (Stage 1.3): no analytics, no third-party resource, no
+ * `<a href>` to another origin; `Cache-Control: no-store` and
+ * `Referrer-Policy: strict-origin` on the response (next.config.ts), so the
+ * token-bearing URL is never cached and never sent onward.
  */
 export default async function ResumeExchangePage({
   searchParams,

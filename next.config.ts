@@ -29,6 +29,19 @@ if (supabasePattern) {
   remotePatterns.push(supabasePattern);
 }
 
+/**
+ * The magic-link interstitial carries a one-time token in its URL. It must not
+ * be cached anywhere, and no request it makes may carry more than the bare
+ * origin as a Referer. `strict-origin` rather than `no-referrer` on purpose:
+ * the Fetch standard sends `Origin: null` on a same-origin POST from a
+ * `no-referrer` document, which would break the exchange's same-origin check
+ * (src/lib/same-origin.ts). Asserted by scripts/test-interstitial.ts.
+ */
+export const RESUME_EXCHANGE_HEADERS = [
+  { key: "Cache-Control", value: "no-store" },
+  { key: "Referrer-Policy", value: "strict-origin" },
+];
+
 const nextConfig: NextConfig = {
   images: {
     remotePatterns,
@@ -55,6 +68,10 @@ const nextConfig: NextConfig = {
             value: "strict-origin-when-cross-origin",
           },
         ],
+      },
+      {
+        source: "/pay/resume/exchange",
+        headers: RESUME_EXCHANGE_HEADERS,
       },
     ];
   },

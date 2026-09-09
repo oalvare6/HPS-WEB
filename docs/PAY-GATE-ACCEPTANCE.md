@@ -2,6 +2,13 @@
 
 Shipped 2026-06-03. Regression reference only.
 
+> **Superseded 2026-09-09 (Stages 1.2 and 1.3).** `POST /api/pay/eligibility` now answers
+> every caller with one neutral body and emails a magic link; the `registrationId` +
+> `payToken` bypass, `PayForm` and `/api/stripe/checkout` no longer exist. A player reaches
+> their registration signed in (`/register` status cards) or through `/pay/resume`. Keep this
+> file as history; the current checks are `scripts/test-resume-routes.ts`,
+> `scripts/test-account-routes.ts` and `scripts/test-legacy-token-retired.ts`.
+
 ## What shipped
 
 - `/pay?tournament=<slug>` — email + adult/youth gate (skipped when `registrationId` + valid `payToken`, or after eligibility `ready_to_pay`).

@@ -9,8 +9,14 @@
  *   1. same-origin check on the request headers (CSRF)
  *   2. the resume cookie → server-side session row (authentication)
  *   3. the session's scope list and registration id (authorisation)
+ *   4. for `registration:cancel`, session freshness (Stage 1.3 Phase 4)
  * Only then does the handler touch the registration, and only ever the ONE
  * registration the session names.
+ *
+ * Two kinds of session reach these handlers, and they are the same row shape:
+ * one minted by a magic-link exchange (Stage 1.2), and one minted for the
+ * browser that has just created the registration (Stage 1.3, replacing the
+ * 90-day HMAC token). Only the second kind can ever carry `waiver:sign`.
  */
 import { normalizeEmail } from "@/lib/contacts";
 import {
@@ -18,6 +24,9 @@ import {
   exchangeResumeToken,
   requestResumeLink,
   sessionAllows,
+  sessionIsFresh,
+  IN_APP_WAIVER_SCOPE,
+  RESUME_CANCEL_FRESHNESS_SECONDS,
   RESUME_LINK_NEUTRAL_MESSAGE,
   RESUME_SESSION_TTL_SECONDS,
   type ResumeLinkSender,
@@ -31,11 +40,20 @@ import {
   serializeResumeCookieClear,
 } from "@/lib/resume-session";
 import { checkSameOrigin } from "@/lib/same-origin";
+import { isPaymentMethodChoice, type PaymentMethodChoice } from "@/lib/payment-method";
+import {
+  clientIpForSignature,
+  parseInAppSignatureBody,
+  type InAppSignatureRequest,
+  type WaiverSigningContext,
+} from "@/lib/waiver-sign-server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Where a successful exchange lands. No token, no id, nothing to bookmark. */
 export const RESUME_PAGE_PATH = "/pay/resume";
+/** The in-app signing screen for a session that carries `waiver:sign`. */
+export const RESUME_WAIVER_PAGE_PATH = "/pay/resume/waiver";
 
 /** What the resume page may show. Deliberately minimal — no phone, dob, emergency contact. */
 export type ResumeSummary = {
@@ -58,8 +76,20 @@ export interface ResumeRegistrationOps {
   ): Promise<{ ok: true; url: string } | { ok: false; status: number; error: string }>;
   cancel(registrationId: string): Promise<{ status: number; body: Record<string, unknown> }>;
   startWaiver(
-    registrationId: string
+    registrationId: string,
+    baseUrl: string
   ): Promise<{ ok: true; url: string; mode: "docuseal" | "in_person_only" } | { ok: false; status: number; error: string }>;
+  /** Declares card or cash. Never settles anything — see lib/registration-payment-method-server.ts. */
+  setPaymentMethod(
+    registrationId: string,
+    method: PaymentMethodChoice
+  ): Promise<{ status: number; body: Record<string, unknown> }>;
+  /** Records an in-app typed-name signature. Reachable only with `waiver:sign`. */
+  signWaiverInApp(
+    registrationId: string,
+    input: InAppSignatureRequest
+  ): Promise<{ status: number; body: Record<string, unknown> }>;
+  loadWaiverSigningContext(registrationId: string): Promise<WaiverSigningContext | null>;
 }
 
 export type ResumeRouteDeps = {
@@ -81,7 +111,13 @@ function redirect(location: string, headers?: Record<string, string>): Response 
   return new Response(null, { status: 303, headers: { Location: location, ...(headers ?? {}) } });
 }
 
-async function readBody(request: Request): Promise<Record<string, unknown>> {
+/**
+ * Parse a request body by content type. Exported for the account routes, which
+ * accept the same shapes. Form bodies are parsed from raw text on purpose:
+ * `formData()` returned nothing on Vercel's runtime for the interstitial's
+ * urlencoded POST (production, 2026-09-09).
+ */
+export async function readRequestBody(request: Request): Promise<Record<string, unknown>> {
   const type = (request.headers.get("content-type") ?? "").toLowerCase();
   try {
     if (type.includes("application/json")) {
@@ -89,8 +125,6 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
       return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
     }
     if (type.includes("application/x-www-form-urlencoded")) {
-      // Parse the raw text ourselves: URLSearchParams has no runtime quirks,
-      // whereas formData() has differed between runtimes for this content type.
       const out: Record<string, unknown> = {};
       for (const [k, v] of new URLSearchParams(await request.text())) out[k] = v;
       return out;
@@ -137,7 +171,7 @@ export async function handleResumeLinkRequest(
   request: Request,
   deps: ResumeRouteDeps
 ): Promise<Response> {
-  const body = await readBody(request);
+  const body = await readRequestBody(request);
   const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
   const tournamentId = typeof body.tournamentId === "string" ? body.tournamentId.trim() : "";
 
@@ -178,7 +212,7 @@ export async function handleResumeExchange(
     return json({ error: "Cross-origin request refused." }, 403);
   }
 
-  const body = await readBody(request);
+  const body = await readRequestBody(request);
   const token = typeof body.token === "string" ? body.token.trim() : "";
 
   let result;
@@ -226,6 +260,8 @@ type Guarded =
   | { ok: true; session: ResumeSession }
   | { ok: false; response: Response };
 
+export const STALE_SESSION_REASON = "stale_session";
+
 async function guard(
   request: Request,
   deps: ResumeRouteDeps,
@@ -236,12 +272,13 @@ async function guard(
     return { ok: false, response: json({ error: "Cross-origin request refused." }, 403) };
   }
 
+  const now = (deps.now ?? (() => new Date()))();
   let session: ResumeSession | null;
   try {
     session = await authenticateResumeSession(
       deps.store,
       readResumeCookieFromHeader(request.headers.get("cookie")),
-      (deps.now ?? (() => new Date()))()
+      now
     );
   } catch (err) {
     console.error("[resume] session lookup failed:", err instanceof Error ? err.message : err);
@@ -256,6 +293,24 @@ async function guard(
   }
   if (!sessionAllows(session, scope, session.registrationId)) {
     return { ok: false, response: json({ error: "This link can't do that." }, 403) };
+  }
+
+  // Step-up for the one destructive scope: a 24-hour session may read, pay and
+  // start a waiver for its whole life, but cancelling needs a session minted in
+  // the last thirty minutes. The player re-verifies through the same magic-link
+  // flow; nothing else changes and no cross-registration authority appears.
+  if (scope === "registration:cancel" && !sessionIsFresh(session, now, RESUME_CANCEL_FRESHNESS_SECONDS)) {
+    return {
+      ok: false,
+      response: json(
+        {
+          error:
+            "For safety, cancelling needs a link you opened in the last 30 minutes. Request a fresh link from the pay page and try again.",
+          reason: STALE_SESSION_REASON,
+        },
+        403
+      ),
+    };
   }
   return { ok: true, session };
 }
@@ -300,13 +355,52 @@ export async function handleResumeWaiverStart(request: Request, deps: ResumeRout
   const g = await guard(request, deps, "waiver:start");
   if (!g.ok) return g.response;
 
-  const result = await deps.ops.startWaiver(g.session.registrationId);
+  const result = await deps.ops.startWaiver(g.session.registrationId, deps.baseUrl);
   if (!result.ok) return json({ error: result.error }, result.status);
   return json({ url: result.url, mode: result.mode });
 }
 
 /* ------------------------------------------------------------------ */
-/* 6. POST /pay/resume/api/sign-out — revoke the session                */
+/* 6. POST /pay/resume/api/payment-method — declare card or cash        */
+/* ------------------------------------------------------------------ */
+
+export async function handleResumePaymentMethod(request: Request, deps: ResumeRouteDeps): Promise<Response> {
+  const g = await guard(request, deps, "payment:start");
+  if (!g.ok) return g.response;
+
+  const body = await readRequestBody(request);
+  const method = typeof body.method === "string" ? body.method.trim() : "";
+  if (!isPaymentMethodChoice(method)) {
+    return json({ error: "Choose card or cash." }, 400);
+  }
+
+  const result = await deps.ops.setPaymentMethod(g.session.registrationId, method);
+  return json(result.body, result.status);
+}
+
+/* ------------------------------------------------------------------ */
+/* 7. POST /pay/resume/api/waiver-sign — in-app signature (waiver:sign) */
+/* ------------------------------------------------------------------ */
+
+export async function handleResumeWaiverSign(request: Request, deps: ResumeRouteDeps): Promise<Response> {
+  const g = await guard(request, deps, IN_APP_WAIVER_SCOPE);
+  if (!g.ok) return g.response;
+
+  const body = await readRequestBody(request);
+  const parsed = parseInAppSignatureBody(body);
+
+  const result = await deps.ops.signWaiverInApp(g.session.registrationId, {
+    signedName: parsed.signedName,
+    signerRelationship: parsed.signerRelationship,
+    ip: clientIpForSignature(request.headers),
+    userAgent: request.headers.get("user-agent"),
+    siteOrigin: deps.baseUrl,
+  });
+  return json(result.body, result.status);
+}
+
+/* ------------------------------------------------------------------ */
+/* 8. POST /pay/resume/api/sign-out — revoke the session                */
 /* ------------------------------------------------------------------ */
 
 export async function handleResumeSignOut(request: Request, deps: ResumeRouteDeps): Promise<Response> {

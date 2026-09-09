@@ -8,8 +8,13 @@ import {
   recordSignedWaiver,
   templateIdFor,
 } from "@/lib/waiver-capture";
-import { createPayResumeToken } from "@/lib/app-signing";
-import { buildWaiverSignPath } from "@/lib/pay-resume-url";
+import { ADMIN_IN_PERSON_SCOPES, issueRegistrationSession } from "@/lib/resume-access";
+import { getResumeStore } from "@/lib/resume-store-supabase";
+import { serializeResumeCookie } from "@/lib/resume-session";
+import { RESUME_WAIVER_PAGE_PATH } from "@/lib/resume-routes";
+
+/** The player is standing at the laptop; an hour is plenty for one signature. */
+const IN_PERSON_SESSION_TTL_SECONDS = 60 * 60;
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -73,18 +78,12 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   // the walk-in path (D8): the owner has a player standing in front of them at
   // the field, and "DocuSeal is not configured on this server" is not something
   // that person can do anything with. Same screen the player would get online.
+  //
+  // Authority for that screen is a registration-bound session set on the
+  // OWNER'S browser (the laptop the player will sign on), carrying only
+  // `registration:read` and `waiver:sign`, for one hour. It replaces the
+  // 90-day HMAC link this route used to mint (Stage 1.3).
   if (!isDocuSealConfigured(type)) {
-    let payToken: string;
-    try {
-      payToken = createPayResumeToken(registration.id);
-    } catch (e) {
-      console.error("[sign-waiver] pay token signing failed:", e);
-      return NextResponse.json(
-        { error: "Server signing is misconfigured; cannot open a waiver." },
-        { status: 500 }
-      );
-    }
-
     if (registration.waiver_type !== type) {
       await supabaseAdmin
         .from("registrations")
@@ -92,18 +91,32 @@ export async function POST(req: NextRequest, { params }: Ctx) {
         .eq("id", registration.id);
     }
 
-    const signUrl = buildWaiverSignPath({
-      registrationId: registration.id,
-      payToken,
-    });
+    let cookie: string;
+    try {
+      const issued = await issueRegistrationSession(getResumeStore(), {
+        registrationId: registration.id,
+        scopes: ADMIN_IN_PERSON_SCOPES,
+        ttlSeconds: IN_PERSON_SESSION_TTL_SECONDS,
+      });
+      cookie = serializeResumeCookie(issued.sessionSecret, issued.maxAgeSeconds);
+    } catch (e) {
+      console.error("[sign-waiver] could not issue an in-person signing session:", e);
+      return NextResponse.json(
+        { error: "Could not open an in-person signing session. Please try again." },
+        { status: 500 }
+      );
+    }
 
-    return NextResponse.json({
-      submissionId: null,
-      signUrl,
-      embedSrc: signUrl,
-      waiverType: type,
-      mode: "in_app",
-    });
+    return NextResponse.json(
+      {
+        submissionId: null,
+        signUrl: RESUME_WAIVER_PAGE_PATH,
+        embedSrc: RESUME_WAIVER_PAGE_PATH,
+        waiverType: type,
+        mode: "in_app",
+      },
+      { headers: { "Set-Cookie": cookie, "Cache-Control": "no-store" } }
+    );
   }
 
   const apiKey = process.env.DOCUSEAL_API_KEY!;

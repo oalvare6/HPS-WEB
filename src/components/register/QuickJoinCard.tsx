@@ -115,11 +115,11 @@ export function QuickJoinCard({
       });
       const data = (await res.json()) as {
         error?: string;
-        payUrl?: string;
+        registrationId?: string;
         settledFree?: boolean;
       };
 
-      if (!res.ok || !data.payUrl) {
+      if (!res.ok || !data.registrationId) {
         setError(data.error || "We couldn't add you to this roster. Please try again.");
         setSubmitting(false);
         return;
@@ -129,12 +129,28 @@ export function QuickJoinCard({
         D7: a comped open-play spot never reaches checkout, whatever the player
         picked. The server decides this — not `method`, and not anything else on
         this screen — because the entitlement is derived from their roster, not
-        from what the browser claims. Sending them to `payUrl` here would ask a
-        free player for $15, and Stripe rejects sub-$0.50 amounts anyway, so
-        there is no "$0 session" fallback to take instead.
+        from what the browser claims. Starting checkout here would ask a free
+        player for $15, and Stripe rejects sub-$0.50 amounts anyway, so there
+        is no "$0 session" fallback to take instead.
+
+        Card: start checkout against the session-authorised account route and
+        follow Stripe's URL. The join response carries no capability — the
+        session cookie is the authority, same as every other control here.
       */
       if (method === "card" && !data.settledFree) {
-        window.location.href = data.payUrl;
+        const checkout = await fetch(
+          `/api/registrations/${encodeURIComponent(data.registrationId)}/checkout`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }
+        );
+        const payload = (await checkout.json().catch(() => ({}))) as { url?: string; error?: string };
+        if (!checkout.ok || typeof payload.url !== "string") {
+          // They are on the roster; the reload lands them on the status card
+          // with the pay controls, plus whatever the server said went wrong.
+          setError(payload.error || "You're signed up, but we couldn't open checkout. Reload to pay from your registration.");
+          setSubmitting(false);
+          return;
+        }
+        window.location.assign(payload.url);
         return;
       }
 

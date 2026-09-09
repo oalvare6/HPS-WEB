@@ -41,8 +41,31 @@ npx tsx scripts/test-payment-finalize.ts
 npx tsx scripts/test-stripe-webhook.ts
 npx tsx scripts/test-reconcile-payments.ts
 npx tsx scripts/test-resend-sender.ts
+npx tsx scripts/test-waiver-reuse.ts
+npx tsx scripts/test-docuseal-webhook.ts
+npx tsx scripts/test-account-routes.ts
+npx tsx scripts/test-legacy-token-retired.ts
+npx tsx scripts/test-interstitial.ts
 npm run build
 ```
+
+**Three Stage 1.3 invariants (2026-09-09, `remediation_stage_1_3_report.md`).** (1) **An
+email address identifies; it never authorises waiver reuse.** Every reuse writer and every
+surface that offers reuse calls `decideWaiverReuse` (`src/lib/waiver-reuse.ts`) and nothing
+else: only a Supabase session resolved to the contact that holds the waiver, on that contact's
+own row, for an unexpired **adult** waiver of the same type. Youth waivers are never reused
+(the schema has no child identity — business question in `docs/waiver_identity_model.md`).
+Registration never fails because reuse was refused. (2) **Only a verified DocuSeal delivery
+completes a waiver through the webhook**, via `handleDocusealWebhook`
+(`src/lib/docuseal-webhook.ts`): raw-body HMAC with ±300 s freshness, association to the one
+registration the submission was created for, an atomic per-submitter claim in
+`docuseal_webhook_events` (migration `20260909130000`), and only then the single writer
+`recordSignedWaiver`. A resume session may START a waiver; it never declares one signed. (3)
+**The 90-day HMAC pay token is gone.** The browser that just created a registration gets the
+same server-side `hps_resume` session a magic link produces, scoped to that one row; signed-in
+players act through `/api/registrations/[id]/{cancel,payment-method,checkout,waiver-sign}`,
+guarded by ownership. `registration:cancel` additionally needs a session younger than 30
+minutes. Do not add a second capability format, and never read `payToken` again.
 
 **Two remediation invariants (2026-09-09, `remediation_stage_1_2_report.md`).** Knowing an
 email address never authorises anything: `POST /api/pay/eligibility` answers every caller

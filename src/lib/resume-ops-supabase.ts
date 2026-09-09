@@ -1,8 +1,10 @@
 /**
  * Production `ResumeRegistrationOps` — what a resume session may do to the
  * one registration it names. Each operation re-reads the row and applies the
- * same business gates the legacy token paths apply; none of them can mark
- * cash received, touch payment status directly, or write waiver state.
+ * same business gates the signed-in account routes apply; none of them can
+ * mark cash received, touch payment status directly, or reuse another
+ * person's waiver. The only way a session ever writes waiver state is the
+ * in-app signature, and only when it holds `waiver:sign`.
  */
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { acceptsPayments, type StatefulTournament } from "@/lib/tournament-state";
@@ -19,6 +21,13 @@ import {
 } from "@/lib/waiver-capture";
 import { reconcileIfUnsigned } from "@/lib/waiver-reconcile";
 import { normalizeEmail } from "@/lib/contacts";
+import { declarePaymentMethod } from "@/lib/registration-payment-method-server";
+import {
+  loadWaiverSigningContext,
+  signWaiverInApp,
+  type InAppSignatureRequest,
+} from "@/lib/waiver-sign-server";
+import type { PaymentMethodChoice } from "@/lib/payment-method";
 import type { ResumeRegistrationOps, ResumeSummary } from "@/lib/resume-routes";
 
 type EmbeddedEvent = {
@@ -37,6 +46,11 @@ function one<T>(raw: T | T[] | null | undefined): T | null {
 const SUMMARY_SELECT =
   "id, payment_status, payment_method, waiver_signed, cancelled_at, teams(name), tournament:tournaments!registrations_tournament_id_fkey ( id, title, slug, entry_fee_cents, drop_in_fee_cents, status, is_draft, registration_open, payments_open, start_date, end_date )";
 
+/** Where DocuSeal sends the signer afterwards: the session page, nothing in the URL. */
+export function resumeSignedRedirectUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/, "")}/pay/resume?signed=1`;
+}
+
 export class SupabaseResumeOps implements ResumeRegistrationOps {
   async loadSummary(registrationId: string): Promise<ResumeSummary | null> {
     const { data, error } = await supabaseAdmin
@@ -48,7 +62,7 @@ export class SupabaseResumeOps implements ResumeRegistrationOps {
     if (!data) return null;
 
     // The row says unsigned? Ask DocuSeal before saying so — the same
-    // reconcile /pay and /register run, for the same reason.
+    // reconcile /register runs, for the same reason.
     let waiverSigned = data.waiver_signed === true;
     if (!waiverSigned) {
       const reconciled = await reconcileIfUnsigned({ id: data.id, waiver_signed: false });
@@ -102,7 +116,8 @@ export class SupabaseResumeOps implements ResumeRegistrationOps {
       };
     }
 
-    // Same gate as /pay and payment-intent: no money without a signature.
+    // Same gate as the account checkout: no money without a signature on THIS
+    // row. A resume session never borrows a contact's waiver.
     let waiverSigned = registration.waiver_signed === true;
     if (!waiverSigned) {
       const reconciled = await reconcileIfUnsigned({ id: registration.id, waiver_signed: false });
@@ -147,15 +162,26 @@ export class SupabaseResumeOps implements ResumeRegistrationOps {
     return cancelRegistrationById(registrationId);
   }
 
+  async setPaymentMethod(registrationId: string, method: PaymentMethodChoice) {
+    return declarePaymentMethod(registrationId, method);
+  }
+
+  async signWaiverInApp(registrationId: string, input: InAppSignatureRequest) {
+    return signWaiverInApp(registrationId, input);
+  }
+
+  async loadWaiverSigningContext(registrationId: string) {
+    return loadWaiverSigningContext(registrationId);
+  }
+
   /**
    * START the waiver flow. Returns the player's existing DocuSeal signing URL
    * when one exists, creates a DocuSeal submission when none does, and refuses
-   * when DocuSeal is not configured — the in-app typed-name flow writes
-   * `waiver_signed` directly from a browser request, which is exactly what a
-   * resume session must not be able to do (task boundary 2.9). Completion is
+   * when DocuSeal is not configured — the typed-name flow lives behind the
+   * `waiver:sign` scope, which a resumed session never carries. Completion is
    * recorded only by the verified provider path (webhook / reconcile).
    */
-  async startWaiver(registrationId: string) {
+  async startWaiver(registrationId: string, baseUrl: string) {
     const { data: registration, error } = await supabaseAdmin
       .from("registrations")
       .select(
@@ -213,6 +239,7 @@ export class SupabaseResumeOps implements ResumeRegistrationOps {
         contact_id: registration.contact_id ?? "",
         source: "resume",
       },
+      completedRedirectUrl: resumeSignedRedirectUrl(baseUrl),
     });
     if (!created.submissionId || !created.signUrl) {
       return { ok: false as const, status: 502, error: "The waiver service didn't respond. Please try again." };

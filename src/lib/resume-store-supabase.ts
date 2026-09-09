@@ -13,6 +13,7 @@ import type { StatefulTournament } from "@/lib/tournament-state";
 import {
   RESUME_THROTTLE,
   type ConsumeResult,
+  type CreateSessionResult,
   type ResumableRegistration,
   type ResumeStore,
   type StoredSession,
@@ -157,10 +158,37 @@ export class SupabaseResumeStore implements ResumeStore {
     };
   }
 
+  /**
+   * A session with no magic link behind it (`access_token_id` stays null):
+   * the browser that just created the registration, or the owner's laptop for
+   * an in-person in-app signature. Same table, same hashing, same expiry rule.
+   */
+  async createSession(input: {
+    registrationId: string;
+    tokenHash: string;
+    scopes: readonly string[];
+    ttlSeconds: number;
+  }): Promise<CreateSessionResult> {
+    const ttl = Math.max(60, Math.floor(input.ttlSeconds));
+    const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
+    const { data, error } = await supabaseAdmin
+      .from("registration_sessions")
+      .insert({
+        registration_id: input.registrationId,
+        token_hash: input.tokenHash,
+        scopes: [...input.scopes],
+        expires_at: expiresAt,
+      })
+      .select("id, created_at, expires_at")
+      .single();
+    if (error || !data) throw new Error(`create session: ${error?.message ?? "no row returned"}`);
+    return { sessionId: data.id, createdAt: data.created_at, expiresAt: data.expires_at };
+  }
+
   async findSession(tokenHash: string): Promise<StoredSession | null> {
     const { data, error } = await supabaseAdmin
       .from("registration_sessions")
-      .select("id, registration_id, scopes, expires_at, revoked_at")
+      .select("id, registration_id, scopes, created_at, expires_at, revoked_at")
       .eq("token_hash", tokenHash)
       .maybeSingle();
     if (error) throw new Error(`find session: ${error.message}`);
@@ -169,6 +197,7 @@ export class SupabaseResumeStore implements ResumeStore {
       id: data.id,
       registrationId: data.registration_id,
       scopes: Array.isArray(data.scopes) ? (data.scopes as string[]) : [],
+      createdAt: data.created_at,
       expiresAt: data.expires_at,
       revokedAt: data.revoked_at ?? null,
     };

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CreditCard } from "lucide-react";
 import { getResumeSessionFromCookies } from "@/lib/resume-session";
 import { getResumeOps } from "@/lib/resume-ops-supabase";
-import { ResumePanel } from "@/components/pay/ResumePanel";
+import { ResumePanel, type ResumeNotice } from "@/components/pay/ResumePanel";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +12,20 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-type SearchParams = Promise<{ link?: string; cancelled?: string; signed_out?: string }>;
+type SearchParams = Promise<{
+  link?: string;
+  cancelled?: string;
+  signed_out?: string;
+  registered?: string;
+  signed?: string;
+}>;
 
 /**
- * Where a magic link lands after the exchange. The URL carries nothing: the
+ * Where a registration-bound session lands: after a magic link, straight after
+ * `/api/register`, or on DocuSeal's return. The URL carries nothing: the
  * registration is whatever the server-side session says it is, and the page
  * shows the minimum a player needs — which event, what they owe, whether the
- * waiver is done — with the four actions a resume session is allowed.
+ * waiver is done — with the actions a session is allowed.
  */
 export default async function ResumePage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
@@ -55,6 +62,18 @@ export default async function ResumePage({ searchParams }: { searchParams: Searc
     );
   }
 
+  const notice: ResumeNotice =
+    sp.registered === "1" ? "registered" : sp.signed === "1" ? "signed" : null;
+
+  const subtitle =
+    sp.cancelled === "true"
+      ? "Payment wasn't completed. Your spot is still held — pay when you're ready."
+      : notice === "registered"
+        ? "Your spot is saved. Pay online now, or tell us you'll pay at the field."
+        : notice === "signed" && !summary.waiverSigned
+          ? "We're still waiting to hear from the signing service. Reload in a moment, or press “Sign my waiver” to pick up where you left off."
+          : "Pay online, sign your waiver, or let us know you're not coming.";
+
   return (
     <>
       <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
@@ -65,17 +84,13 @@ export default async function ResumePage({ searchParams }: { searchParams: Searc
               {summary.eventTitle ? `Your spot — ${summary.eventTitle}` : "Your registration"}
             </h1>
           </div>
-          <p className="text-zinc-400 max-w-2xl">
-            {sp.cancelled === "true"
-              ? "Payment wasn't completed. Your spot is still held — pay when you're ready."
-              : "Pay online, sign your waiver, or let us know you're not coming."}
-          </p>
+          <p className="text-zinc-400 max-w-2xl">{subtitle}</p>
         </div>
       </section>
 
       <section className="bg-surface text-white py-10 md:py-14">
         <div className="max-w-2xl mx-auto px-6 space-y-6">
-          <ResumePanel summary={summary} />
+          <ResumePanel summary={summary} notice={notice} />
           <p className="text-center text-xs text-zinc-500">
             Questions?{" "}
             <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false} />

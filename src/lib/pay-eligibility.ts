@@ -1,12 +1,11 @@
-import { createPayResumeToken } from "@/lib/app-signing";
-import {
-  getContactByEmail,
-  getWaiverExpiryIso,
-  isContactWaiverValid,
-  normalizeEmail,
-} from "@/lib/contacts";
+import { getContactByEmail, normalizeEmail } from "@/lib/contacts";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { acceptsPayments } from "@/lib/tournament-state";
+import {
+  decideWaiverReuse,
+  type WaiverReuseLinkage,
+  type WaiverReuseRefusal,
+} from "@/lib/waiver-reuse";
 import type { PaymentMethodChoice } from "@/lib/payment-method";
 import type {
   PayEligibilityStatus,
@@ -25,6 +24,8 @@ export type PayEligibilityRegistrationSnapshot = {
   id: string;
   payment_status: RegistrationPaymentStatus;
   waiver_signed: boolean;
+  /** Who the row belongs to. Reuse is refused when it is not the caller's contact. */
+  contact_id?: string | null;
 };
 
 export type PayEligibilityResolveInput = {
@@ -39,6 +40,12 @@ export type PayEligibilityResolveInput = {
   > | null;
   registration: PayEligibilityRegistrationSnapshot | null;
   waiverType: PayEligibilityWaiverType;
+  /**
+   * How the caller is known. Only `authenticated_contact` can ever turn a
+   * contact's waiver into "ready to pay" for an unsigned row — see
+   * lib/waiver-reuse.ts. Required so a future caller has to say.
+   */
+  linkage: WaiverReuseLinkage;
 };
 
 export type PayEligibilityResolveResult = {
@@ -62,7 +69,11 @@ function canPayPending(status: RegistrationPaymentStatus): boolean {
 
 /**
  * Pure resolver: given contact + optional registration for a tournament, return
- * gate status. Does not mint tokens or write to the database.
+ * gate status. Does not write to the database.
+ *
+ * "The contact's waiver covers this" is decided by `decideWaiverReuse`, never by
+ * looking at the contact's dates directly: an unsigned row is rescued only for
+ * an authenticated adult whose own row it is.
  */
 export function resolvePayEligibility(
   input: PayEligibilityResolveInput
@@ -74,7 +85,15 @@ export function resolvePayEligibility(
   }
 
   const contactId = contact.id;
-  const contactWaiverValid = isContactWaiverValid(contact, waiverType);
+  const reuse = decideWaiverReuse({
+    contact,
+    waiverType,
+    linkage: input.linkage,
+    registrationContactId: registration
+      ? (registration.contact_id ?? null)
+      : undefined,
+  });
+  const contactWaiverValid = reuse.allowed;
 
   if (registration && isPaidUpForGate(registration.payment_status)) {
     return {
@@ -86,6 +105,11 @@ export function resolvePayEligibility(
 
   if (!contactWaiverValid) {
     if (registration) {
+      // The row's own signature is what counts when the contact's waiver
+      // cannot be reused for it.
+      if (registration.waiver_signed && canPayPending(registration.payment_status)) {
+        return { status: "ready_to_pay", contactId, registrationId: registration.id };
+      }
       return {
         status: "needs_waiver",
         contactId,
@@ -136,6 +160,12 @@ export type EnrollContactInTournamentInput = {
   tournamentId: string;
   waiverType: PayEligibilityWaiverType;
   /**
+   * How the caller is known to us. The row is written signed only when
+   * `decideWaiverReuse` allows it for this linkage — in practice, only the
+   * signed-in confirm path (`/api/register/join`) qualifies.
+   */
+  linkage: WaiverReuseLinkage;
+  /**
    * Team picked at signup (D3). Callers must have already checked the team
    * belongs to this event — see `resolveTeamIdForTournament`.
    */
@@ -178,6 +208,8 @@ export type EnrollContactInTournamentResult =
        * never succeed. Callers must say so plainly.
        */
       reason: "missing_waiver" | "already_registered" | "insert_failed";
+      /** Why the waiver could not be reused, when that is the reason. */
+      refusal?: WaiverReuseRefusal;
     };
 
 /** Postgres unique-violation. */
@@ -185,10 +217,13 @@ const UNIQUE_VIOLATION = "23505";
 
 /**
  * Create a pending registration row for a player whose contact already has a
- * valid facility waiver on file. This is the heart of the operator's rule: one
- * signed waiver (365 days) means the player never re-registers per event — any
- * tournament they want to pay for just gets a pending registration created here
- * and they go straight to checkout at the event's preset price.
+ * valid facility waiver on file — the D5/D9 rule: one signed adult waiver
+ * (365 days) means the player never re-signs per event.
+ *
+ * The waiver evidence copied onto the row is the contact's signed date and
+ * document link. The DocuSeal submission id is deliberately NOT copied: that
+ * submission was signed for a different registration, and a second row
+ * claiming it is what made the webhook's lookup ambiguous (audit F-04).
  *
  * Emergency contact is mirrored from the contact when present but is NOT
  * required — most waiver-on-file contacts were captured without it, and forcing
@@ -200,14 +235,13 @@ export async function enrollContactInTournament(
 ): Promise<EnrollContactInTournamentResult> {
   const { contact, tournamentId, waiverType } = input;
 
-  if (!isContactWaiverValid(contact, waiverType)) {
-    return { ok: false, reason: "missing_waiver" };
+  const reuse = decideWaiverReuse({ contact, waiverType, linkage: input.linkage });
+  if (!reuse.allowed) {
+    return { ok: false, reason: "missing_waiver", refusal: reuse.reason };
   }
 
   const emergencyName = (contact.emergency_name ?? "").trim();
   const emergencyPhone = (contact.emergency_phone ?? "").trim();
-
-  const signedAt = contact.waiver_signed_at ?? new Date().toISOString();
 
   const { data: inserted, error } = await supabaseAdmin
     .from("registrations")
@@ -225,10 +259,9 @@ export async function enrollContactInTournament(
       emergency_phone: emergencyPhone,
       waiver_type: waiverType,
       waiver_signed: true,
-      waiver_signed_at: signedAt,
-      waiver_document_url: contact.waiver_document_url,
+      waiver_signed_at: reuse.signedAt,
+      waiver_document_url: reuse.documentUrl,
       docuseal_status: "signed",
-      docuseal_submission_id: contact.waiver_submission_id,
       // A comped open-play spot is settled the moment it is confirmed: there is
       // nothing to collect, so leaving it 'pending' would put the player on the
       // owner's chase list for a fee that was never owed.
@@ -254,52 +287,54 @@ export async function enrollContactInTournament(
   return { ok: true, registrationId: inserted.id };
 }
 
-export async function syncRegistrationWaiverFromContact(
-  registrationId: string,
-  contact: Contact,
-  waiverType: PayEligibilityWaiverType
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  if (!isContactWaiverValid(contact, waiverType)) {
-    return { ok: false, message: "Contact waiver is not valid for sync." };
-  }
+export type SyncRegistrationWaiverResult =
+  | { ok: true }
+  | { ok: false; message: string; refusal?: WaiverReuseRefusal };
 
-  const canonicalSignedAt = contact.waiver_signed_at ?? new Date().toISOString();
-  const canonicalExpiresAt =
-    contact.waiver_expires_at ?? getWaiverExpiryIso(canonicalSignedAt);
+/**
+ * Copy a contact's still-valid adult waiver onto one of that contact's OWN
+ * registrations — the "registration hasn't caught up" convergence. The only
+ * writer of inherited waiver state besides `enrollContactInTournament`, and
+ * gated by the same decision: an authenticated caller, the same contact on the
+ * row, an unexpired adult waiver of the same type.
+ */
+export async function syncRegistrationWaiverFromContact(
+  registration: { id: string; contact_id: string | null },
+  contact: Contact,
+  waiverType: PayEligibilityWaiverType,
+  linkage: WaiverReuseLinkage
+): Promise<SyncRegistrationWaiverResult> {
+  const reuse = decideWaiverReuse({
+    contact,
+    waiverType,
+    linkage,
+    registrationContactId: registration.contact_id ?? null,
+  });
+  if (!reuse.allowed) {
+    return { ok: false, message: "Contact waiver cannot be reused for this registration.", refusal: reuse.reason };
+  }
 
   const { error: markSignedErr } = await supabaseAdmin
     .from("registrations")
     .update({
       waiver_signed: true,
-      waiver_signed_at: canonicalSignedAt,
-      waiver_document_url: contact.waiver_document_url,
+      waiver_signed_at: reuse.signedAt,
+      waiver_document_url: reuse.documentUrl,
       docuseal_status: "signed",
-      docuseal_submission_id: contact.waiver_submission_id,
     })
-    .eq("id", registrationId);
+    .eq("id", registration.id)
+    // Belt and braces on the ownership rule, in the statement itself.
+    .eq("contact_id", contact.id);
 
   if (markSignedErr) {
     console.error("[pay-eligibility] waiver sync failed:", markSignedErr.message);
     return { ok: false, message: markSignedErr.message };
   }
 
-  const contactPatch: Record<string, unknown> = {};
-  if (!contact.waiver_signed_at) {
-    contactPatch.waiver_signed_at = canonicalSignedAt;
-  }
-  if (!contact.waiver_expires_at && canonicalExpiresAt) {
-    contactPatch.waiver_expires_at = canonicalExpiresAt;
-  }
   if (!contact.waiver_source) {
-    contactPatch.waiver_source = "import";
-  }
-  if (!contact.waiver_type) {
-    contactPatch.waiver_type = waiverType;
-  }
-  if (Object.keys(contactPatch).length > 0) {
     const { error: contactPatchErr } = await supabaseAdmin
       .from("contacts")
-      .update(contactPatch)
+      .update({ waiver_source: "import" })
       .eq("id", contact.id);
     if (contactPatchErr) {
       console.warn("[pay-eligibility] contact waiver patch failed:", contactPatchErr.message);
@@ -336,9 +371,13 @@ async function findRegistrationForPayGate(
       id: byContact.id,
       payment_status: byContact.payment_status,
       waiver_signed: byContact.waiver_signed,
+      contact_id: byContact.contact_id ?? null,
     };
   }
 
+  // Legacy rows with no contact link, matched by the session's verified email.
+  // The snapshot carries `contact_id` (null or another contact), so the
+  // resolver can refuse to treat the contact's waiver as this row's.
   const { data: byEmail, error: emailErr } = await supabaseAdmin
     .from("registrations")
     .select(REGISTRATION_SELECT)
@@ -360,6 +399,7 @@ async function findRegistrationForPayGate(
     id: byEmail.id,
     payment_status: byEmail.payment_status,
     waiver_signed: byEmail.waiver_signed,
+    contact_id: byEmail.contact_id ?? null,
   };
 }
 
@@ -367,6 +407,12 @@ export type RunPayEligibilityCheckInput = {
   email: string;
   tournamentId: string;
   waiverType: PayEligibilityWaiverType;
+  /**
+   * How the caller is known. The only production caller is the signed-in
+   * server render of `/pay`, which passes `authenticated_contact` because
+   * `email` came from the Supabase session, not from a form.
+   */
+  linkage: WaiverReuseLinkage;
   /**
    * Whether a valid-waiver contact with no registration for this event may be
    * put on the roster as a side effect of this check.
@@ -381,7 +427,7 @@ export type RunPayEligibilityCheckResult =
   | { ok: false; httpStatus: number; error: string };
 
 /**
- * Load contact + registration, resolve status, optionally sync waiver, mint pay token.
+ * Load contact + registration, resolve status, optionally sync waiver.
  *
  * `allowAutoEnroll` has **no default**, deliberately. It used to be unconditional
  * behaviour: a recognised player with a valid waiver who so much as loaded
@@ -449,6 +495,7 @@ export async function runPayEligibilityCheck(
     contact,
     registration,
     waiverType: input.waiverType,
+    linkage: input.linkage,
   });
 
   switch (resolved.status) {
@@ -478,26 +525,15 @@ export async function runPayEligibilityCheck(
           contact,
           tournamentId: input.tournamentId,
           waiverType: input.waiverType,
+          linkage: input.linkage,
         });
         if (enroll.ok) {
-          let payToken: string;
-          try {
-            payToken = createPayResumeToken(enroll.registrationId);
-          } catch (e) {
-            console.error("[pay-eligibility] pay token signing failed after enroll:", e);
-            return {
-              ok: false,
-              httpStatus: 500,
-              error: "Payment could not be prepared (server signing misconfiguration).",
-            };
-          }
           return {
             ok: true,
             body: {
               status: "ready_to_pay",
               contactId: resolved.contactId!,
               registrationId: enroll.registrationId,
-              payToken,
             },
           };
         }
@@ -526,11 +562,12 @@ export async function runPayEligibilityCheck(
         },
       };
     case "ready_to_pay": {
-      if (resolved.syncWaiverFromContact && contact) {
+      if (resolved.syncWaiverFromContact && contact && registration) {
         const sync = await syncRegistrationWaiverFromContact(
-          resolved.registrationId!,
+          { id: registration.id, contact_id: registration.contact_id ?? null },
           contact,
-          input.waiverType
+          input.waiverType,
+          input.linkage
         );
         if (!sync.ok) {
           return {
@@ -541,25 +578,12 @@ export async function runPayEligibilityCheck(
         }
       }
 
-      let payToken: string;
-      try {
-        payToken = createPayResumeToken(resolved.registrationId!);
-      } catch (e) {
-        console.error("[pay-eligibility] pay token signing failed:", e);
-        return {
-          ok: false,
-          httpStatus: 500,
-          error: "Payment could not be prepared (server signing misconfiguration).",
-        };
-      }
-
       return {
         ok: true,
         body: {
           status: "ready_to_pay",
           contactId: resolved.contactId!,
           registrationId: resolved.registrationId!,
-          payToken,
         },
       };
     }

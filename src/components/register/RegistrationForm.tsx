@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, FormEvent } from "react";
 import { trackRegistrationEvent } from "@/lib/analytics";
-import Link from "next/link";
 import {
   Trophy,
   User,
@@ -11,15 +10,10 @@ import {
   ShieldAlert,
   ShieldCheck,
   Pencil,
-  CheckCircle2,
   Info,
-  Users,
 } from "lucide-react";
 import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
 import { NO_TEAM, TeamSelect } from "@/components/register/TeamPicker";
-import { PaymentChoice } from "@/components/register/PaymentChoice";
-import { copyForKind } from "@/lib/event-kind";
-import type { EventKind } from "@/lib/types";
 import type { TeamOption } from "@/lib/tournaments";
 
 type RegistrationOption = {
@@ -34,6 +28,10 @@ type RegistrationOption = {
  * pre-fills these fields, locks the email to the auth identity, and hides
  * the personal-info block behind an "Edit my info" toggle (collapsed by
  * default when all required fields are non-empty).
+ *
+ * `hasAdultWaiverOnFile` / `hasYouthWaiverOnFile` are answered by the same
+ * reuse rule the server applies (`decideWaiverReuse`), so the form never
+ * promises a skip the API will refuse. Youth is always false.
  */
 export type RegistrationPrefill = {
   email: string;
@@ -47,23 +45,20 @@ export type RegistrationPrefill = {
   hasYouthWaiverOnFile: boolean;
 };
 
+/**
+ * What `POST /api/register` answers (Stage 1.3). The response sets the
+ * registration session cookie itself; the browser is told only where to go
+ * next. No id, no token.
+ */
 type RegistrationApiResponse = {
   error?: string;
+  /** DocuSeal's signing page for this registration. */
   signUrl?: string;
+  /** A path on our own host: `/pay/resume/waiver` (in-app) or `/pay/resume?registered=1` (waiver reused). */
+  next?: string;
   waiverSkipped?: boolean;
-  waiverSignedAt?: string | null;
+  waiverMode?: "docuseal" | "in_app";
   tournamentTitle?: string | null;
-  registrationId?: string;
-  payToken?: string;
-};
-
-type ConfirmationState = {
-  tournamentTitle: string | null;
-  waiverSignedAt: string | null;
-  payUrl: string;
-  /** Both null on legacy responses; the card then shows the plain pay link. */
-  registrationId: string | null;
-  payToken: string | null;
 };
 
 function formatPhone(value: string) {
@@ -71,17 +66,6 @@ function formatPhone(value: string) {
   if (digits.length <= 3) return digits;
   if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
-
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 const inputClass =
@@ -96,8 +80,6 @@ export function RegistrationForm({
   preselectedType = null,
   prefill = null,
   lockedToEvent = false,
-  entryFeeLabel = null,
-  eventKind = "tournament",
 }: {
   tournaments: RegistrationOption[];
   /** Teams available per tournament id. Missing/empty hides the picker. */
@@ -107,18 +89,11 @@ export function RegistrationForm({
   preselectedType?: "adult" | "youth" | null;
   prefill?: RegistrationPrefill | null;
   /**
-   * `"$80.00"`. Shown on the confirmation card so "pay by card" names the
-   * amount rather than sending the player to a page to find out.
-   */
-  entryFeeLabel?: string | null;
-  /**
    * The event is already decided (the page was reached from that event), so the
    * dropdown becomes a statement rather than a question. A one-option select
    * that looks editable is a small lie about how much choice the player has.
    */
   lockedToEvent?: boolean;
-  /** Words only — "entry fee" vs "door price" on the confirmation card. */
-  eventKind?: EventKind;
 }) {
   const initialId = useMemo(() => {
     if (preselectedSlug) {
@@ -154,9 +129,6 @@ export function RegistrationForm({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(
-    null
-  );
   const startTracked = useRef(false);
 
   useEffect(() => {
@@ -189,7 +161,6 @@ export function RegistrationForm({
   const isLoggedIn = Boolean(prefill);
   const teams = teamsByTournament[tournamentId] ?? [];
   const selectedTournament = tournaments.find((t) => t.id === tournamentId);
-  const selectedTournamentTitle = selectedTournament?.title ?? null;
   const isWorldCupSelected =
     selectedTournament?.slug === WORLD_CUP_TOURNAMENT_SLUG;
   const waiverOnFileForType = prefill
@@ -203,7 +174,6 @@ export function RegistrationForm({
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitError("");
-    setConfirmation(null);
 
     if (!tournamentId) {
       setSubmitError("Please select an event to register for.");
@@ -247,32 +217,30 @@ export function RegistrationForm({
         return;
       }
 
-      if (data.waiverSkipped && data.signUrl) {
-        trackRegistrationEvent("registration_waiver_skipped", {
-          tournament_id: tournamentId,
-          registration_type: registrationType,
-        });
-        setConfirmation({
-          tournamentTitle: data.tournamentTitle ?? selectedTournamentTitle,
-          waiverSignedAt: data.waiverSignedAt ?? null,
-          payUrl: data.signUrl,
-          registrationId: data.registrationId ?? null,
-          payToken: data.payToken ?? null,
-        });
+      /*
+        The server has set the registration session cookie on this response.
+        All that is left is to go where it said: DocuSeal to sign, the in-app
+        signing screen, or the registration page when the waiver was reused.
+        A full navigation, not a client transition, so the next request
+        carries the cookie and reads fresh state.
+      */
+      const target = data.next ?? data.signUrl;
+      if (!target) {
+        setSubmitError(
+          "Registration saved, but we couldn't load the next step. Please contact us."
+        );
         return;
       }
 
-      if (data.signUrl) {
-        trackRegistrationEvent("registration_waiver_needed", {
+      trackRegistrationEvent(
+        data.waiverSkipped ? "registration_waiver_skipped" : "registration_waiver_needed",
+        {
           tournament_id: tournamentId,
           registration_type: registrationType,
-        });
-        window.location.href = data.signUrl;
-      } else {
-        setSubmitError(
-          "Registration saved, but we couldn't load the waiver. Please contact us."
-        );
-      }
+          waiver_mode: data.waiverMode ?? (data.waiverSkipped ? "reused" : "unknown"),
+        }
+      );
+      window.location.assign(target);
     } catch {
       setSubmitError(
         "We couldn't save your registration right now. Please try again."
@@ -281,20 +249,6 @@ export function RegistrationForm({
       setIsSubmitting(false);
     }
   };
-
-  if (confirmation) {
-    return (
-      <ConfirmationCard
-        tournamentTitle={confirmation.tournamentTitle}
-        waiverSignedAt={confirmation.waiverSignedAt}
-        payUrl={confirmation.payUrl}
-        registrationId={confirmation.registrationId}
-        payToken={confirmation.payToken}
-        entryFeeLabel={entryFeeLabel}
-        eventKind={eventKind}
-      />
-    );
-  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
@@ -391,7 +345,7 @@ export function RegistrationForm({
         </select>
         <p className="text-xs text-zinc-500">
           Adults sign the adult waiver. Youth registrations use the youth
-          waiver (signed by a parent or guardian).
+          waiver, signed by a parent or guardian for each registration.
         </p>
         {preselectedType && (
           <p className="text-xs text-zinc-500">
@@ -475,8 +429,8 @@ export function RegistrationForm({
       <p className="text-sm text-zinc-500 text-center">
         {isWorldCupSelected
           ? isLoggedIn && registrationType && waiverOnFileForType
-            ? "Your waiver is on file — next you'll choose team payment on the pay page (full team, your share, or captain already paid)."
-            : "After submitting, you'll sign the waiver, then choose team payment on the pay page."
+            ? "Your waiver is on file — next you'll choose how to pay on your registration page."
+            : "After submitting, you'll sign the waiver, then choose how to pay."
           : isLoggedIn && registrationType && waiverOnFileForType
             ? "Your waiver is already on file — we'll take you straight to payment."
             : "After submitting, you'll be directed to sign the waiver. Registration is not complete until the waiver is signed."}
@@ -509,12 +463,8 @@ function WorldCupRegisterInstructions() {
               already on file.
             </li>
             <li>
-              <strong className="text-zinc-200">Team fee is paid later</strong> on
-              the payment page: the captain may pay the full{" "}
-              <strong className="text-zinc-200">$960</strong> team fee, or each
-              player may pay their share (
-              <strong className="text-zinc-200">$960 divided by roster size</strong>,
-              roster size 8–12). Your team should agree on the same roster size.
+              <strong className="text-zinc-200">Team fee is paid later</strong> from
+              your registration page.
             </li>
             <li>
               <strong className="text-zinc-200">Pick your team above</strong> if
@@ -828,103 +778,6 @@ function PersonalInfoFields({
             </button>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function ConfirmationCard({
-  tournamentTitle,
-  waiverSignedAt,
-  payUrl,
-  registrationId,
-  payToken,
-  entryFeeLabel,
-  eventKind = "tournament",
-}: {
-  tournamentTitle: string | null;
-  waiverSignedAt: string | null;
-  payUrl: string;
-  registrationId: string | null;
-  payToken: string | null;
-  entryFeeLabel: string | null;
-  eventKind?: EventKind;
-}) {
-  const feeNoun = copyForKind(eventKind).feeLabel.toLowerCase();
-  const paymentLinkTracked = useRef(false);
-
-  useEffect(() => {
-    if (paymentLinkTracked.current) return;
-    paymentLinkTracked.current = true;
-    trackRegistrationEvent("registration_payment_link_shown", {
-      source: "registration_confirmation",
-      waiver_on_file: Boolean(waiverSignedAt),
-    });
-  }, [waiverSignedAt]);
-
-  const titleLine = tournamentTitle
-    ? `You're registered for ${tournamentTitle}.`
-    : "You're registered.";
-  const signedDate = formatDate(waiverSignedAt);
-
-  return (
-    <div className="dashboard-card p-6 md:p-8 space-y-5">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-lg bg-brand/15 text-brand flex items-center justify-center shrink-0">
-          <CheckCircle2 size={20} />
-        </div>
-        <div className="space-y-1">
-          <h3 className="text-lg md:text-xl font-semibold text-white">
-            {titleLine}
-          </h3>
-          <p className="text-sm text-zinc-400">
-            {signedDate ? (
-              <>
-                Waiver on file from{" "}
-                <span className="text-zinc-200">{signedDate}</span>. No new
-                signature needed.
-              </>
-            ) : (
-              <>Waiver on file. No new signature needed.</>
-            )}
-          </p>
-        </div>
-      </div>
-
-      <div className="border-t border-border-token pt-5 space-y-3">
-        {/*
-          Not "one more step". The spot is already theirs — the waiver is what
-          holds it — and saying otherwise is what taught players that closing
-          the tab before paying meant they weren't in. All that is left is
-          settling up, and there are two ways to do that.
-        */}
-        <p className="text-sm text-zinc-400">
-          Your spot is saved. Last thing: how do you want to pay
-          {entryFeeLabel ? ` the ${entryFeeLabel} ${feeNoun}` : ` the ${feeNoun}`}?
-        </p>
-        {registrationId && payToken ? (
-          <PaymentChoice
-            registrationId={registrationId}
-            payToken={payToken}
-            payHref={payUrl}
-            entryFeeLabel={entryFeeLabel}
-            eventKind={eventKind}
-          />
-        ) : (
-          <Link
-            href={payUrl}
-            className="btn-primary w-full h-12 inline-flex items-center justify-center"
-          >
-            Pay here
-          </Link>
-        )}
-        <p className="text-xs text-zinc-500 text-center">
-          You can also view this registration any time at{" "}
-          <Link href="/me" className="underline underline-offset-2">
-            My account
-          </Link>
-          .
-        </p>
       </div>
     </div>
   );

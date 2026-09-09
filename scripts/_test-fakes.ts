@@ -1,15 +1,18 @@
 /**
- * In-memory doubles for the F-01 / F-02 stores, used by the test scripts.
+ * In-memory doubles for the F-01 / F-02 / Stage 1.3 stores, used by the test
+ * scripts.
  *
  * They mirror the SEMANTICS of the database functions in
- * supabase/migrations/20260909120000_* and 20260909120100_* — single-winner
- * token consumption, upsert-on-session-id, convergent registration
- * confirmation, event idempotency, all-or-nothing on failure — so the
- * application logic can be exercised without Postgres. They are not a
- * substitute for running the SQL; see remediation_stage_1_2_report.md §8.
+ * supabase/migrations/20260909120000_*, 20260909120100_* and 20260909130000_*
+ * — single-winner token consumption, upsert-on-session-id, convergent
+ * registration confirmation, event idempotency, atomic webhook claims,
+ * all-or-nothing on failure — so the application logic can be exercised
+ * without Postgres. They are not a substitute for running the SQL; see the
+ * remediation reports.
  */
 import type {
   ConsumeResult,
+  CreateSessionResult,
   ResumableRegistration,
   ResumeLinkMessage,
   ResumeLinkSender,
@@ -25,6 +28,16 @@ import type {
 } from "../src/lib/payment-finalize";
 import type { PricedTournament } from "../src/lib/stripe-checkout";
 import type { ResumeRegistrationOps, ResumeSummary } from "../src/lib/resume-routes";
+import type { InAppSignatureRequest, WaiverSigningContext } from "../src/lib/waiver-sign-server";
+import type { PaymentMethodChoice } from "../src/lib/payment-method";
+import type {
+  ClaimEventResult,
+  DocusealWebhookStore,
+  WebhookRegistrationRow,
+} from "../src/lib/docuseal-webhook";
+import type { RecordSignedWaiverInput, RecordSignedWaiverResult } from "../src/lib/waiver-capture";
+import type { AccountIdentity, AccountRegistrationOps } from "../src/lib/account-routes";
+import { getWaiverExpiryIso } from "../src/lib/contacts";
 
 /* ------------------------------------------------------------------ */
 /* Resume store                                                          */
@@ -45,9 +58,12 @@ type SessionRow = {
   registrationId: string;
   tokenHash: string;
   scopes: string[];
+  createdAt: number;
   expiresAt: number;
   revokedAt: number | null;
   lastUsedAt: number | null;
+  /** Null for a session minted directly (post-registration / in-person). */
+  accessTokenId: string | null;
 };
 
 let counter = 0;
@@ -154,15 +170,46 @@ export class InMemoryResumeStore implements ResumeStore {
       registrationId: row.registrationId,
       tokenHash: input.sessionTokenHash,
       scopes: [...input.scopes],
+      createdAt: now,
       expiresAt: now + input.sessionTtlSeconds * 1000,
       revokedAt: null,
       lastUsedAt: null,
+      accessTokenId: row.id,
     };
     this.sessions.set(session.tokenHash, session);
     return {
       ok: true,
       sessionId: session.id,
       registrationId: session.registrationId,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+    };
+  }
+
+  /** A plain INSERT into registration_sessions: no token behind it. */
+  async createSession(input: {
+    registrationId: string;
+    tokenHash: string;
+    scopes: readonly string[];
+    ttlSeconds: number;
+  }): Promise<CreateSessionResult> {
+    this.maybeFail("createSession");
+    if (this.sessions.has(input.tokenHash)) throw new Error("duplicate session hash");
+    const now = this.now();
+    const session: SessionRow = {
+      id: fakeId(),
+      registrationId: input.registrationId,
+      tokenHash: input.tokenHash,
+      scopes: [...input.scopes],
+      createdAt: now,
+      expiresAt: now + Math.max(60, input.ttlSeconds) * 1000,
+      revokedAt: null,
+      lastUsedAt: null,
+      accessTokenId: null,
+    };
+    this.sessions.set(session.tokenHash, session);
+    return {
+      sessionId: session.id,
+      createdAt: new Date(session.createdAt).toISOString(),
       expiresAt: new Date(session.expiresAt).toISOString(),
     };
   }
@@ -175,6 +222,7 @@ export class InMemoryResumeStore implements ResumeStore {
       id: row.id,
       registrationId: row.registrationId,
       scopes: row.scopes,
+      createdAt: new Date(row.createdAt).toISOString(),
       expiresAt: new Date(row.expiresAt).toISOString(),
       revokedAt: row.revokedAt ? new Date(row.revokedAt).toISOString() : null,
     };
@@ -195,6 +243,11 @@ export class InMemoryResumeStore implements ResumeStore {
   }
   sessionFor(rawSecretHash: string) {
     return this.sessions.get(rawSecretHash) ?? null;
+  }
+  /** Age a session, as if it had been minted `seconds` ago. */
+  ageSession(rawSecretHash: string, seconds: number) {
+    const row = this.sessions.get(rawSecretHash);
+    if (row) row.createdAt -= seconds * 1000;
   }
 }
 
@@ -221,11 +274,14 @@ export class CapturingSender implements ResumeLinkSender {
 export type FakeRegistration = {
   id: string;
   paymentStatus: string;
+  paymentMethod: string | null;
   cancelledAt: string | null;
   waiverSigned: boolean;
   /** Spies: a resume session must never be able to flip these. */
   cashMarkedPaid: boolean;
+  /** Flipped only by an in-app signature request (needs `waiver:sign`). */
   waiverCompletedDirectly: boolean;
+  signedName: string | null;
 };
 
 export class RecordingOps implements ResumeRegistrationOps {
@@ -236,10 +292,12 @@ export class RecordingOps implements ResumeRegistrationOps {
     this.registrations.set(id, {
       id,
       paymentStatus: "pending",
+      paymentMethod: null,
       cancelledAt: null,
       waiverSigned: true,
       cashMarkedPaid: false,
       waiverCompletedDirectly: false,
+      signedName: null,
       ...patch,
     });
   }
@@ -252,7 +310,7 @@ export class RecordingOps implements ResumeRegistrationOps {
       eventTitle: "Community Cup - Fall 2026",
       eventSlug: "community-cup-fall-2026",
       paymentStatus: r.paymentStatus,
-      paymentMethod: null,
+      paymentMethod: r.paymentMethod,
       waiverSigned: r.waiverSigned,
       teamName: null,
       entryFeeCents: 8000,
@@ -285,6 +343,242 @@ export class RecordingOps implements ResumeRegistrationOps {
     if (r.waiverSigned) return { ok: false as const, status: 409, error: "signed" };
     // Starting the provider flow does NOT complete it.
     return { ok: true as const, url: `https://docuseal.test/s/${registrationId}`, mode: "docuseal" as const };
+  }
+
+  async setPaymentMethod(registrationId: string, method: PaymentMethodChoice) {
+    this.calls.push({ op: "setPaymentMethod", registrationId });
+    const r = this.registrations.get(registrationId);
+    if (!r) return { status: 404, body: { error: "not found" } };
+    if (r.cancelledAt) return { status: 409, body: { error: "cancelled" } };
+    if (!r.waiverSigned) return { status: 409, body: { error: "sign first", needsWaiver: true } };
+    r.paymentMethod = method;
+    return { status: 200, body: { ok: true, method, paymentStatus: r.paymentStatus } };
+  }
+
+  async signWaiverInApp(registrationId: string, input: InAppSignatureRequest) {
+    this.calls.push({ op: "signWaiverInApp", registrationId });
+    const r = this.registrations.get(registrationId);
+    if (!r) return { status: 404, body: { error: "not found" } };
+    if (r.waiverSigned) return { status: 200, body: { ok: true, alreadySigned: true } };
+    if (input.signedName.trim().length < 3 || !input.signedName.includes(" ")) {
+      return { status: 400, body: { error: "full name" } };
+    }
+    r.waiverSigned = true;
+    r.waiverCompletedDirectly = true;
+    r.signedName = input.signedName;
+    return { status: 200, body: { ok: true, signedAt: new Date().toISOString() } };
+  }
+
+  async loadWaiverSigningContext(registrationId: string): Promise<WaiverSigningContext | null> {
+    const r = this.registrations.get(registrationId);
+    if (!r) return null;
+    return {
+      registrationId,
+      contactId: null,
+      waiverType: "adult",
+      playerName: "Test Player",
+      eventTitle: "Community Cup - Fall 2026",
+      eventSlug: "community-cup-fall-2026",
+      alreadySigned: r.waiverSigned,
+    };
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Account ops (what a signed-in owner may do)                           */
+/* ------------------------------------------------------------------ */
+
+export type FakeOwnedRegistration = FakeRegistration & { contactId: string | null };
+
+export class RecordingAccountOps implements AccountRegistrationOps {
+  registrations = new Map<string, FakeOwnedRegistration>();
+  calls: { op: string; registrationId: string; contactId?: string }[] = [];
+
+  add(id: string, contactId: string | null, patch: Partial<FakeRegistration> = {}) {
+    this.registrations.set(id, {
+      id,
+      contactId,
+      paymentStatus: "pending",
+      paymentMethod: null,
+      cancelledAt: null,
+      waiverSigned: true,
+      cashMarkedPaid: false,
+      waiverCompletedDirectly: false,
+      signedName: null,
+      ...patch,
+    });
+  }
+
+  async loadOwner(registrationId: string) {
+    const r = this.registrations.get(registrationId);
+    if (!r) return null;
+    return { contactId: r.contactId };
+  }
+
+  async cancel(registrationId: string) {
+    this.calls.push({ op: "cancel", registrationId });
+    const r = this.registrations.get(registrationId)!;
+    if (r.cancelledAt) return { status: 200, body: { ok: true, alreadyCancelled: true } };
+    r.cancelledAt = new Date().toISOString();
+    return { status: 200, body: { ok: true, alreadyCancelled: false } };
+  }
+
+  async setPaymentMethod(registrationId: string, method: PaymentMethodChoice, identity: AccountIdentity) {
+    this.calls.push({ op: "setPaymentMethod", registrationId, contactId: identity.contactId });
+    const r = this.registrations.get(registrationId)!;
+    if (!r.waiverSigned) return { status: 409, body: { error: "sign first", needsWaiver: true } };
+    r.paymentMethod = method;
+    return { status: 200, body: { ok: true, method } };
+  }
+
+  async startCheckout(registrationId: string, identity: AccountIdentity) {
+    this.calls.push({ op: "startCheckout", registrationId, contactId: identity.contactId });
+    const r = this.registrations.get(registrationId)!;
+    if (r.paymentStatus === "paid") return { ok: false as const, status: 400, error: "paid" };
+    return { ok: true as const, url: `https://checkout.stripe.test/${registrationId}` };
+  }
+
+  async signWaiverInApp(registrationId: string, input: InAppSignatureRequest) {
+    this.calls.push({ op: "signWaiverInApp", registrationId });
+    const r = this.registrations.get(registrationId)!;
+    if (r.waiverSigned) return { status: 200, body: { ok: true, alreadySigned: true } };
+    r.waiverSigned = true;
+    r.waiverCompletedDirectly = true;
+    r.signedName = input.signedName;
+    return { status: 200, body: { ok: true } };
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* DocuSeal webhook store (mirrors claim_docuseal_webhook_event)          */
+/* ------------------------------------------------------------------ */
+
+export type FakeWaiverRow = WebhookRegistrationRow & {
+  waiverSigned: boolean;
+  waiverSignedAt: string | null;
+  waiverExpiresAt: string | null;
+  documentUrl: string | null;
+  /** Times the row was written — a replay must not add to this. */
+  writes: number;
+};
+
+type FakeEventRow = {
+  eventKey: string;
+  eventType: string;
+  submitterId: number;
+  submissionId: number;
+  registrationId: string;
+  claimedAt: number;
+  processedAt: number | null;
+  outcome: string | null;
+  detail: string | null;
+  attempts: number;
+};
+
+export class InMemoryDocusealStore implements DocusealWebhookStore {
+  registrations = new Map<string, FakeWaiverRow>();
+  contacts = new Map<string, { waiverSignedAt: string | null; waiverExpiresAt: string | null }>();
+  events = new Map<string, FakeEventRow>();
+  now: () => number = () => Date.now();
+  failNextRecord = false;
+  failNextClaim = false;
+  recordCalls = 0;
+
+  add(row: Partial<FakeWaiverRow> & { id: string }) {
+    this.registrations.set(row.id, {
+      contactId: null,
+      waiverType: "adult",
+      docusealSubmissionId: null,
+      waiverSigned: false,
+      waiverSignedAt: null,
+      waiverExpiresAt: null,
+      documentUrl: null,
+      writes: 0,
+      ...row,
+    });
+  }
+
+  async loadRegistration(id: string) {
+    const r = this.registrations.get(id);
+    if (!r) return null;
+    const { id: rid, contactId, waiverType, docusealSubmissionId } = r;
+    return { id: rid, contactId, waiverType, docusealSubmissionId };
+  }
+
+  async findRegistrationsBySubmission(submissionId: number) {
+    return [...this.registrations.values()]
+      .filter((r) => r.docusealSubmissionId === submissionId)
+      .map(({ id, contactId, waiverType, docusealSubmissionId }) => ({ id, contactId, waiverType, docusealSubmissionId }));
+  }
+
+  async claimEvent(input: {
+    eventKey: string;
+    eventType: string;
+    submitterId: number;
+    submissionId: number;
+    registrationId: string;
+    staleAfterSeconds: number;
+  }): Promise<ClaimEventResult> {
+    if (this.failNextClaim) {
+      this.failNextClaim = false;
+      throw new Error("simulated claim failure");
+    }
+    const now = this.now();
+    const existing = this.events.get(input.eventKey);
+    if (!existing) {
+      this.events.set(input.eventKey, {
+        eventKey: input.eventKey,
+        eventType: input.eventType,
+        submitterId: input.submitterId,
+        submissionId: input.submissionId,
+        registrationId: input.registrationId,
+        claimedAt: now,
+        processedAt: null,
+        outcome: null,
+        detail: null,
+        attempts: 1,
+      });
+      return { status: "claimed" };
+    }
+    if (existing.processedAt !== null) return { status: "duplicate", previousOutcome: existing.outcome };
+    if (existing.claimedAt < now - input.staleAfterSeconds * 1000) {
+      existing.claimedAt = now;
+      existing.attempts += 1;
+      existing.detail = null;
+      return { status: "reclaimed" };
+    }
+    return { status: "in_flight" };
+  }
+
+  /** Mirrors recordSignedWaiver: registration first, then contact promotion. */
+  async recordSignedWaiver(input: RecordSignedWaiverInput): Promise<RecordSignedWaiverResult> {
+    this.recordCalls += 1;
+    const signedAt = input.completedAt ?? new Date(this.now()).toISOString();
+    const expiresAt = getWaiverExpiryIso(signedAt);
+    if (this.failNextRecord) {
+      this.failNextRecord = false;
+      return { ok: false, signedAt, expiresAt, documentUrl: input.documentUrl ?? null, error: "simulated write failure" };
+    }
+    const r = this.registrations.get(input.registrationId);
+    if (!r) return { ok: false, signedAt, expiresAt, documentUrl: null, error: "no row" };
+    r.waiverSigned = true;
+    r.waiverSignedAt = signedAt;
+    r.waiverExpiresAt = expiresAt;
+    if (input.documentUrl) r.documentUrl = input.documentUrl;
+    if (input.submissionId != null) r.docusealSubmissionId = Number(input.submissionId);
+    r.writes += 1;
+    if (input.contactId) {
+      this.contacts.set(input.contactId, { waiverSignedAt: signedAt, waiverExpiresAt: expiresAt });
+    }
+    return { ok: true, signedAt, expiresAt, documentUrl: input.documentUrl ?? null };
+  }
+
+  async finishEvent(input: { eventKey: string; processed: boolean; outcome: string; detail: string | null }) {
+    const row = this.events.get(input.eventKey);
+    if (!row) return;
+    row.outcome = input.outcome;
+    row.detail = input.detail;
+    if (input.processed) row.processedAt = this.now();
   }
 }
 

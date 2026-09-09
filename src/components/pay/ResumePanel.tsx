@@ -1,29 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, CheckCircle2, CreditCard, PenLine, XCircle } from "lucide-react";
+import { AlertCircle, Banknote, CheckCircle2, CreditCard, PenLine, XCircle } from "lucide-react";
+import { trackRegistrationEvent } from "@/lib/analytics";
 import type { ResumeSummary } from "@/lib/resume-routes";
 
 /**
- * The actions a resume session may take, and nothing else. Every button POSTs
- * to /pay/resume/api/* with the HttpOnly session cookie; the browser never
- * holds a registration id or a token.
+ * The actions a registration-bound session may take, and nothing else. Every
+ * button POSTs to /pay/resume/api/* with the HttpOnly session cookie; the
+ * browser never holds a registration id or a token.
+ *
+ * Two kinds of session land here and see the same panel: a magic-link
+ * session, and the session minted for the browser that just created the
+ * registration (Stage 1.3 — this replaced the confirmation card that used to
+ * carry a 90-day token). `notice` only changes the first line.
  */
-export function ResumePanel({ summary }: { summary: ResumeSummary }) {
+export type ResumeNotice = "registered" | "signed" | null;
+
+export function ResumePanel({
+  summary,
+  notice = null,
+}: {
+  summary: ResumeSummary;
+  notice?: ResumeNotice;
+}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [cancelled, setCancelled] = useState(Boolean(summary.cancelledAt));
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(summary.paymentMethod);
+  const shownTracked = useRef(false);
 
   const settled = summary.paymentStatus === "paid" || summary.paymentStatus === "waived";
+  const payingCash = paymentMethod === "cash" && !settled;
   const feeLabel = summary.entryFeeCents != null ? `$${(summary.entryFeeCents / 100).toFixed(2)}` : null;
 
-  async function post(path: string): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+  useEffect(() => {
+    if (shownTracked.current || settled || cancelled) return;
+    shownTracked.current = true;
+    trackRegistrationEvent("registration_payment_link_shown", {
+      source: "resume_page",
+      waiver_on_file: summary.waiverSigned,
+      notice: notice ?? undefined,
+    });
+  }, [settled, cancelled, summary.waiverSigned, notice]);
+
+  async function post(path: string, body: Record<string, unknown> = {}): Promise<{ ok: boolean; data: Record<string, unknown> }> {
     const res = await fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: "{}",
+      body: JSON.stringify(body),
     });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     return { ok: res.ok, data };
@@ -33,6 +60,8 @@ export function ResumePanel({ summary }: { summary: ResumeSummary }) {
     setError("");
     setBusy("pay");
     try {
+      // Card is a declared intent as well as a payment, so the roster shows it.
+      await post("/pay/resume/api/payment-method", { method: "card" });
       const { ok, data } = await post("/pay/resume/api/checkout");
       if (!ok || typeof data.url !== "string") {
         setError(typeof data.error === "string" ? data.error : "We couldn't start payment. Please try again.");
@@ -42,6 +71,25 @@ export function ResumePanel({ summary }: { summary: ResumeSummary }) {
       window.location.assign(data.url);
     } catch {
       setError("Network error. Please try again.");
+      setBusy(null);
+    }
+  };
+
+  const payCash = async () => {
+    setError("");
+    setBusy("cash");
+    try {
+      const { ok, data } = await post("/pay/resume/api/payment-method", { method: "cash" });
+      if (!ok) {
+        setError(typeof data.error === "string" ? data.error : "We couldn't save that. Please try again.");
+        setBusy(null);
+        return;
+      }
+      setPaymentMethod("cash");
+      trackRegistrationEvent("registration_payment_method_chosen", { surface: "resume", method: "cash" });
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
       setBusy(null);
     }
   };
@@ -69,7 +117,14 @@ export function ResumePanel({ summary }: { summary: ResumeSummary }) {
     try {
       const { ok, data } = await post("/pay/resume/api/cancel");
       if (!ok) {
-        setError(typeof data.error === "string" ? data.error : "We couldn't cancel that just now.");
+        // A session older than thirty minutes may read and pay but not cancel;
+        // the server says so and the player re-verifies through a fresh link.
+        setError(
+          typeof data.error === "string"
+            ? data.error
+            : "We couldn't cancel that just now."
+        );
+        setConfirmCancel(false);
         setBusy(null);
         return;
       }
@@ -84,6 +139,22 @@ export function ResumePanel({ summary }: { summary: ResumeSummary }) {
 
   return (
     <div className="dashboard-card p-6 md:p-8 space-y-6">
+      {notice === "registered" && (
+        <p className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-100">
+          <CheckCircle2 size={18} className="shrink-0 mt-0.5 text-emerald-300" aria-hidden />
+          <span>
+            You&apos;re registered{summary.eventTitle ? ` for ${summary.eventTitle}` : ""}. Your
+            waiver is on file — nothing to sign. Last thing: how do you want to pay?
+          </span>
+        </p>
+      )}
+      {notice === "signed" && summary.waiverSigned && (
+        <p className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-100">
+          <CheckCircle2 size={18} className="shrink-0 mt-0.5 text-emerald-300" aria-hidden />
+          <span>Waiver signed — thank you. Your spot is held; pay now or at the field.</span>
+        </p>
+      )}
+
       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
         <Row label="Event" value={summary.eventTitle ?? "—"} />
         <Row label="Team" value={summary.teamName ?? "Not assigned yet"} />
@@ -99,7 +170,7 @@ export function ResumePanel({ summary }: { summary: ResumeSummary }) {
               ? "Spot cancelled"
               : settled
                 ? "Paid"
-                : `${feeLabel ?? "Entry fee"} outstanding${summary.paymentMethod === "cash" ? " — paying cash at the field" : ""}`
+                : `${feeLabel ?? "Entry fee"} outstanding${payingCash ? " — paying cash at the field" : ""}`
           }
           tone={cancelled ? "warn" : settled ? "good" : "warn"}
         />
@@ -134,10 +205,35 @@ export function ResumePanel({ summary }: { summary: ResumeSummary }) {
           )}
 
           {!settled && summary.waiverSigned && (
-            <button type="button" onClick={payNow} disabled={busy !== null} className="btn-primary w-full justify-center">
-              <CreditCard size={16} />
-              {busy === "pay" ? "Opening secure checkout…" : feeLabel ? `Pay ${feeLabel} by card` : "Pay by card"}
-            </button>
+            <>
+              <button type="button" onClick={payNow} disabled={busy !== null} className="btn-primary w-full justify-center">
+                <CreditCard size={16} />
+                {busy === "pay" ? "Opening secure checkout…" : feeLabel ? `Pay ${feeLabel} by card` : "Pay by card"}
+              </button>
+
+              {payingCash ? (
+                <div className="flex gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3">
+                  <Banknote size={18} className="text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-white">Paying {feeLabel ?? "the fee"} at the field</p>
+                    <p className="text-xs text-zinc-400">Your spot is saved. Bring it on the night — we&apos;ll mark you off when you hand it over.</p>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={payCash}
+                  disabled={busy !== null}
+                  className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-border-token text-sm font-medium text-zinc-200 hover:text-white hover:border-zinc-500 transition-colors disabled:opacity-60"
+                >
+                  <Banknote size={16} />
+                  {busy === "cash" ? "Saving…" : "I'll pay cash at the field"}
+                </button>
+              )}
+              <p className="text-xs text-zinc-500 text-center">
+                Either way your spot is saved — the waiver is what holds it, not the payment.
+              </p>
+            </>
           )}
 
           {settled && (

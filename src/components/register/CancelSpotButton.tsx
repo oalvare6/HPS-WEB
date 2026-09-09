@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AlertCircle, Loader2, XCircle } from "lucide-react";
 
 /**
- * The way off a roster.
+ * The way off a roster, for a SIGNED-IN player on their own status card.
  *
  * There wasn't one. Every `DELETE` in the app is admin-only, `/me` was a
  * read-only table, and both status cards offered payment controls and nothing
@@ -26,25 +26,19 @@ import { AlertCircle, Loader2, XCircle } from "lucide-react";
  * outlined rather than filled, below a divider, and behind a confirm step. It
  * reads as the door marked exit, not as a third way to pay.
  *
- * ## Suspense note
+ * ## Authorisation (Stage 1.3)
  *
- * A client component with **no async children**, deliberately — same rule as
- * `PaymentChoice`, and for the same reason. It renders on `/register` (inside
- * the status cards) and on `/pay` (inside `PayLaterCard`), and the `/pay` one
- * sits in `PayForm`'s Suspense subtree: an awaiting child there strands the
- * boundary's fallback `<template>` and the Pay button never renders at all.
- * Reproduced on a clean production build — see `EnrolledPanels.tsx`. Do not
- * give this an async server component child.
+ * The request carries nothing but the registration id in the path; the route
+ * decides from the Supabase session whether that row is this player's. The
+ * 90-day HMAC token this button used to send was retired. The resume page has
+ * its own cancel control against the session cookie (`ResumePanel`).
  */
 export function CancelSpotButton({
   registrationId,
-  payToken,
   eventTitle,
   className = "",
 }: {
   registrationId: string;
-  /** HMAC pay-resume token — the route's authorization for signed-out players. */
-  payToken: string;
   eventTitle: string;
   className?: string;
 }) {
@@ -56,10 +50,10 @@ export function CancelSpotButton({
     setError("");
     setBusy(true);
     try {
-      const res = await fetch(`/api/registrations/${registrationId}/cancel`, {
+      const res = await fetch(`/api/registrations/${encodeURIComponent(registrationId)}/cancel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payToken }),
+        body: "{}",
       });
       const data = (await res.json()) as { error?: string; ok?: boolean };
 

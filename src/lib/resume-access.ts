@@ -39,7 +39,28 @@ export const RESUME_SCOPES = [
   "registration:cancel",
   "waiver:start",
 ] as const;
-export type ResumeScope = (typeof RESUME_SCOPES)[number];
+
+/**
+ * The one scope a magic-link session NEVER carries. It lets a browser record an
+ * in-app typed-name signature (the A7 placeholder used when DocuSeal is not
+ * configured). It is granted only to the session minted for the browser that
+ * just created the registration while DocuSeal is unconfigured, and to the
+ * owner's laptop for in-person signing (D8). A resumed session may START a
+ * DocuSeal flow; it may not declare a waiver signed.
+ */
+export const IN_APP_WAIVER_SCOPE = "waiver:sign" as const;
+
+/** What the admin's laptop gets for one in-person in-app signature: read + sign, nothing else. */
+export const ADMIN_IN_PERSON_SCOPES = ["registration:read", IN_APP_WAIVER_SCOPE] as const;
+
+export type ResumeScope = (typeof RESUME_SCOPES)[number] | typeof IN_APP_WAIVER_SCOPE;
+
+/**
+ * Cancelling is more destructive than reading, paying or starting a waiver, so
+ * it needs a session younger than this (Stage 1.3 Phase 4). A session past
+ * this age keeps every other scope and is told to verify again for cancel.
+ */
+export const RESUME_CANCEL_FRESHNESS_SECONDS = 30 * 60;
 
 /**
  * Throttle windows. Defence in depth only — the token is the authorisation.
@@ -108,8 +129,15 @@ export type StoredSession = {
   id: string;
   registrationId: string;
   scopes: string[];
+  createdAt: string;
   expiresAt: string;
   revokedAt: string | null;
+};
+
+export type CreateSessionResult = {
+  sessionId: string;
+  createdAt: string;
+  expiresAt: string;
 };
 
 export interface ResumeStore {
@@ -144,6 +172,19 @@ export interface ResumeStore {
     scopes: readonly string[];
     sessionTtlSeconds: number;
   }): Promise<ConsumeResult>;
+
+  /**
+   * Mint a session directly, with no magic-link token behind it. Used for the
+   * browser that has just CREATED a registration (Stage 1.3 Phase 3) and for
+   * the owner's in-person signing laptop. The row is identical to one created
+   * by `consumeAccessToken`, minus `access_token_id`.
+   */
+  createSession(input: {
+    registrationId: string;
+    tokenHash: string;
+    scopes: readonly string[];
+    ttlSeconds: number;
+  }): Promise<CreateSessionResult>;
 
   findSession(tokenHash: string): Promise<StoredSession | null>;
   touchSession(sessionId: string): Promise<void>;
@@ -312,6 +353,62 @@ export async function exchangeResumeToken(
 }
 
 /* ------------------------------------------------------------------ */
+/* 2b. Mint a session for a registration the caller has just created    */
+/* ------------------------------------------------------------------ */
+
+export type IssuedRegistrationSession = {
+  /** Raw session secret. Goes into the cookie and nowhere else. */
+  sessionSecret: string;
+  sessionId: string;
+  registrationId: string;
+  expiresAt: string;
+  /** Seconds until expiry, for the cookie's Max-Age. */
+  maxAgeSeconds: number;
+};
+
+/**
+ * The immediate post-registration authority (Stage 1.3, replacing the 90-day
+ * HMAC token). The browser has just successfully created THIS registration, so
+ * the server may hand it a session scoped to exactly that row — the same
+ * server-side, hashed, revocable session a magic link produces, with the same
+ * scope model. Never wider: a caller passes only scopes from `ResumeScope`,
+ * and `IN_APP_WAIVER_SCOPE` only when DocuSeal is unconfigured.
+ *
+ * Nothing about the submitted email is consulted here; the binding is the
+ * immutable `registrationId` the caller just inserted.
+ */
+export async function issueRegistrationSession(
+  store: ResumeStore,
+  input: {
+    registrationId: string;
+    scopes: readonly ResumeScope[];
+    ttlSeconds?: number;
+    now?: () => Date;
+  }
+): Promise<IssuedRegistrationSession> {
+  const ttl = input.ttlSeconds ?? RESUME_SESSION_TTL_SECONDS;
+  const sessionSecret = generateSecret();
+  const created = await store.createSession({
+    registrationId: input.registrationId,
+    tokenHash: hashSecret(sessionSecret),
+    scopes: input.scopes,
+    ttlSeconds: ttl,
+  });
+  const nowMs = (input.now ?? (() => new Date()))().getTime();
+  const expiresMs = Date.parse(created.expiresAt);
+  const maxAgeSeconds = Number.isNaN(expiresMs)
+    ? ttl
+    : Math.max(60, Math.floor((expiresMs - nowMs) / 1000));
+  return {
+    sessionSecret,
+    sessionId: created.sessionId,
+    registrationId: input.registrationId,
+    expiresAt: created.expiresAt,
+    maxAgeSeconds,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* 3. Authenticate a request by its session cookie                      */
 /* ------------------------------------------------------------------ */
 
@@ -319,6 +416,8 @@ export type ResumeSession = {
   sessionId: string;
   registrationId: string;
   scopes: ReadonlySet<string>;
+  /** When the session was minted — the freshness clock for destructive scopes. */
+  createdAt: string;
 };
 
 export async function authenticateResumeSession(
@@ -346,6 +445,7 @@ export async function authenticateResumeSession(
     sessionId: row.id,
     registrationId: row.registrationId,
     scopes: new Set(row.scopes),
+    createdAt: row.createdAt,
   };
 }
 
@@ -358,4 +458,19 @@ export function sessionAllows(
   if (!session) return false;
   if (session.registrationId !== registrationId) return false;
   return session.scopes.has(scope);
+}
+
+/**
+ * Step-up for `registration:cancel`: the session must have been minted within
+ * the last `maxAgeSeconds`. An unparseable `createdAt` is treated as stale —
+ * fail closed on the destructive action, never open.
+ */
+export function sessionIsFresh(
+  session: Pick<ResumeSession, "createdAt">,
+  now: Date = new Date(),
+  maxAgeSeconds: number = RESUME_CANCEL_FRESHNESS_SECONDS
+): boolean {
+  const createdMs = Date.parse(session.createdAt);
+  if (Number.isNaN(createdMs)) return false;
+  return now.getTime() - createdMs <= maxAgeSeconds * 1000;
 }

@@ -599,3 +599,44 @@ agent against a test registration on Community Cup; two defects found and fixed 
   sent-but-unsigned DocuSeal submission; leave that alone.
 - **Diagnostic warning `[resume-exchange] refused:` is token-free** (reason, token length,
   content type) and is meant to stay.
+
+## 2026-09-09 — Stage 1.3: waiver identity, DocuSeal trust boundary, legacy token retired
+
+Branch `claude/houston-premier-stage-1-3-lewiry`; full record in `remediation_stage_1_3_report.md`.
+
+- **Email-only waiver inheritance is gone.** `POST /api/register` no longer marks a new row
+  signed because the typed email matched a waived contact. Reuse is one pure decision,
+  `decideWaiverReuse` (`src/lib/waiver-reuse.ts`): authenticated owner + own row + unexpired
+  ADULT waiver of the same type. Youth never reuses — a fresh guardian signature per
+  registration until the model has a child/guardian identity (business questions 1–5 in
+  `docs/waiver_identity_model.md`). Inherited rows no longer copy `docuseal_submission_id`.
+- **DocuSeal webhook is a real trust boundary.** Raw-body HMAC (`X-Docuseal-Signature`,
+  ±300 s), association check against `metadata.registration_id` + the row's own submission
+  id + template/waiver-type, atomic claim per `form.completed:<submitter id>` in the new
+  `docuseal_webhook_events` table, 2xx only after the write. Response contract in the report
+  §11. **Migration `20260909130000_docuseal_webhook_events.sql` must be applied by hand before
+  the code ships**; until then every completion answers 500 and DocuSeal retries (bounded).
+  DocuSeal's dashboard "test webhook" now answers 404 by design (its fixture registration does
+  not exist here).
+- **The 90-day HMAC `payToken` is retired everywhere.** Deleted: `lib/pay-resume-url.ts`,
+  `api/registrations/[id]` GET, `api/register/payment-intent`, `api/register/captain-paid-ack`,
+  `api/waiver/sign`, `api/stripe/checkout` (was also an unauthenticated checkout creator),
+  `api/pay/options`, `components/pay/{PayForm,EnrolledPanels}.tsx`, `scripts/_mint-pay-token.ts`.
+  Replacements: the post-registration `hps_resume` session (`issueRegistrationSession`) and the
+  owner-guarded `/api/registrations/[id]/{cancel,payment-method,checkout,waiver-sign}` routes.
+  `APP_SIGNING_SECRET` / `ADMIN_SESSION_SECRET` still sign the **admin** cookie and stay set.
+- **Cancellation freshness:** `registration:cancel` needs a session younger than 30 minutes
+  (`RESUME_CANCEL_FRESHNESS_SECONDS`); a stale one is told to open a fresh link. Nothing else
+  about the 24-hour session changed.
+- **Interstitial:** `Cache-Control: no-store` + `Referrer-Policy: strict-origin` (not
+  `no-referrer`, which makes a same-origin form POST send `Origin: null` and would break the
+  exchange's same-origin check). No third-party assets; GET never consumes.
+- **Runtime verification is a deployment prerequisite** (report §19): no preview environment
+  was reachable from this session. The Stage 1.2 `formData()` lesson applies — exercise the
+  new register → session → `/pay/resume` path and one DocuSeal completion in Preview first.
+- **Historical docs describing the retired flow** (`docs/PAY-GATE-ACCEPTANCE.md`,
+  `docs/HANDOFF-PLAYER-PAY-FLOW.md`, `docs/WORLD-CUP-ACCEPTANCE.md`, `docs/PROJECT-STATUS.md`,
+  session logs) are left as history; `PAY-GATE-ACCEPTANCE.md` carries a superseded banner.
+- `scripts/verify-world-cup-launch.mjs` also expects `src/components/admin/RegistrationsList.tsx`,
+  which was removed by the B6 admin consolidation before this stage — pre-existing failure,
+  untouched here.

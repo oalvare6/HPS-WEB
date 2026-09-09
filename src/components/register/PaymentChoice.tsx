@@ -17,50 +17,44 @@ import type { EventKind } from "@/lib/types";
  * spot. Their registration row existed the whole time. The system knew; the
  * player didn't.
  *
- * There *was* a pay-later link, at the very bottom of `/pay`, underneath the
- * checkout form. An option you have to scroll past a payment form to find is not
- * an option anybody takes.
- *
  * ## What it changes
  *
  * Nothing about money. Choosing cash writes `payment_method='cash'` and leaves
  * `payment_status='pending'`, so the Roster keeps counting the player as owing
  * and the owner collects at the field. What it changes is that the player is
- * *told* their spot is safe, and the owner learns who to expect cash from —
- * which "said nothing and closed the tab" never conveyed.
+ * *told* their spot is safe, and the owner learns who to expect cash from.
  *
- * ## Note for whoever renders this on `/pay`
+ * ## Where it posts (Stage 1.3)
  *
- * This is a client component with no async children, which is what makes it safe
- * next to `PayForm`'s Suspense boundary. Do not give it an awaiting child (an
- * async Server Component such as `WhatsAppCommunityLinkFromSite`) — that is the
- * exact shape that stranded the boundary's fallback and made the Pay button
- * vanish. See `EnrolledPanels.tsx`.
+ * There is no token in the browser any more. `surface` picks the routes:
+ *   account — `/api/registrations/<id>/…`, authorised by the Supabase session
+ *             (the `/register` status cards);
+ *   resume  — `/pay/resume/api/…`, authorised by the HttpOnly session cookie
+ *             (the `/pay/resume` page).
+ * Picking card declares the method, then starts checkout and follows Stripe's
+ * URL, so the click means what it looks like it means.
  */
+export type PaymentChoiceSurface =
+  | { kind: "account"; registrationId: string }
+  | { kind: "resume" };
+
 export function PaymentChoice({
-  registrationId,
-  payToken,
-  payHref,
+  surface,
   entryFeeLabel,
   initialMethod = null,
   mode = "both",
   className = "",
   eventKind = "tournament",
 }: {
-  registrationId: string;
-  /** HMAC pay-resume token for this registration — the route's authorization. */
-  payToken: string;
-  /** Where the card button goes. */
-  payHref: string;
+  surface: PaymentChoiceSurface;
   entryFeeLabel: string | null;
   /** `"cash"` when they have already told us. */
   initialMethod?: string | null;
   /** Words only — "match night" reads wrong on a one-off open play night. */
   eventKind?: EventKind;
   /**
-   * `"cash-only"` drops the card button, for `/pay` — the Stripe form is
-   * already on that screen, and a second route to it would be two buttons that
-   * do the same thing sitting inches apart.
+   * `"cash-only"` drops the card button where a card button already sits
+   * inches away.
    */
   mode?: "both" | "cash-only";
   className?: string;
@@ -69,14 +63,19 @@ export function PaymentChoice({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const base =
+    surface.kind === "resume"
+      ? "/pay/resume/api"
+      : `/api/registrations/${encodeURIComponent(surface.registrationId)}`;
+
   const choose = async (next: "cash" | "card") => {
     setError("");
     setBusy(true);
     try {
-      const res = await fetch("/api/register/payment-intent", {
+      const res = await fetch(`${base}/payment-method`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registrationId, payToken, method: next }),
+        body: JSON.stringify({ method: next }),
       });
       const data = (await res.json()) as { error?: string; method?: string };
 
@@ -88,14 +87,25 @@ export function PaymentChoice({
 
       setMethod(data.method ?? next);
       trackRegistrationEvent("registration_payment_method_chosen", {
-        registration_id: registrationId,
+        surface: surface.kind,
         method: next,
       });
 
-      // Picking card is a statement of intent, not a payment. Send them
-      // straight to checkout so the click means what it looks like it means.
+      // Picking card is a statement of intent, not a payment. Start checkout
+      // and go straight to Stripe.
       if (next === "card") {
-        window.location.href = payHref;
+        const checkout = await fetch(`${base}/checkout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        const payload = (await checkout.json().catch(() => ({}))) as { url?: string; error?: string };
+        if (!checkout.ok || typeof payload.url !== "string") {
+          setError(payload.error || "We couldn't start payment. Please try again.");
+          setBusy(false);
+          return;
+        }
+        window.location.assign(payload.url);
         return;
       }
       setBusy(false);
@@ -156,7 +166,7 @@ export function PaymentChoice({
           disabled={busy}
           className="btn-primary w-full h-12 inline-flex items-center justify-center gap-2 disabled:opacity-60"
         >
-          <CreditCard size={16} />
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <CreditCard size={16} />}
           Pay {entryFeeLabel ? `${entryFeeLabel} ` : ""}by card
         </button>
       )}

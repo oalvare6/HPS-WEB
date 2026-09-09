@@ -23,9 +23,11 @@ const REQUIRED_FILES = [
   "src/components/shared/TournamentBannerImage.tsx",
   "src/lib/tournament-image.ts",
   "src/app/auth/callback/route.ts",
-  "src/components/pay/PayForm.tsx",
-  "src/app/api/stripe/checkout/route.ts",
-  "src/app/api/register/captain-paid-ack/route.ts",
+  // Stage 1.3 retired the token-authorised pay surface: PayForm.tsx,
+  // api/stripe/checkout and api/register/captain-paid-ack were deleted.
+  // Card payment now starts from the session-authorised routes below.
+  "src/lib/stripe-checkout.ts",
+  "src/app/api/registrations/[id]/checkout/route.ts",
   "src/components/admin/RegistrationsList.tsx",
   "docs/WORLD-CUP-ACCEPTANCE.md",
   "scripts/update-world-cup-tournament.mjs",

@@ -224,14 +224,18 @@ const CASES: Case[] = [
     expect: "waiver_required",
   },
   {
-    name: "youth player checked against youth → free",
+    // Stage 1.3 (SEC-01): a youth waiver on the contact never covers another
+    // registration — the schema has no child identity, so a fresh guardian
+    // signature is required per registration. Free entry still applies once
+    // that waiver is signed; the gate is ordered, not removed.
+    name: "youth player checked against youth → still signs a fresh youth waiver first",
     input: {
       ...base,
       waiverType: "youth",
       contact: waiverYouth,
       registrations: [liveSpot()],
     },
-    expect: "free",
+    expect: "waiver_required",
   },
   {
     name: "nobody we have ever met → waiver first, never must_pay",

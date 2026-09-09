@@ -16,8 +16,10 @@ import type { TeamOption } from "@/lib/tournaments";
  * was to fill the whole form a second time, or to type your email into a
  * separate `/pay` screen that spoke a different language about the same event.
  *
- * Server components on purpose — every link here is minted server-side with a
- * signed token, so there is nothing for the client to compute.
+ * Server components on purpose. Every control here talks to
+ * `/api/registrations/<id>/…`, which decides from the SUPABASE SESSION whether
+ * the row is this player's — nothing in these cards carries a credential. The
+ * 90-day HMAC token they used to embed was retired in Stage 1.3.
  */
 
 const cardClass = "dashboard-card p-6 md:p-8 space-y-5";
@@ -29,7 +31,6 @@ export function AlreadyPaidCard({
   teamId,
   teamName,
   registrationId,
-  payToken,
   eventKind = "tournament",
 }: {
   tournamentTitle: string;
@@ -38,7 +39,6 @@ export function AlreadyPaidCard({
   teamId: string | null;
   teamName: string | null;
   registrationId: string;
-  payToken: string;
   /** Words and panels only — a Friday night has no roster and no teams. */
   eventKind?: EventKind;
 }) {
@@ -108,11 +108,7 @@ export function AlreadyPaidCard({
         the case that owes a refund.
       */}
       <div className="border-t border-border-token pt-5">
-        <CancelSpotButton
-          registrationId={registrationId}
-          payToken={payToken}
-          eventTitle={tournamentTitle}
-        />
+        <CancelSpotButton registrationId={registrationId} eventTitle={tournamentTitle} />
       </div>
     </div>
   );
@@ -121,19 +117,16 @@ export function AlreadyPaidCard({
 export function OwesPaymentCard({
   tournamentTitle,
   tournamentId,
-  payHref,
   entryFeeLabel,
   teams,
   teamId,
   teamName,
   payingCash,
   registrationId,
-  payToken,
   eventKind = "tournament",
 }: {
   tournamentTitle: string;
   tournamentId: string;
-  payHref: string;
   entryFeeLabel: string | null;
   teams: TeamOption[];
   teamId: string | null;
@@ -141,7 +134,6 @@ export function OwesPaymentCard({
   /** They have already told us they're bringing cash. */
   payingCash: boolean;
   registrationId: string;
-  payToken: string;
   /** Words and panels only — a Friday night has no roster and no teams. */
   eventKind?: EventKind;
 }) {
@@ -199,9 +191,7 @@ export function OwesPaymentCard({
           why the only exit anybody found was a card payment.
         */}
         <PaymentChoice
-          registrationId={registrationId}
-          payToken={payToken}
-          payHref={payHref}
+          surface={{ kind: "account", registrationId }}
           entryFeeLabel={entryFeeLabel}
           initialMethod={payingCash ? "cash" : null}
           eventKind={eventKind}
@@ -224,11 +214,7 @@ export function OwesPaymentCard({
         visible button, still behind a confirm.
       */}
       <div className="border-t border-border-token pt-5">
-        <CancelSpotButton
-          registrationId={registrationId}
-          payToken={payToken}
-          eventTitle={tournamentTitle}
-        />
+        <CancelSpotButton registrationId={registrationId} eventTitle={tournamentTitle} />
       </div>
     </div>
   );

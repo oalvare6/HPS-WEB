@@ -2,7 +2,20 @@
 
 import Link from "next/link";
 import { PayEmailGate } from "@/components/pay/PayEmailGate";
-import type { TournamentPayOption } from "@/components/pay/PayForm";
+
+/** The slim event row the gate renders as context. */
+export type TournamentPayOption = {
+  id: string;
+  title: string;
+  slug: string;
+  format: string | null;
+  recurrence: string | null;
+  time_start: string | null;
+  time_end: string | null;
+  location: string | null;
+  entry_fee_cents: number | null;
+  drop_in_fee_cents: number;
+};
 
 type PayPageClientProps = {
   initialTournament: TournamentPayOption | null;
@@ -12,8 +25,9 @@ type PayPageClientProps = {
 
 /**
  * Logged-out pay flow only. Logged-in users are resolved server-side in
- * `pay/page.tsx` and either land directly on `<PayForm/>` (via redirect) or
- * see a server-rendered result card — they never mount this client tree.
+ * `pay/page.tsx` and either land on their `/register` status card (via
+ * redirect) or see a server-rendered result card — they never mount this
+ * client tree.
  *
  * A logged-out player is offered an emailed link (F-01); the browser is never
  * handed a token here.

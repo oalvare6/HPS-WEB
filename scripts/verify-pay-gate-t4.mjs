@@ -36,8 +36,13 @@ const registerRoute = fs.readFileSync(
   path.join(root, "src/app/api/register/route.ts"),
   "utf8"
 );
-if (registerRoute.includes("buildPayResumeUrl")) ok("register API uses buildPayResumeUrl");
-else bad("register API missing buildPayResumeUrl");
+// Stage 1.3: the register API no longer builds a token-bearing pay URL; it
+// mints a registration-bound session and sends the browser to a clean URL.
+if (registerRoute.includes("issueRegistrationSession") && !registerRoute.includes("buildPayResumeUrl")) {
+  ok("register API issues a registration session (no pay-resume token URL)");
+} else {
+  bad("register API should issue a registration session and never build a pay-resume URL");
+}
 
 const card = fs.readFileSync(
   path.join(root, "src/components/shared/TournamentCard.tsx"),

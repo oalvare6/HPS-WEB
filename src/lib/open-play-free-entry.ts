@@ -41,7 +41,7 @@
  * The branch table is pure and lives in `resolveOpenPlayEntitlement`, so it can
  * be tested without a database — see scripts/test-open-play-free-entry.ts.
  */
-import { isContactWaiverValid } from "@/lib/contacts";
+import { decideWaiverReuse } from "@/lib/waiver-reuse";
 import type { Contact, RegistrationPaymentStatus } from "@/lib/types";
 import type { SignupWaiverType } from "@/lib/signup-state";
 
@@ -96,6 +96,11 @@ export type OpenPlayEntitlement =
   | { kind: "must_pay"; contactId: string; amountCents: number };
 
 export type OpenPlayEntitlementInput = {
+  /**
+   * The SIGNED-IN player's own contact (from the Supabase session), or null.
+   * The waiver gate below asks the reuse rule with `authenticated_contact`
+   * linkage on that basis; never pass a contact found by a typed email.
+   */
   contact: Pick<
     Contact,
     "id" | "waiver_type" | "waiver_signed_at" | "waiver_expires_at"
@@ -160,8 +165,10 @@ export function resolveOpenPlayEntitlement(
 
   // The waiver is a legal gate, not a commercial one, so it comes first and is
   // never skipped for a free player. A comped Community Cup regular with a
-  // lapsed waiver signs again before they play.
-  if (!isContactWaiverValid(contact, waiverType)) {
+  // lapsed waiver signs again before they play — and a youth player signs a
+  // fresh waiver for every registration (lib/waiver-reuse.ts), free or not.
+  const reuse = decideWaiverReuse({ contact, waiverType, linkage: "authenticated_contact" });
+  if (!reuse.allowed) {
     return { kind: "waiver_required", contactId: contact.id };
   }
 

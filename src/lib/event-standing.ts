@@ -70,7 +70,7 @@ export async function findEventRegistration(
 ): Promise<SignupRegistrationSnapshot | null> {
   const { data, error } = await supabaseAdmin
     .from("registrations")
-    .select("id, payment_status, waiver_signed, team_id, payment_method")
+    .select("id, payment_status, waiver_signed, team_id, payment_method, contact_id")
     .eq("tournament_id", tournamentId)
     .eq("contact_id", contactId)
     .is("cancelled_at", null)

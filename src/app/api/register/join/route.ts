@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import { createPayResumeToken } from "@/lib/app-signing";
 import { getCurrentPlayer } from "@/lib/player-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { enrollContactInTournament } from "@/lib/pay-eligibility";
 import { resolveTeamIdForTournament } from "@/lib/tournaments";
 import { acceptsRegistrations } from "@/lib/tournament-state";
-import { buildPayResumePath } from "@/lib/pay-resume-url";
-import { isContactWaiverValid } from "@/lib/contacts";
+import { decideWaiverReuse, describeWaiverReuseRefusal } from "@/lib/waiver-reuse";
 import { defaultWaiverTypeFor } from "@/lib/signup-state";
 import { isPaymentMethodChoice } from "@/lib/payment-method";
 import { isOpenPlay } from "@/lib/event-kind";
 import { loadOpenPlayEntitlement } from "@/lib/open-play-attendance";
+
+export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,16 +25,22 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * body carries only the event, the team choice and the payment method, so this
  * cannot be used to enroll somebody else.
  *
+ * Whether the session's waiver may be reused is decided by
+ * `decideWaiverReuse` with `authenticated_contact` linkage: an adult waiver on
+ * the player's own contact, unexpired. A youth waiver never qualifies here — a
+ * fresh youth waiver is signed per registration through the full form.
+ *
  * ## Why the payment method arrives here
  *
  * It used to be a second request. `QuickJoinCard` called this route, then called
- * `/api/register/payment-intent`, and swallowed any failure from the second one
- * — so a player who said "cash at the field" could land on the roster with
+ * a payment-intent route, and swallowed any failure from the second one — so a
+ * player who said "cash at the field" could land on the roster with
  * `payment_method` NULL and the owner would never learn to expect cash from
  * them. Writing it in the same insert removes the half-failed state entirely.
  *
  * It remains only a declaration. `payment_status` is `'pending'` either way; a
- * cash promise is not a payment.
+ * cash promise is not a payment. A card choice is settled by the caller through
+ * `POST /api/registrations/[id]/checkout` (session-authorised) afterwards.
  */
 export async function POST(request: Request) {
   try {
@@ -91,15 +97,13 @@ export async function POST(request: Request) {
     const contact = player.contact;
     const waiverType = defaultWaiverTypeFor(contact);
 
-    // Already on this roster? Hand back the same pay link instead of creating a
-    // duplicate row. A double-tap on a phone at the field is not a new player.
+    // Already on this roster? Hand back the same registration instead of
+    // creating a duplicate row. A double-tap on a phone at the field is not a
+    // new player.
     //
     // This lookup runs BEFORE the waiver check on purpose. The waiver gate
     // guards *enrolment* — it must not fire for someone already on the roster,
-    // who now reaches this route just to fill in the team they never picked. A
-    // player whose registration is signed but whose contact-level waiver has
-    // lapsed sits in exactly that state, and refusing them a team would be
-    // refusing the wrong thing.
+    // who now reaches this route just to fill in the team they never picked.
     const { data: existing } = await supabaseAdmin
       .from("registrations")
       .select("id, team_id")
@@ -108,20 +112,28 @@ export async function POST(request: Request) {
       // Cancelled rows are not "already on this roster". Without this filter a
       // player who dropped out could never sign back up: the old row would be
       // found as `existing`, the insert would be skipped, and they would be
-      // handed a pay link for a spot they no longer hold.
+      // handed a spot they no longer hold.
       .is("cancelled_at", null)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    // The quick path is only quick because the waiver already exists. If it has
-    // lapsed, say so plainly rather than enrolling someone with no waiver — the
-    // screen sends them to the full signup, which collects a new signature.
-    if (!existing?.id && !isContactWaiverValid(contact, waiverType)) {
-      return NextResponse.json(
-        { error: "Your waiver needs signing again. Continue with the full sign-up." },
-        { status: 409 }
-      );
+    // The quick path is only quick because the waiver can be reused. If it
+    // cannot — lapsed, wrong type, or a youth waiver — say so plainly rather
+    // than enrolling someone with no waiver; the screen sends them to the full
+    // signup, which collects a new signature.
+    if (!existing?.id) {
+      const reuse = decideWaiverReuse({ contact, waiverType, linkage: "authenticated_contact" });
+      if (!reuse.allowed) {
+        return NextResponse.json(
+          {
+            error: `${describeWaiverReuseRefusal(reuse.reason)} Continue with the full sign-up.`,
+            reason: "missing_waiver",
+            refusal: reuse.reason,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const teamId = await resolveTeamIdForTournament(requestedTeamId, tournamentId);
@@ -166,7 +178,7 @@ export async function POST(request: Request) {
       // team picker on an existing signup, and the picker sends no method — so
       // writing one would blank the choice of anyone setting their team. A
       // player already on the roster changes how they pay through
-      // `PaymentChoice` → `/api/register/payment-intent`.
+      // `PaymentChoice` → `/api/registrations/[id]/payment-method`.
       if (!currentTeamId && teamId) {
         const { error: teamErr } = await supabaseAdmin
           .from("registrations")
@@ -187,12 +199,6 @@ export async function POST(request: Request) {
         Evaluated here, from the database, and never from the request body — the
         rule is readable in the shipped bundle, so a client-supplied "I'm free"
         flag would be forgeable free entry.
-
-        `waiver_required` is not handled as a branch because it cannot be
-        reached: the block above already turned away anyone without a valid
-        contact-level waiver with the "continue with the full sign-up" 409. The
-        entitlement check re-derives it anyway rather than assuming, so the two
-        gates can never drift apart.
       */
       let freeEntry: { viaTournamentId: string } | null = null;
       if (isOpenPlay(tournament)) {
@@ -211,6 +217,7 @@ export async function POST(request: Request) {
         contact,
         tournamentId,
         waiverType,
+        linkage: "authenticated_contact",
         teamId,
         paymentMethod,
         freeEntry,
@@ -227,7 +234,9 @@ export async function POST(request: Request) {
         */
         const message =
           enrolled.reason === "missing_waiver"
-            ? "Your waiver needs signing again. Continue with the full sign-up."
+            ? `${
+                enrolled.refusal ? describeWaiverReuseRefusal(enrolled.refusal) : "Your waiver needs signing again."
+              } Continue with the full sign-up.`
             : enrolled.reason === "already_registered"
               ? "You're already signed up for this one. Refresh the page to see where you stand."
               : "We couldn't add you to this roster. Please try again.";
@@ -245,17 +254,6 @@ export async function POST(request: Request) {
       registrationId = enrolled.registrationId;
     }
 
-    let payToken: string;
-    try {
-      payToken = createPayResumeToken(registrationId);
-    } catch (e) {
-      console.error("[register/join] pay token signing failed:", e);
-      return NextResponse.json(
-        { error: "Payment could not be prepared (server signing misconfiguration)." },
-        { status: 500 }
-      );
-    }
-
     return NextResponse.json({
       ok: true,
       registrationId,
@@ -264,19 +262,10 @@ export async function POST(request: Request) {
 
         The client must not send them to checkout on the strength of having
         picked "card" — there is no session to send them to, and Stripe would
-        reject the amount anyway. `payUrl` is still returned so the shape of
-        this response never changes; it is simply not the right place to go.
+        reject the amount anyway.
       */
       settledFree,
-      // Returned alongside the URL so the caller can also declare a payment
-      // method (`/api/register/payment-intent`) without having to pick the
-      // token back out of a query string it just received.
-      payToken,
-      payUrl: buildPayResumePath({
-        registrationId,
-        payToken,
-        tournamentSlug: tournament.slug,
-      }),
+      statusHref: `/register?tournament=${encodeURIComponent(tournament.slug)}`,
     });
   } catch (error) {
     console.error("[register/join] unexpected error:", error);

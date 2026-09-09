@@ -12,18 +12,23 @@ const inputClass =
  * service, and it is intentionally the plainest thing that still produces a
  * record worth keeping: the name, the box, and one button.
  *
- * On success the browser navigates to the pay page with a full page load rather
- * than a client transition, so the next request re-reads the registration and
- * cannot render a stale "waiver required" state.
+ * The request carries only what was typed. Who may sign is decided by the
+ * route behind `endpoint` — the Supabase session for `/api/registrations/…`,
+ * the `waiver:sign` session cookie for `/pay/resume/api/…` — never by anything
+ * the browser holds.
+ *
+ * On success the browser navigates with a full page load rather than a client
+ * transition, so the next request re-reads the registration and cannot render
+ * a stale "waiver required" state.
  */
 export function WaiverSignForm({
-  registrationId,
-  payToken,
+  endpoint,
+  nextHref,
   waiverType,
   playerName,
 }: {
-  registrationId: string;
-  payToken: string;
+  endpoint: string;
+  nextHref: string;
   waiverType: WaiverType;
   playerName: string;
 }) {
@@ -47,26 +52,24 @@ export function WaiverSignForm({
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/waiver/sign", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          registrationId,
-          payToken,
           signedName: name,
           signerRelationship: isYouth ? relationship.trim() || null : null,
         }),
       });
 
-      const data = (await res.json()) as { error?: string; payUrl?: string };
+      const data = (await res.json()) as { error?: string; ok?: boolean };
 
-      if (!res.ok || !data.payUrl) {
+      if (!res.ok || !data.ok) {
         setError(data.error || "We couldn't record your signature. Please try again.");
         setSubmitting(false);
         return;
       }
 
-      window.location.href = data.payUrl;
+      window.location.assign(nextHref);
     } catch {
       setError("Network error. Check your connection and try again.");
       setSubmitting(false);
