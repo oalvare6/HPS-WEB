@@ -125,6 +125,18 @@ async function main() {
     t.check("cookie value is the raw session secret and the store has only its hash", store.sessionFor(hashSecret(secret)) !== null);
     t.check("cookie carries no registration id / email", !setCookie.includes(REG_A) && !setCookie.includes("alice"));
 
+    const malformed = await handleResumeExchange(post("/pay/resume/api/exchange", { token: "short" }, same), deps);
+    t.eq("malformed token → 303 to the malformed-link page (store never consulted)", malformed.headers.get("location"), "/pay/resume?link=malformed");
+    const noBody = await handleResumeExchange(new Request(`${SITE}/pay/resume/api/exchange`, { method: "POST", headers: { origin: SITE, host: "www.example.com" } }), deps);
+    t.eq("empty body → malformed, not invalid", noBody.headers.get("location"), "/pay/resume?link=malformed");
+    const charsetForm = new Request(`${SITE}/pay/resume/api/exchange`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded; charset=UTF-8", origin: SITE, host: "www.example.com" },
+      body: new URLSearchParams({ token: raw }).toString(),
+    });
+    // The token was consumed by the successful exchange above, so a parsed body reaches
+    // the store and is refused as `invalid`; a body that failed to parse would be `malformed`.
+    t.eq("form body with charset parameter is parsed (store consulted → invalid, not malformed)", (await handleResumeExchange(charsetForm, deps)).headers.get("location"), "/pay/resume?link=invalid");
     const reuse = await handleResumeExchange(post("/pay/resume/api/exchange", { token: raw }, same), deps);
     t.eq("re-used token → 303 to the invalid-link page", reuse.headers.get("location"), "/pay/resume?link=invalid");
     t.check("re-use clears any cookie rather than setting one", /Max-Age=0/.test(reuse.headers.get("set-cookie") ?? ""));

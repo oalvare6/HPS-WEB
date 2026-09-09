@@ -82,13 +82,20 @@ function redirect(location: string, headers?: Record<string, string>): Response 
 }
 
 async function readBody(request: Request): Promise<Record<string, unknown>> {
-  const type = request.headers.get("content-type") ?? "";
+  const type = (request.headers.get("content-type") ?? "").toLowerCase();
   try {
     if (type.includes("application/json")) {
       const parsed = (await request.json()) as unknown;
       return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
     }
-    if (type.includes("application/x-www-form-urlencoded") || type.includes("multipart/form-data")) {
+    if (type.includes("application/x-www-form-urlencoded")) {
+      // Parse the raw text ourselves: URLSearchParams has no runtime quirks,
+      // whereas formData() has differed between runtimes for this content type.
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of new URLSearchParams(await request.text())) out[k] = v;
+      return out;
+    }
+    if (type.includes("multipart/form-data")) {
       const form = await request.formData();
       const out: Record<string, unknown> = {};
       form.forEach((v, k) => {
@@ -96,8 +103,15 @@ async function readBody(request: Request): Promise<Record<string, unknown>> {
       });
       return out;
     }
-  } catch {
-    // fall through
+    // Unknown or missing content type: best effort as form-encoded text.
+    const text = await request.text();
+    if (text) {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of new URLSearchParams(text)) out[k] = v;
+      return out;
+    }
+  } catch (err) {
+    console.warn("[resume] body parse failed:", err instanceof Error ? err.message : err);
   }
   return {};
 }
@@ -176,7 +190,14 @@ export async function handleResumeExchange(
   }
 
   if (!result.ok) {
-    return redirect(`${RESUME_PAGE_PATH}?link=invalid`, {
+    // Token-free diagnostic: enough to tell "the browser sent nothing usable"
+    // from "a well-formed token the database does not recognise".
+    console.warn("[resume-exchange] refused:", {
+      reason: result.reason,
+      tokenLength: token.length,
+      contentType: request.headers.get("content-type") ?? "none",
+    });
+    return redirect(`${RESUME_PAGE_PATH}?link=${result.reason === "malformed" ? "malformed" : "invalid"}`, {
       "Set-Cookie": serializeResumeCookieClear(),
       "Cache-Control": "no-store",
     });

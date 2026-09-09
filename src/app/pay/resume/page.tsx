@@ -30,7 +30,9 @@ export default async function ResumePage({ searchParams }: { searchParams: Searc
         <p className="text-sm text-zinc-400 leading-relaxed">
           {sp.link === "invalid"
             ? "That link was already used or has expired. Links work once and for twenty minutes."
-            : sp.signed_out === "1"
+            : sp.link === "malformed"
+              ? "That link didn't come through in one piece. Open it straight from the email, or request a new one from the event's pay page."
+              : sp.signed_out === "1"
               ? "Request a new link from the event's pay page whenever you need to come back."
               : "Resume links are personal and time-limited. Request a new one from the event's pay page."}
         </p>
