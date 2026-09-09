@@ -197,8 +197,11 @@ export async function handleResumeExchange(
       tokenLength: token.length,
       contentType: request.headers.get("content-type") ?? "none",
     });
+    // Leave any existing cookie alone. A refused token says nothing about the
+    // session the browser may already hold: a player who clicks an old link a
+    // second time while signed in simply lands on their registration page
+    // (found in production 2026-09-09 — clearing here signed them out).
     return redirect(`${RESUME_PAGE_PATH}?link=${result.reason === "malformed" ? "malformed" : "invalid"}`, {
-      "Set-Cookie": serializeResumeCookieClear(),
       "Cache-Control": "no-store",
     });
   }

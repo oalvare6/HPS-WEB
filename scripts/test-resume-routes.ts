@@ -139,7 +139,11 @@ async function main() {
     t.eq("form body with charset parameter is parsed (store consulted → invalid, not malformed)", (await handleResumeExchange(charsetForm, deps)).headers.get("location"), "/pay/resume?link=invalid");
     const reuse = await handleResumeExchange(post("/pay/resume/api/exchange", { token: raw }, same), deps);
     t.eq("re-used token → 303 to the invalid-link page", reuse.headers.get("location"), "/pay/resume?link=invalid");
-    t.check("re-use clears any cookie rather than setting one", /Max-Age=0/.test(reuse.headers.get("set-cookie") ?? ""));
+    t.check("re-use sets no cookie at all: it neither mints a session nor touches an existing one", reuse.headers.get("set-cookie") === null);
+    t.check("malformed exchange also leaves any existing cookie alone", malformed.headers.get("set-cookie") === null);
+    // A live session survives someone re-clicking a used link: the page it lands on still authenticates.
+    const afterReuse = await handleResumeCheckout(post("/pay/resume/api/checkout", {}, { ...same, cookie: setCookie.split(";")[0] }), deps);
+    t.eq("session from the first exchange still works after a refused re-use", afterReuse.status, 200);
 
     // Form-encoded submission (the no-JS button) works too.
     await handleResumeLinkRequest(post("/api/pay/eligibility", { email: "bob@example.com", tournamentId: EVENT_ID }, { "x-forwarded-for": "7.7.7.7" }), deps);
