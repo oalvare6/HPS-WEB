@@ -377,10 +377,8 @@ export default async function PayPage({
         ) : (
           <Suspense fallback={null}>
             <PayPageClient
-              tournamentSlug={tournamentSlug}
               initialTournament={initialTournament}
               whatsappUrl={whatsappUrl}
-              defaultWaiverType={resolveDefaultWaiverType(player?.contact.waiver_type)}
               tournamentMissing={tournamentMissing}
             />
           </Suspense>

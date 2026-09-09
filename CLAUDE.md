@@ -35,8 +35,25 @@ npx tsx scripts/test-canonical-host.ts
 npx tsx scripts/test-open-play-free-entry.ts
 npx tsx scripts/test-standings.ts
 npx tsx scripts/test-schedule.ts
+npx tsx scripts/test-resume-access.ts
+npx tsx scripts/test-resume-routes.ts
+npx tsx scripts/test-payment-finalize.ts
+npx tsx scripts/test-stripe-webhook.ts
+npx tsx scripts/test-reconcile-payments.ts
+npx tsx scripts/test-resend-sender.ts
 npm run build
 ```
+
+**Two remediation invariants (2026-09-09, `remediation_stage_1_2_report.md`).** Knowing an
+email address never authorises anything: `POST /api/pay/eligibility` answers every caller
+with the same neutral body and delivers a one-time magic link by email; the only
+capability a signed-out player holds is the HttpOnly `hps_resume` cookie backed by a row
+in `registration_sessions` (`src/lib/resume-access.ts`). And a Stripe payment settles
+through exactly one path, the database function `finalize_checkout_payment`
+(`src/lib/payment-finalize.ts`): amount, currency and event are re-derived from the rows
+before a registration is confirmed, replays converge, and the webhook answers 5xx on a
+local failure so Stripe retries. Do not add a second writer of `payments` or of
+`registrations.payment_status = 'paid'` for card money.
 
 **Two FKs now run from `registrations` to `tournaments`** — `tournament_id` and D7's
 `free_entry_tournament_id`. PostgREST will not choose between them: any `.select()` that

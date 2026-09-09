@@ -1,40 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
+import { NextRequest } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { recordCheckoutSessionPayment } from "@/lib/stripe-payments";
+import { handleStripeWebhook } from "@/lib/stripe-webhook";
+import { getFinalizeStore } from "@/lib/payment-finalize-store-supabase";
 
+export const dynamic = "force-dynamic";
+
+/**
+ * POST /api/stripe/webhook
+ *
+ * The contract lives in src/lib/stripe-webhook.ts (signature → supported
+ * events → re-validated finalisation → 2xx only after commit; 5xx so Stripe
+ * retries a local failure). This file only wires production dependencies.
+ */
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
-  const sig = req.headers.get("stripe-signature") ?? "";
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
-
-  let event: Stripe.Event;
-
-  try {
-    event = getStripe().webhooks.constructEvent(rawBody, sig, webhookSecret);
-  } catch (err) {
-    console.error("Stripe webhook signature verification failed:", err);
-    return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
-  }
-
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const outcome = await recordCheckoutSessionPayment(session);
-    if (outcome.status === "error") {
-      console.error("Stripe webhook: record failed", outcome.error);
-    }
-
-    // We used to email a Supabase invite here so the payer could "claim" an
-    // account. That is gone with email sign-in (D5): the invite created an
-    // email-identity account whose only key was the emailed link, so once
-    // sign-in became Google only it would have minted accounts nobody
-    // could open a second time. Production already has 28 accounts and 5 that
-    // have ever been signed into; there was no case for manufacturing more.
-    //
-    // `/pay/success` now offers Google directly instead, which links to
-    // the same person by verified email with no dead-end row in between.
-  }
-
-  return NextResponse.json({ received: true });
+  return handleStripeWebhook(rawBody, req.headers.get("stripe-signature"), {
+    constructEvent: (body, sig, secret) => getStripe().webhooks.constructEvent(body, sig, secret),
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+    store: getFinalizeStore(),
+  });
 }
-
