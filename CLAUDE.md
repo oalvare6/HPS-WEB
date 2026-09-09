@@ -33,6 +33,8 @@ npx tsx scripts/test-signup-state.ts
 npx tsx scripts/test-roster-totals.ts
 npx tsx scripts/test-canonical-host.ts
 npx tsx scripts/test-open-play-free-entry.ts
+npx tsx scripts/test-standings.ts
+npx tsx scripts/test-schedule.ts
 npm run build
 ```
 
@@ -51,6 +53,17 @@ covered person is a green ✓ whatever the paper trail; the missing-document cas
 tag, and "needs waiver" is reserved for genuinely missing or expired. Do not read
 `registrations.waiver_signed` directly in a UI again; that habit is what had the same
 person reading "signed" and "pending" on the same page.
+
+**Match results have exactly one writer and one rule.** A match becomes `completed` only
+through `PUT /api/admin/tournaments/[id]/matches/[matchId]/result`, which calls the database
+function `save_match_result` (score + status + scorers in one transaction). The match PATCH
+route rejects scores and status on purpose. "Played" is `isMatchPlayed()` in
+`src/lib/schedule.ts` (completed AND both scores), used by the table, the leaderboard, the
+public hub and the admin. **A scorer row's `team_id` is always the team the goal counted
+for**; an own goal is a row on the benefiting team with `own_goal = true`. Rounds carry
+`counts_toward_table`; the semis, final and exhibition are false and `computeStandings`
+requires the rounds so nobody can forget. New columns are read only through
+`roundCountsTowardTable()` / `=== true` checks, never directly (deploy-order tolerance).
 
 **And note what that migration did to the code already running.** It only *added* things, so it
 looked backward compatible — but the second FK breaks every existing unqualified embed the
@@ -101,7 +114,9 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md`](docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md) | **Most recent session.** Production data cleanup (B1 done), the four-way waiver-display contradiction, and the B6 admin consolidation (one page per event). Read after the plan. |
+| [`docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md`](docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md) | **Most recent session.** Community Cup schedule, scores and table: the round-centric admin, the phone-first public hub, the one-transaction result save, the own-goal rule, and the spreadsheet import. Read after the plan. |
+| [`docs/COMMUNITY-CUP-ACCEPTANCE.md`](docs/COMMUNITY-CUP-ACCEPTANCE.md) | The owner's Friday-night checklist for the new Schedule & scores tab and the public page. |
+| [`docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md`](docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md) | Production data cleanup (B1 done), the four-way waiver-display contradiction, and the B6 admin consolidation (one page per event). |
 | [`docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md`](docs/SESSION-LOG-2026-08-14-OPEN-PLAY-FREE-ENTRY.md) | D7 free entry, the guest list, the two-FK deploy trap, and why "correct" wasn't "delivered". |
 | [`docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md`](docs/SESSION-LOG-2026-08-14-SIGNUP-CONFIRM-GATE.md) | Earlier the same day: confirm-before-roster, self-cancel, and a 9-way duplicate-registration fix. |
 | [`docs/SESSION-LOG-2026-08-14-WAIVERS.md`](docs/SESSION-LOG-2026-08-14-WAIVERS.md) | Earlier the same day: the waiver round trip and pay-later. |

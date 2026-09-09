@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { translateDbError } from "@/lib/admin-db-errors";
 import {
   MAX_ROUND_LABEL_LENGTH,
   MAX_ROUND_NOTE_LENGTH,
@@ -131,6 +132,15 @@ export async function PATCH(request: Request, ctx: Ctx) {
     }
     patch.sort_order = n;
   }
+  if ("counts_toward_table" in b) {
+    if (typeof b.counts_toward_table !== "boolean") {
+      return NextResponse.json(
+        { error: "counts_toward_table must be true or false." },
+        { status: 400 }
+      );
+    }
+    patch.counts_toward_table = b.counts_toward_table;
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
@@ -145,8 +155,8 @@ export async function PATCH(request: Request, ctx: Ctx) {
     .single();
 
   if (error) {
-    const status = error.code === "PGRST116" ? 404 : 500;
-    return NextResponse.json({ error: error.message }, { status });
+    const t = translateDbError(error, "Could not save the round.");
+    return NextResponse.json({ error: t.message }, { status: t.status });
   }
 
   const slug = await getTournamentSlug(id);
@@ -160,6 +170,23 @@ export async function DELETE(_request: Request, ctx: Ctx) {
   if (unauthorized) return unauthorized;
 
   const { id, roundId } = await ctx.params;
+
+  // A round with matches is not deletable: the FK would set round_id null and
+  // the fixtures would drop into the "Unscheduled" bucket without a word.
+  const { count } = await supabaseAdmin
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("tournament_id", id)
+    .eq("round_id", roundId);
+  if ((count ?? 0) > 0) {
+    return NextResponse.json(
+      {
+        error: `This round has ${count} ${count === 1 ? "match" : "matches"}. Move or delete them first.`,
+      },
+      { status: 409 }
+    );
+  }
+
   const { error } = await supabaseAdmin
     .from("tournament_rounds")
     .delete()
@@ -167,7 +194,8 @@ export async function DELETE(_request: Request, ctx: Ctx) {
     .eq("tournament_id", id);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const t = translateDbError(error, "Could not delete the round.");
+    return NextResponse.json({ error: t.message }, { status: t.status });
   }
 
   const slug = await getTournamentSlug(id);

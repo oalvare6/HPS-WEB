@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { ListRowsSkeleton } from "@/components/shared/skeleton";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { LOGIN_EXPIRED_MESSAGE } from "@/lib/admin-fetch";
 
 import {
   assignRegistrationToTeam,
@@ -45,8 +46,15 @@ type Props = {
   maxTeams?: number | null;
 };
 
-function handleAuthLost(): void {
-  if (typeof window !== "undefined") window.location.reload();
+/**
+ * The admin API answers an expired cookie with 401 {error: "Unauthorized"}
+ * and the helpers in admin-teams pass that word through. It used to trigger a
+ * full reload, which threw away whatever the owner was typing; now it is one
+ * plain sentence and the screen stays as it was.
+ */
+function friendly(error: string | null | undefined, fallback: string): string {
+  if (error === "Unauthorized") return LOGIN_EXPIRED_MESSAGE;
+  return error ?? fallback;
 }
 
 export default function TournamentTeamsPanel({
@@ -66,15 +74,17 @@ export default function TournamentTeamsPanel({
       fetchTeamsForTournament(tournamentId),
       fetchTournamentRegistrations(tournamentId),
     ]);
-    if (teamsRes.error && teamsRes.error.includes("401")) handleAuthLost();
+    if (teamsRes.error === "Unauthorized" || regsRes.error === "Unauthorized") {
+      toast.error(LOGIN_EXPIRED_MESSAGE);
+    }
     if (teamsRes.error) {
-      setError(teamsRes.error);
+      setError(friendly(teamsRes.error, "Failed to load teams."));
     } else {
       setError("");
       setTeams(teamsRes.data ?? []);
     }
     if (regsRes.error) {
-      setError((cur) => cur || regsRes.error || "");
+      setError((cur) => cur || friendly(regsRes.error, "Failed to load registrations."));
     } else {
       setRegistrations(regsRes.data ?? []);
     }
@@ -193,7 +203,7 @@ function NewTeamForm({
     });
     setSaving(false);
     if (res.error || !res.data) {
-      toast.error(res.error ?? "Failed to create team.");
+      toast.error(friendly(res.error, "Failed to create team."));
       return;
     }
     toast.success("Team created.");
@@ -292,7 +302,7 @@ function TeamCard({
     const res = await updateTeam(team.id, { name: trimmed, color });
     setSaving(false);
     if (res.error) {
-      toast.error(res.error);
+      toast.error(friendly(res.error, "That did not save. Try again."));
       return;
     }
     toast.success("Team updated.");
@@ -305,7 +315,7 @@ function TeamCard({
     const res = await updateTeam(team.id, { captain_contact_id: contactId });
     setBusySetCaptain(false);
     if (res.error) {
-      toast.error(res.error);
+      toast.error(friendly(res.error, "That did not save. Try again."));
       return;
     }
     onChanged();
@@ -316,7 +326,7 @@ function TeamCard({
     const res = await assignRegistrationToTeam(registrationId, null);
     setBusyRegId(null);
     if (res.error) {
-      toast.error(res.error);
+      toast.error(friendly(res.error, "That did not save. Try again."));
       return;
     }
     onChanged();
@@ -334,7 +344,7 @@ function TeamCard({
     const res = await deleteTeam(team.id);
     setDeleting(false);
     if (res.error) {
-      toast.error(res.error);
+      toast.error(friendly(res.error, "That did not save. Try again."));
       return;
     }
     toast.success("Team deleted.");
@@ -578,7 +588,7 @@ function UnassignedRow({
     const res = await assignRegistrationToTeam(registration.id, teamId);
     setAssigning(false);
     if (res.error) {
-      toast.error(res.error);
+      toast.error(friendly(res.error, "That did not save. Try again."));
       return;
     }
     onChanged();

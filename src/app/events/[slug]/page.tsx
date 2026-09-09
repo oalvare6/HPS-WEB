@@ -32,15 +32,20 @@ import {
 } from "@/lib/tournaments";
 import { parseFreeEntryTournamentIds } from "@/lib/open-play-free-entry";
 import { computeStandings, computeTopScorers } from "@/lib/standings";
+import { groupMatchesByRound, openRoundKeys } from "@/lib/schedule";
 import { getWorldCupStandingsOverride } from "@/lib/world-cup-standings";
 import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
 import type {
   Tournament,
-  TournamentRound,
   TournamentStatus,
   TournamentUpdate,
 } from "@/lib/types";
 import { TournamentHub } from "@/components/tournament/TournamentHub";
+import { AtAGlance } from "@/components/tournament/AtAGlance";
+import { MatchList } from "@/components/tournament/MatchList";
+import { MobileDisclosure } from "@/components/tournament/MobileDisclosure";
+import { ShowMoreItems } from "@/components/tournament/ShowMoreItems";
+import { parseHubTab } from "@/components/tournament/hub-tab";
 import { OpenPlayAttendees } from "@/components/tournament/OpenPlayAttendees";
 import { getOpenPlayAttendees } from "@/lib/open-play-attendance";
 import { getPresetUrl } from "@/lib/tournament-image-presets";
@@ -59,6 +64,9 @@ import { ShareTournamentButton } from "@/components/shared/ShareTournamentButton
 import { LocationCard } from "@/components/shared/location-card";
 
 export const dynamic = "force-dynamic";
+
+/** How many unpinned posts show before "Show all N updates" on a live page. */
+const RECENT_UPDATES_SHOWN = 2;
 
 /**
  * Generic playbook shown on every tournament page. Pulled out so a single edit
@@ -187,20 +195,6 @@ function formatUpdateDate(iso: string): string {
   });
 }
 
-function formatRoundDate(iso: string | null): string {
-  if (!iso) return "Date TBA";
-  // YYYY-MM-DD comes from a date column; build it as a local date so the day
-  // doesn't shift backwards in negative-UTC time zones.
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 /** One icon vocabulary for the CTA card, so the header and the button agree. */
 function CtaIcon({
   cta,
@@ -219,6 +213,37 @@ function CtaIcon({
   return <Trophy size={size} className="text-brand" />;
 }
 
+/** The amber "could not load" strip, same markup as the events list page. */
+function LoadErrorBanner({ message }: { message: string }) {
+  return (
+    <p
+      role="alert"
+      className="rounded-lg border border-amber-500/35 bg-amber-950/25 px-4 py-3 text-sm text-amber-100"
+    >
+      {message}
+    </p>
+  );
+}
+
+function UpdateItem({ u }: { u: TournamentUpdate }) {
+  return (
+    <li className={`dashboard-card p-5 ${u.pinned ? "border-brand/50" : ""}`}>
+      <div className="flex items-center justify-between gap-3 mb-2 text-xs">
+        <div className="flex items-center gap-2">
+          {u.pinned && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-brand/15 text-brand font-semibold uppercase tracking-wide">
+              <Pin size={10} />
+              Pinned
+            </span>
+          )}
+          <span className="text-zinc-500">{formatUpdateDate(u.created_at)}</span>
+        </div>
+      </div>
+      <p className="text-sm md:text-base text-zinc-100 whitespace-pre-wrap">{u.body}</p>
+    </li>
+  );
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -230,15 +255,15 @@ export async function generateMetadata({
 
   const title = `${t.title} | Houston Premier Soccer`;
   // The fallback blurb has to match what the event actually is — the tournament
-  // version promises refs, 25-minute halves and end-of-season awards, none of
-  // which a one-off open play night has.
+  // version promises refs, 25-minute halves and live scores, none of which a
+  // one-off open play night has. It promises only what the page can show.
   const description =
     t.description?.slice(0, 200)?.trim() ||
     (isOpenPlay(t)
       ? `${t.title} — ${t.format ?? "7v7"} open play at Houston Premier Soccer. ` +
         `Real grass field under the lights, one night, sides made on the night.`
       : `${t.title} — ${t.format ?? "7v7"} at Houston Premier Soccer. ` +
-        `Real grass field, 25-min halves, refs on every match, MVP awards at the end.`);
+        `Real grass field, 25-min halves, refs on every match, live scores and standings.`);
 
   // Link-preview image: tournament banner first (custom upload or preset),
   // fall back to the brand badge so iMessage / WhatsApp / Twitter always
@@ -281,47 +306,66 @@ export async function generateMetadata({
 
 export default async function TournamentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
 }) {
-  const { slug } = await params;
+  const [{ slug }, { tab }] = await Promise.all([params, searchParams]);
   const tournament = await getTournamentBySlug(slug);
   if (!tournament) notFound();
 
-  const [{ updates }, { rounds }, { matches, teams }, attendees, freeEntryEvents] =
-    await Promise.all([
-      getTournamentUpdates(tournament.id),
-      getTournamentRounds(tournament.id),
-      getTournamentMatches(tournament.id),
-      // Added to the existing Promise.all rather than awaited after it: this is
-      // the most-visited page on the site and it is force-dynamic, so a fourth
-      // serial round trip would be paid on every view. The query returns an
-      // empty list for anything that is not an open-play night, so asking
-      // unconditionally costs one cheap call and keeps the branch out of here.
-      getOpenPlayAttendees(tournament.id),
-      // Which tournaments confer free entry to this night — display only, so a
-      // signed-out visitor can see the deal exists. Zero queries for anything
-      // that is not an open play night with a non-empty config.
-      getTournamentsByIds(
-        isOpenPlay(tournament)
-          ? parseFreeEntryTournamentIds(tournament.free_entry_tournament_ids)
-          : []
-      ),
-    ]);
+  const [
+    { updates },
+    { rounds, loadError: roundsLoadError },
+    { matches, teams, loadError: matchesLoadError },
+    attendees,
+    freeEntryEvents,
+  ] = await Promise.all([
+    getTournamentUpdates(tournament.id),
+    getTournamentRounds(tournament.id),
+    getTournamentMatches(tournament.id),
+    // Added to the existing Promise.all rather than awaited after it: this is
+    // the most-visited page on the site and it is force-dynamic, so a fourth
+    // serial round trip would be paid on every view. The query returns an
+    // empty list for anything that is not an open-play night, so asking
+    // unconditionally costs one cheap call and keeps the branch out of here.
+    getOpenPlayAttendees(tournament.id),
+    // Which tournaments confer free entry to this night — display only, so a
+    // signed-out visitor can see the deal exists. Zero queries for anything
+    // that is not an open play night with a non-empty config.
+    getTournamentsByIds(
+      isOpenPlay(tournament)
+        ? parseFreeEntryTournamentIds(tournament.free_entry_tournament_ids)
+        : []
+    ),
+  ]);
 
   const openPlay = isOpenPlay(tournament);
   const kindCopy = eventKindCopy(tournament);
+
+  // A schedule that failed to load is said out loud, not rendered as "no
+  // matches yet". Open play has no schedule to fail, so nothing to say there.
+  const hubLoadError = openPlay ? null : (roundsLoadError ?? matchesLoadError);
 
   // No standings, no top scorers, no schedule grid for a single evening — even
   // if stray match rows exist against it, a league table for one night is a
   // table of one row and reads as a mistake.
   const hasHub = !openPlay && matches.length > 0;
+  // The World Cup table is published from the flyer, not computed; the hub
+  // treats those rows as opaque (no re-sorting, no cut line).
+  const standingsSource =
+    tournament.slug === WORLD_CUP_TOURNAMENT_SLUG ? "published" : "computed";
   const standings = hasHub
-    ? tournament.slug === WORLD_CUP_TOURNAMENT_SLUG
+    ? standingsSource === "published"
       ? getWorldCupStandingsOverride(teams)
-      : computeStandings(teams, matches)
+      : computeStandings(teams, matches, rounds)
     : [];
-  const topScorers = hasHub ? computeTopScorers(matches) : [];
+  const topScorers = hasHub ? computeTopScorers(matches) : { rows: [], ownGoals: 0 };
+  // Every round in season order (empty ones too). Feeds the at-a-glance card
+  // on a live page and the pre-season round list otherwise.
+  const groups = openPlay ? [] : groupMatchesByRound(rounds, matches);
+  const initialTab = parseHubTab(tab);
 
   const pill = STATUS_PILL[tournament.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
@@ -335,7 +379,7 @@ export default async function TournamentDetailPage({
     report: "it still says register even though I am registered." The only way
     to find out what was actually left was to press it and read the next screen.
 
-    ⚠ No DocuSeal reconcile here, deliberately. `/register` and `/pay` ask
+    No DocuSeal reconcile here, deliberately. `/register` and `/pay` ask
     DocuSeal directly because they are about to hold a player at a gate; this
     page only routes them there, and it is the most-visited page on the site.
     See lib/event-standing.ts.
@@ -357,75 +401,384 @@ export default async function TournamentDetailPage({
       ? `${tournament.time_start} – ${tournament.time_end}`
       : tournament.time_start || tournament.time_end || null;
 
-  return (
+  // Pinned posts plus the two most recent show at once on a live page; the rest
+  // sit behind one button. The loader already orders pinned first, then newest.
+  const shownUpdates: TournamentUpdate[] = [];
+  const hiddenUpdates: TournamentUpdate[] = [];
+  let recentShown = 0;
+  for (const u of updates) {
+    if (u.pinned) shownUpdates.push(u);
+    else if (recentShown < RECENT_UPDATES_SHOWN) {
+      shownUpdates.push(u);
+      recentShown += 1;
+    } else hiddenUpdates.push(u);
+  }
+
+  /* ---------------------------------------------------------------- blocks */
+
+  const aboutBlock = (
+    <div>
+      <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold mb-3">
+        {kindCopy.aboutHeading}
+      </h2>
+      {tournament.description ? (
+        <p className="text-zinc-200 leading-relaxed whitespace-pre-wrap">
+          {tournament.description}
+        </p>
+      ) : (
+        <p className="text-zinc-500 italic">
+          More details coming soon. Check back for the full rundown.
+        </p>
+      )}
+    </div>
+  );
+
+  const featuresHeading = (
+    <span className="flex items-center gap-2 min-w-0">
+      <Sparkles size={18} className="text-brand flex-shrink-0" />
+      <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+        What you&apos;re walking into
+      </h2>
+    </span>
+  );
+
+  const featuresBody = (
     <>
-      {/* Header strip */}
-      <section className="bg-base text-white py-10 md:py-14 bg-tactical-grid">
-        <div className="max-w-6xl mx-auto px-6">
-          <Link
-            href="/events"
-            className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-4"
-          >
-            <ArrowLeft size={14} />
-            All events
-          </Link>
-
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold border ${pill.cls}`}
-            >
-              <span className={`w-1.5 h-1.5 ${pill.dot} rounded-full ${tournament.status === "upcoming" || tournament.status === "ongoing" ? "animate-pulse" : ""}`} />
-              {pill.text}
-            </span>
-            {tournament.registration_open && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-brand-deep text-white border border-brand">
-                Registration Open
-              </span>
-            )}
-            {tournament.payments_open && tournament.status !== "completed" && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-surface-2 text-brand border border-brand/30">
-                Payments Open
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 mb-4">
-            {openPlay ? (
-              <Zap size={28} className="text-brand flex-shrink-0" />
-            ) : (
-              <Trophy size={28} className="text-brand flex-shrink-0" />
-            )}
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
-              {tournament.title}
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-300">
-            <div className="flex items-center gap-2">
-              <Calendar size={14} className="text-brand" />
-              <span>{formatDateRow(tournament)}</span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {(openPlay ? OPEN_PLAY_FEATURES : TOURNAMENT_FEATURES).map((feature) => {
+          const Icon = feature.icon;
+          return (
+            <div key={feature.title} className="dashboard-card p-4 flex gap-3 items-start">
+              <div className="w-10 h-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center flex-shrink-0">
+                <Icon size={18} className="text-brand" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">{feature.title}</p>
+                <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">{feature.body}</p>
+              </div>
             </div>
-            {timeRange && (
-              <div className="flex items-center gap-2">
-                <Clock size={14} className="text-brand" />
-                <span>{timeRange}</span>
-              </div>
-            )}
-            {tournament.format && (
-              <div className="flex items-center gap-2">
-                <Users size={14} className="text-brand" />
-                <span>{tournament.format}</span>
-              </div>
-            )}
-            {tournament.location && (
-              <div className="flex items-center gap-2">
-                <MapPin size={14} className="text-brand" />
-                <span>{tournament.location}</span>
-              </div>
-            )}
+          );
+        })}
+      </div>
+      {/*
+        Season-long awards. An open play night has no final whistle to give
+        them at and no stats carried anywhere, so promising them would be
+        describing an event that isn't happening. Only what the site tracks is
+        promised: goals.
+      */}
+      {!openPlay && (
+        <div className="mt-4 dashboard-card border-brand/30 bg-brand/5 p-4 flex gap-3 items-start">
+          <div className="w-10 h-10 rounded-lg bg-brand/15 border border-brand/40 flex items-center justify-center flex-shrink-0">
+            <Award size={18} className="text-brand" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">MVP awards at the final whistle</p>
+            <p className="text-xs text-zinc-300 leading-relaxed mt-0.5">
+              <span className="text-white">Golden Boot</span> for most goals. Live
+              top-scorer table across every match.
+            </p>
           </div>
         </div>
-      </section>
+      )}
+    </>
+  );
+
+  const updatesHeading = (
+    <div className="flex items-center gap-2 mb-4">
+      <Megaphone size={18} className="text-brand" />
+      <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+        Updates
+      </h2>
+      {updates.length > 0 && (
+        <span className="text-xs text-zinc-500">
+          {updates.length} {updates.length === 1 ? "post" : "posts"}
+        </span>
+      )}
+    </div>
+  );
+
+  const updatesEmpty = (
+    <div className="dashboard-card p-6 text-center text-zinc-500 text-sm border-dashed">
+      No updates yet. Check back as the {kindCopy.noun} gets closer.
+    </div>
+  );
+
+  const ctaCard = (
+    <div
+      className={`dashboard-card p-5 space-y-3 ${cta.personalised ? "border-brand/40" : ""}`}
+    >
+      <div className="flex items-center gap-2">
+        <CtaIcon cta={cta} openPlay={openPlay} />
+        <h3 className="text-base font-semibold text-white">{cta.heading}</h3>
+      </div>
+
+      {/*
+        `note` is what turns a button into an answer: which team you're
+        on, what you still owe, whether you already told us you're
+        paying cash. Without it "Pay $80 now" is the same sentence the
+        site showed a total stranger.
+      */}
+      {cta.note && <p className="text-sm text-zinc-300">{cta.note}</p>}
+
+      {cta.kind === "none" && !cta.note && (
+        <p className="text-sm text-zinc-400 italic">
+          {cta.heading === "Past event"
+            ? "This event has ended. Schedules and updates stay here so you can reference what we ran."
+            : "Registration isn't open right now. Watch this page for updates."}
+        </p>
+      )}
+
+      {cta.kind !== "none" && cta.href && cta.label && (
+        <Link href={cta.href} className="btn-primary w-full justify-center text-sm">
+          <CtaIcon cta={cta} size={14} openPlay={openPlay} />
+          {cta.label}
+          <ArrowRight size={14} />
+        </Link>
+      )}
+
+      {/*
+        No `path`: the button shares the URL as it stands, so a link copied
+        from the Table tab opens on the Table tab.
+      */}
+      <ShareTournamentButton
+        title={tournament.title}
+        description={tournament.description}
+        variant="secondary"
+        shareNoun={kindCopy.noun}
+      />
+
+      {cta.href && (
+        <p className="text-center text-xs text-zinc-500 pt-1">
+          <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
+            Questions? Join WhatsApp
+          </WhatsAppCommunityLinkFromSite>
+        </p>
+      )}
+      {tournament.entry_fee != null && (
+        <p className="text-xs text-zinc-500 text-center pt-1 border-t border-border-token/50">
+          {kindCopy.feeLabel}: ${Number(tournament.entry_fee).toFixed(2)}
+          {!openPlay &&
+            tournament.max_teams != null &&
+            ` · Max ${tournament.max_teams} teams`}
+        </p>
+      )}
+      {/*
+        Display only — /api/register/join re-derives the entitlement at
+        write time; this line just makes the deal visible signed-out.
+      */}
+      {openPlay && freeEntryEvents.length > 0 && (
+        <p className="text-xs text-emerald-300/90 text-center pt-1">
+          Free for{" "}
+          {freeEntryEvents.map((t, i) => (
+            <span key={t.id}>
+              {i > 0 && ", "}
+              <Link
+                href={`/events/${t.slug}`}
+                className="underline underline-offset-2 hover:text-white"
+              >
+                {t.title}
+              </Link>
+            </span>
+          ))}{" "}
+          players — sign in to claim your free spot.
+        </p>
+      )}
+    </div>
+  );
+
+  const asideInner = (
+    <div className="lg:sticky lg:top-28 space-y-4">
+      {ctaCard}
+      {tournament.location && <LocationCard compact />}
+    </div>
+  );
+
+  const scheduleNote = (
+    <p className="text-xs text-zinc-400 italic leading-relaxed">
+      Scores update through the tournament. Schedule subject to change —
+      updates are posted here and pushed to our{" "}
+      <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
+        WhatsApp community
+      </WhatsAppCommunityLinkFromSite>
+      .
+    </p>
+  );
+
+  const header = (
+    <section className="bg-base text-white py-10 md:py-14 bg-tactical-grid">
+      <div className="max-w-6xl mx-auto px-6">
+        <Link
+          href="/events"
+          className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-4"
+        >
+          <ArrowLeft size={14} />
+          All events
+        </Link>
+
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold border ${pill.cls}`}
+          >
+            <span
+              className={`w-1.5 h-1.5 ${pill.dot} rounded-full ${
+                tournament.status === "upcoming" || tournament.status === "ongoing"
+                  ? "animate-pulse"
+                  : ""
+              }`}
+            />
+            {pill.text}
+          </span>
+          {tournament.registration_open && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-brand-deep text-white border border-brand">
+              Registration Open
+            </span>
+          )}
+          {tournament.payments_open && tournament.status !== "completed" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-surface-2 text-brand border border-brand/30">
+              Payments Open
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 mb-4">
+          {openPlay ? (
+            <Zap size={28} className="text-brand flex-shrink-0" />
+          ) : (
+            <Trophy size={28} className="text-brand flex-shrink-0" />
+          )}
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+            {tournament.title}
+          </h1>
+        </div>
+
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-300">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-brand" />
+            <span>{formatDateRow(tournament)}</span>
+          </div>
+          {timeRange && (
+            <div className="flex items-center gap-2">
+              <Clock size={14} className="text-brand" />
+              <span>{timeRange}</span>
+            </div>
+          )}
+          {tournament.format && (
+            <div className="flex items-center gap-2">
+              <Users size={14} className="text-brand" />
+              <span>{tournament.format}</span>
+            </div>
+          )}
+          {tournament.location && (
+            <div className="flex items-center gap-2">
+              <MapPin size={14} className="text-brand" />
+              <span>{tournament.location}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+
+  /* ---------------------------------------------- live tournament: scores first */
+
+  if (hasHub) {
+    /*
+      Single column on a phone, in this order: at a glance, the hub, the
+      sign-up / share card, about, the playbook (collapsed), updates, the flyer.
+      On lg the same three DOM blocks land in a two-column grid: the aside is
+      pinned to column 3 spanning both rows, the two main blocks fill columns
+      1-2 above and below. Nothing is rendered twice.
+    */
+    return (
+      <>
+        {header}
+
+        <section className="bg-surface text-white py-6 md:py-14">
+          <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
+            <div className="lg:col-span-2 space-y-6">
+              <AtAGlance
+                groups={groups}
+                standings={standings}
+                standingsSource={standingsSource}
+              />
+
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <CalendarDays size={16} className="text-brand" />
+                  <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+                    Schedule &amp; standings
+                  </h2>
+                </div>
+                <div className="mb-3">{scheduleNote}</div>
+                {hubLoadError && (
+                  <div className="mb-3">
+                    <LoadErrorBanner message={hubLoadError} />
+                  </div>
+                )}
+                <TournamentHub
+                  matches={matches}
+                  rounds={rounds}
+                  standings={standings}
+                  standingsSource={standingsSource}
+                  topScorers={topScorers}
+                  initialTab={initialTab}
+                />
+              </div>
+            </div>
+
+            <aside className="lg:col-start-3 lg:row-start-1 lg:row-span-2">{asideInner}</aside>
+
+            <div className="lg:col-span-2 space-y-10">
+              {aboutBlock}
+
+              <MobileDisclosure summary={featuresHeading}>
+                <div className="mt-4">{featuresBody}</div>
+              </MobileDisclosure>
+
+              <div>
+                {updatesHeading}
+                {updates.length === 0 ? (
+                  updatesEmpty
+                ) : (
+                  <ul className="space-y-3">
+                    {shownUpdates.map((u) => (
+                      <UpdateItem key={u.id} u={u} />
+                    ))}
+                    {hiddenUpdates.length > 0 && (
+                      <ShowMoreItems label={`Show all ${updates.length} updates`}>
+                        {hiddenUpdates.map((u) => (
+                          <UpdateItem key={u.id} u={u} />
+                        ))}
+                      </ShowMoreItems>
+                    )}
+                  </ul>
+                )}
+              </div>
+
+              {/* The flyer, last: on a phone a portrait poster is a full screen
+                  and cannot sit above the scores. Smaller than the hero frame. */}
+              {bannerUrl && (
+                <div>
+                  <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold mb-3">
+                    Flyer
+                  </h2>
+                  <div className="max-w-md mx-auto">
+                    <TournamentBannerImage tournament={tournament} variant="hero" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      </>
+    );
+  }
+
+  /* -------------------------------- open play and pre-season: today's order */
+
+  return (
+    <>
+      {header}
 
       {/* Banner image — portrait flyers render full poster via TournamentBannerImage */}
       {bannerUrl && (
@@ -440,118 +793,23 @@ export default async function TournamentDetailPage({
       <section className="bg-surface text-white py-10 md:py-14">
         <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
           <div className="lg:col-span-2 space-y-10">
-            {/* About */}
-            <div>
-              <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold mb-3">
-                {kindCopy.aboutHeading}
-              </h2>
-              {tournament.description ? (
-                <p className="text-zinc-200 leading-relaxed whitespace-pre-wrap">
-                  {tournament.description}
-                </p>
-              ) : (
-                <p className="text-zinc-500 italic">
-                  More details coming soon. Check back for the full rundown.
-                </p>
-              )}
-            </div>
+            {aboutBlock}
 
-            {/* What to expect — generic tournament playbook, same every event */}
+            {/* What to expect — generic playbook, same every event */}
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Sparkles size={18} className="text-brand" />
-                <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
-                  What you&apos;re walking into
-                </h2>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {(openPlay ? OPEN_PLAY_FEATURES : TOURNAMENT_FEATURES).map((feature) => {
-                  const Icon = feature.icon;
-                  return (
-                    <div
-                      key={feature.title}
-                      className="dashboard-card p-4 flex gap-3 items-start"
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-brand/10 border border-brand/20 flex items-center justify-center flex-shrink-0">
-                        <Icon size={18} className="text-brand" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white">
-                          {feature.title}
-                        </p>
-                        <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">
-                          {feature.body}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {/*
-                Season-long awards. An open play night has no final whistle to
-                give them at and no stats carried anywhere, so promising them
-                would be describing an event that isn't happening.
-              */}
-              {!openPlay && (
-                <div className="mt-4 dashboard-card border-brand/30 bg-brand/5 p-4 flex gap-3 items-start">
-                  <div className="w-10 h-10 rounded-lg bg-brand/15 border border-brand/40 flex items-center justify-center flex-shrink-0">
-                    <Award size={18} className="text-brand" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">
-                      MVP awards at the final whistle
-                    </p>
-                    <p className="text-xs text-zinc-300 leading-relaxed mt-0.5">
-                      <span className="text-white">Golden Boot</span> for most goals.{" "}
-                      <span className="text-white">Golden Glove</span> for most saves.
-                      Stats tracked live across every match.
-                    </p>
-                  </div>
-                </div>
-              )}
+              <div className="mb-4">{featuresHeading}</div>
+              {featuresBody}
             </div>
 
             {/* Updates feed */}
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Megaphone size={18} className="text-brand" />
-                <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
-                  Updates
-                </h2>
-                {updates.length > 0 && (
-                  <span className="text-xs text-zinc-500">
-                    {updates.length} {updates.length === 1 ? "post" : "posts"}
-                  </span>
-                )}
-              </div>
+              {updatesHeading}
               {updates.length === 0 ? (
-                <div className="dashboard-card p-6 text-center text-zinc-500 text-sm border-dashed">
-                  No updates yet. Check back as the {kindCopy.noun} gets closer.
-                </div>
+                updatesEmpty
               ) : (
                 <ul className="space-y-3">
-                  {updates.map((u: TournamentUpdate) => (
-                    <li
-                      key={u.id}
-                      className={`dashboard-card p-5 ${
-                        u.pinned ? "border-brand/50" : ""
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3 mb-2 text-xs">
-                        <div className="flex items-center gap-2">
-                          {u.pinned && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-brand/15 text-brand font-semibold uppercase tracking-wide">
-                              <Pin size={10} />
-                              Pinned
-                            </span>
-                          )}
-                          <span className="text-zinc-500">{formatUpdateDate(u.created_at)}</span>
-                        </div>
-                      </div>
-                      <p className="text-sm md:text-base text-zinc-100 whitespace-pre-wrap">
-                        {u.body}
-                      </p>
-                    </li>
+                  {updates.map((u) => (
+                    <UpdateItem key={u.id} u={u} />
                   ))}
                 </ul>
               )}
@@ -562,212 +820,34 @@ export default async function TournamentDetailPage({
                 event this *is* "what's happening here". */}
             {openPlay && <OpenPlayAttendees attendees={attendees} />}
 
-            {/* Tournament hub: schedule, results, standings, top scorers */}
-            {hasHub ? (
+            {/* The schedule failed to load: say so where it would have been. */}
+            {hubLoadError && <LoadErrorBanner message={hubLoadError} />}
+
+            {/* Pre-season: the rounds exist, no match does yet. Same round
+                headers the live hub uses, each saying fixtures are to come.
+                One night has one date, already in the header, so open play
+                shows nothing here. */}
+            {!openPlay && !hubLoadError && rounds.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <CalendarDays size={18} className="text-brand" />
+                  <CalendarDays size={16} className="text-brand" />
                   <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
-                    Schedule &amp; standings
+                    Schedule
                   </h2>
+                  <span className="text-xs text-zinc-500">
+                    {rounds.length} {rounds.length === 1 ? "round" : "rounds"}
+                  </span>
                 </div>
-                <p className="text-xs text-zinc-400 italic mb-4 leading-relaxed">
-                  Scores update through the tournament. Schedule subject to
-                  change — updates are posted here and pushed to our{" "}
-                  <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
-                    WhatsApp community
-                  </WhatsAppCommunityLinkFromSite>
-                  .
-                </p>
-                <TournamentHub
-                  matches={matches}
-                  rounds={rounds}
-                  standings={standings}
-                  topScorers={topScorers}
-                />
+                <div className="mb-3">{scheduleNote}</div>
+                <MatchList groups={groups} openKeys={openRoundKeys(groups)} />
               </div>
-            ) : (
-              // Rounds are a season's weeks. One night has one date, already in
-              // the header — a "Schedule" of a single row adds nothing.
-              !openPlay &&
-              rounds.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <CalendarDays size={18} className="text-brand" />
-                    <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
-                      Schedule
-                    </h2>
-                    <span className="text-xs text-zinc-500">
-                      {rounds.length} {rounds.length === 1 ? "round" : "rounds"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400 italic mb-4 leading-relaxed">
-                    Schedule subject to change. Any updates will be posted on this
-                    page and pushed to our{" "}
-                    <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
-                      WhatsApp community
-                    </WhatsAppCommunityLinkFromSite>
-                    .
-                  </p>
-                  <ul className="dashboard-card divide-y divide-border-token overflow-hidden">
-                    {rounds.map((r: TournamentRound) => {
-                      const cancelled = r.status === "cancelled";
-                      const rescheduled = r.status === "rescheduled";
-                      const timeRange =
-                        r.time_start && r.time_end
-                          ? `${r.time_start} – ${r.time_end}`
-                          : r.time_start || r.time_end || null;
-                      return (
-                        <li
-                          key={r.id}
-                          className={`px-5 py-4 ${cancelled ? "opacity-70" : ""}`}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <span
-                                className={`font-medium truncate ${
-                                  cancelled
-                                    ? "text-zinc-500 line-through"
-                                    : r.status === "note"
-                                      ? "text-zinc-300"
-                                      : "text-white"
-                                }`}
-                              >
-                                {r.label}
-                              </span>
-                              {cancelled && (
-                                <span className="text-xs font-mono bg-red-500/20 text-red-300 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
-                                  Cancelled
-                                </span>
-                              )}
-                              {rescheduled && (
-                                <span className="text-xs font-mono bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0">
-                                  Rescheduled
-                                </span>
-                              )}
-                            </div>
-                            <span
-                              className={`text-sm text-right pl-4 flex-shrink-0 ${
-                                cancelled ? "text-zinc-500 line-through" : "text-zinc-300"
-                              }`}
-                            >
-                              {formatRoundDate(r.round_date)}
-                            </span>
-                          </div>
-                          {(timeRange || r.note || (rescheduled && r.rescheduled_to)) && (
-                            <div className="text-xs text-zinc-400 mt-1 space-x-2">
-                              {timeRange && <span>{timeRange}</span>}
-                              {rescheduled && r.rescheduled_to && (
-                                <span className="text-yellow-300">
-                                  → {formatRoundDate(r.rescheduled_to)}
-                                </span>
-                              )}
-                              {r.note && <span>· {r.note}</span>}
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )
             )}
           </div>
 
           {/* Sticky CTA card */}
-          <aside className="lg:col-span-1">
-            <div className="lg:sticky lg:top-28 space-y-4">
-              <div
-                className={`dashboard-card p-5 space-y-3 ${
-                  cta.personalised ? "border-brand/40" : ""
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <CtaIcon cta={cta} openPlay={openPlay} />
-                  <h3 className="text-base font-semibold text-white">
-                    {cta.heading}
-                  </h3>
-                </div>
-
-                {/*
-                  `note` is what turns a button into an answer: which team you're
-                  on, what you still owe, whether you already told us you're
-                  paying cash. Without it "Pay $80 now" is the same sentence the
-                  site showed a total stranger.
-                */}
-                {cta.note && <p className="text-sm text-zinc-300">{cta.note}</p>}
-
-                {cta.kind === "none" && !cta.note && (
-                  <p className="text-sm text-zinc-400 italic">
-                    {cta.heading === "Past event"
-                      ? "This event has ended. Schedules and updates stay here so you can reference what we ran."
-                      : "Registration isn't open right now. Watch this page for updates."}
-                  </p>
-                )}
-
-                {cta.kind !== "none" && cta.href && cta.label && (
-                  <Link
-                    href={cta.href}
-                    className="btn-primary w-full justify-center text-sm"
-                  >
-                    <CtaIcon cta={cta} size={14} openPlay={openPlay} />
-                    {cta.label}
-                    <ArrowRight size={14} />
-                  </Link>
-                )}
-
-                <ShareTournamentButton
-                  title={tournament.title}
-                  description={tournament.description}
-                  path={`/events/${tournament.slug}`}
-                  variant="secondary"
-                  shareNoun={kindCopy.noun}
-                />
-
-                {cta.href && (
-                  <p className="text-center text-xs text-zinc-500 pt-1">
-                    <WhatsAppCommunityLinkFromSite variant="inline" showIcon={false}>
-                      Questions? Join WhatsApp
-                    </WhatsAppCommunityLinkFromSite>
-                  </p>
-                )}
-                {tournament.entry_fee != null && (
-                  <p className="text-xs text-zinc-500 text-center pt-1 border-t border-border-token/50">
-                    {kindCopy.feeLabel}: ${Number(tournament.entry_fee).toFixed(2)}
-                    {!openPlay &&
-                      tournament.max_teams != null &&
-                      ` · Max ${tournament.max_teams} teams`}
-                  </p>
-                )}
-                {/*
-                  Display only — /api/register/join re-derives the entitlement at
-                  write time; this line just makes the deal visible signed-out.
-                */}
-                {openPlay && freeEntryEvents.length > 0 && (
-                  <p className="text-xs text-emerald-300/90 text-center pt-1">
-                    Free for{" "}
-                    {freeEntryEvents.map((t, i) => (
-                      <span key={t.id}>
-                        {i > 0 && ", "}
-                        <Link
-                          href={`/events/${t.slug}`}
-                          className="underline underline-offset-2 hover:text-white"
-                        >
-                          {t.title}
-                        </Link>
-                      </span>
-                    ))}{" "}
-                    players — sign in to claim your free spot.
-                  </p>
-                )}
-              </div>
-
-              {tournament.location && <LocationCard compact />}
-            </div>
-          </aside>
+          <aside className="lg:col-span-1">{asideInner}</aside>
         </div>
       </section>
-
     </>
   );
 }

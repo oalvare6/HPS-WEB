@@ -33,7 +33,7 @@ function eventDay(iso: string): string | null {
 }
 
 /** Today's calendar day in Houston, as YYYY-MM-DD. */
-function todayInHouston(now: Date): string {
+export function todayInHouston(now: Date = new Date()): string {
   // en-CA renders as YYYY-MM-DD, which sorts lexicographically.
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: EVENT_TIME_ZONE,

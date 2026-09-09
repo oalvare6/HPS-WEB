@@ -500,3 +500,57 @@ Full detail in [`docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md`](docs/SESSIO
   kept but has no UI caller since RegistrationsList died — rewire or delete in B-track.
 - Operator declined paid plans for now (no Supabase Pro backups, no Vercel Pro). Vercel has
   two projects (`hpsweb`, `hps-web`) — one is a stale duplicate to confirm and remove.
+
+## 2026-09-08 — Community Cup: schedule, scores and table on phones; the round-centric admin
+
+See `docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md` and `docs/COMMUNITY-CUP-ACCEPTANCE.md`.
+
+- **Migration `20260908120000_round_counts_and_scorer_identity.sql` applied to production
+  2026-09-08** (before the code deploy, on purpose: additive columns with defaults, every
+  deployed read is `select("*")`). Adds `tournament_rounds.counts_toward_table`,
+  `match_scorers.own_goal`, `match_scorers.contact_id`, and the functions
+  `save_match_result` / `clear_match_result` (service role only).
+- ⚠ **`20260908120100_matches_integrity_constraints.sql` is written but NOT applied.** Apply
+  it only after this code is deployed (it needs `admin-db-errors.ts` live to translate
+  23505/23514) — pre-check queries are in the file header.
+- **THE ONE RULE for scorers**: `match_scorers.team_id` is always the team the goal COUNTED
+  FOR. An own goal is a row on the benefiting team with `own_goal = true` and
+  `scorer_name = 'Own goal'`. Per-side tallies therefore equal the score. Column comment
+  says the same.
+- **A match becomes `completed` only via `PUT .../matches/[matchId]/result`** (RPC
+  `save_match_result`, one transaction). The match PATCH route now rejects
+  `home_score`/`away_score`/`status`. "Played" is `isMatchPlayed()` in `src/lib/schedule.ts`.
+- **`computeStandings(teams, matches, rounds)` requires rounds** and skips rounds where
+  `counts_toward_table` is false. `computeTopScorers` returns `{rows, ownGoals}`, played
+  matches only, own goals excluded, identity by `contact_id` when present, ranks shared on
+  ties, playoff goals included (the Scorers tab says so).
+- **`match_scorers.contact_id` is revoked from the anon/authenticated roles** (table SELECT
+  replaced by a column list). Nothing reads that table with the browser key; any future
+  column that should be public must be added to the grant in the migration.
+- **Community Cup imported from the spreadsheet** via `scripts/import-community-cup-fall-2026.sql`
+  (rounds by label, matches by match_number, updated in place, zero deletes). 10 rounds,
+  25 matches, 30 scorer rows (17 linked to people), 2 own goals. Verified table: Hiram
+  Clarke 6 pts 18/5 +13, Post Oak 6 pts 18/6 +12, 3rd Ward 3 pts 13/10 +3, Beltway 0 2/9,
+  Bellaire 0 2/10, Townwood 0 6/19. **The sheet's GD for the top two rows is wrong (9, 8);
+  the site shows +13, +12.** Three attributions follow the match lines and disagree with the
+  sheet's scoring list (Brandon Bricker → Hiram Clarke; Jose Chavarria → Bellaire; Tony →
+  Hiram Clarke); Tony/Antonio/Bryan imported as first names only. Owner to confirm in admin.
+- "Beltway FC" on the sheet is the team created in admin as **"S. Beltway FC"**; kept as the
+  owner named it. 3rd Ward FC was given a colour (`#f97316`).
+- **Admin**: `TournamentRoundsPanel.tsx` and `TournamentMatchesPanel.tsx` deleted; replaced by
+  `SchedulePanel.tsx` (round cards, matches inside, Enter result sheet, no Status dropdown,
+  no score field on the match form, server-assigned match numbers, no manual reorder). Round
+  status choices in the UI are Scheduled / Cancelled only; `rescheduled` / `note` remain valid
+  DB values for old rows. Stats tiles render on the Roster tab only. Schedule tab hidden on
+  open play (same gate as Teams). Team delete refuses (409) when the team is in a match or a
+  scorer row. Round delete refuses when it has matches. 401s no longer reload the page.
+- **Public**: at-a-glance card + Table / Matches / Scorers directly under the title on a
+  running tournament; tab in `?tab=` via `history.replaceState`; standings as rows on
+  phones; Schedule/Results merged; empty rounds listed; round notes/cancellations shown;
+  `loadError` rendered as the amber banner; Share button shares the current URL; flyer
+  moved below the updates on a live page. World Cup override untouched (`source:
+  "published"`). REBUILD-PLAN §B7 mobile-spine bullet was closed earlier by `702be9f`.
+- `isHappeningToday` still fires only on the event's start date, not on round dates; the
+  at-a-glance card uses `nextMatchday()` instead. Left for a later pass — discovered 2026-09-08.
+- Not built, by decision: assists and cards, round-robin generator, CSV import UI, homepage
+  score strip, "your next match" on /me, forfeit status, head-to-head tiebreak.
