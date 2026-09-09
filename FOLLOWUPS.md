@@ -574,3 +574,8 @@ See `remediation_stage_1_2_report.md`. Not deployed; migrations not applied.
 - **The known $80 row** (`803e3697-…` / `bbd7fa9b-…`) is documented, not fixed. Converge it
   with `scripts/reconcile-payments.ts --apply` (dry run first) or a Stripe event replay.
 - **Credential rotation** for F-00 is planned in `credential_containment_plan.md`; not done.
+- **Resend is configured (2026-09-09, operator).** Domain verified; `RESEND_API_KEY` +
+  `RESUME_EMAIL_FROM` set in Vercel (Production + Preview). Not yet deployed. DNS for the
+  domain lives at **Namecheap**, not Vercel — `send` and `rsend` are CNAMEs to Resend, the
+  apex keeps Namecheap email forwarding; a CNAME cannot coexist with any other record at the
+  same host, so never add an MX/TXT at `send`.
