@@ -579,3 +579,23 @@ See `remediation_stage_1_2_report.md`. Not deployed; migrations not applied.
   domain lives at **Namecheap**, not Vercel — `send` and `rsend` are CNAMEs to Resend, the
   apex keeps Namecheap email forwarding; a CNAME cannot coexist with any other record at the
   same host, so never add an MX/TXT at `send`.
+
+## 2026-09-09 — Resume link: production smoke test (main `bca287b` → this fix)
+
+Deployed (#4, #5) and migrations applied by the operator. Smoke-tested live by the browser
+agent against a test registration on Community Cup; two defects found and fixed the same day.
+
+- **`request.formData()` returned nothing on Vercel for the interstitial's urlencoded POST.**
+  The email carried the right 43-char token (sha256 matched the stored hash, no Resend link
+  rewriting — tracking is off), but the exchange hashed an empty string and answered
+  `?link=invalid`. `readBody` now parses `application/x-www-form-urlencoded` from raw text
+  with `URLSearchParams`; a token the server never received is reported as `?link=malformed`
+  so this is never mistaken for a used link again (#5). Keep the two distinct.
+- **A refused exchange used to clear `hps_resume`.** Re-clicking a used link in a second tab
+  signed the player out of the tab that was working. The refusal now sets no cookie at all;
+  a signed-in player who re-clicks lands on their registration page.
+- **Test fixture to clean up:** registration for `omaralvarezz01+resume@gmail.com` ("Resume
+  Test", 3rd Ward FC, Community Cup) — cancel from the admin once the run is over. It owns a
+  sent-but-unsigned DocuSeal submission; leave that alone.
+- **Diagnostic warning `[resume-exchange] refused:` is token-free** (reason, token length,
+  content type) and is meant to stay.
