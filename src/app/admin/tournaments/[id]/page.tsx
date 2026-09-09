@@ -14,6 +14,7 @@ import {
   ListOrdered,
   Megaphone,
   Settings,
+  ExternalLink,
 } from "lucide-react";
 import { Section } from "@/components/shared/section";
 import type { Tournament } from "@/lib/types";
@@ -28,8 +29,7 @@ import {
 import RosterScreen from "@/components/admin/RosterScreen";
 import TournamentTeamsPanel from "@/components/admin/TournamentTeamsPanel";
 import { TournamentForm } from "@/components/admin/TournamentForm";
-import { TournamentRoundsPanel } from "@/components/admin/TournamentRoundsPanel";
-import { TournamentMatchesPanel } from "@/components/admin/TournamentMatchesPanel";
+import { SchedulePanel } from "@/components/admin/SchedulePanel";
 import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { eventKindCopy } from "@/lib/event-kind";
@@ -83,10 +83,13 @@ function ViewContent({ id }: { id: string }) {
   };
 
   const kindCopy = eventKindCopy(tournament);
-  // A tab that doesn't apply to this event kind (teams on an open-play
-  // night) falls back rather than rendering an empty screen.
+  // A tab that doesn't apply to this event kind (teams or a schedule on an
+  // open-play night, where nothing can publish) falls back rather than
+  // rendering an empty screen.
   const effectiveTab: EventTab =
-    tab === "teams" && !kindCopy.hasTeams ? "roster" : tab;
+    (tab === "teams" || tab === "schedule") && !kindCopy.hasTeams
+      ? "roster"
+      : tab;
 
   const load = useCallback(() => {
     return Promise.all([fetchTournamentById(id), fetchTournamentStats(id)]).then(
@@ -133,8 +136,17 @@ function ViewContent({ id }: { id: string }) {
               {tournament && <MetaLine tournament={tournament} />}
             </div>
             {tournament && (
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <EventStateBadge tournament={tournament} />
+                <a
+                  href={`/events/${tournament.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border-token bg-surface/60 px-3 text-sm text-zinc-200 hover:border-brand/50 hover:text-white transition-colors"
+                >
+                  <ExternalLink size={14} />
+                  View public page
+                </a>
                 {tournament.is_featured && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-brand/20 text-brand">
                     <Star size={12} className="fill-current" />
@@ -159,7 +171,8 @@ function ViewContent({ id }: { id: string }) {
 
           {!loading && tournament && (
             <>
-              <StatsCards stats={stats} />
+              {/* Money and headcount belong to the roster, not above every tab. */}
+              {effectiveTab === "roster" && <StatsCards stats={stats} />}
 
               <EventTabs
                 value={effectiveTab}
@@ -182,11 +195,11 @@ function ViewContent({ id }: { id: string }) {
                 />
               )}
 
-              {effectiveTab === "schedule" && (
-                <div className="space-y-6">
-                  <TournamentRoundsPanel tournamentId={tournament.id} />
-                  <TournamentMatchesPanel tournamentId={tournament.id} />
-                </div>
+              {effectiveTab === "schedule" && kindCopy.hasTeams && (
+                <SchedulePanel
+                  tournamentId={tournament.id}
+                  tournamentSlug={tournament.slug}
+                />
               )}
 
               {effectiveTab === "updates" && (
@@ -269,13 +282,15 @@ function EventTabs({
   const tabs: { id: EventTab; label: string; icon: React.ReactNode }[] = [
     { id: "roster", label: rosterLabel, icon: <Users size={14} /> },
     ...(showTeams
-      ? [{ id: "teams" as const, label: "Teams", icon: <UsersRound size={14} /> }]
+      ? [
+          { id: "teams" as const, label: "Teams", icon: <UsersRound size={14} /> },
+          {
+            id: "schedule" as const,
+            label: "Schedule & scores",
+            icon: <ListOrdered size={14} />,
+          },
+        ]
       : []),
-    {
-      id: "schedule",
-      label: "Schedule & scores",
-      icon: <ListOrdered size={14} />,
-    },
     { id: "updates", label: "Announcements", icon: <Megaphone size={14} /> },
     { id: "settings", label: "Settings", icon: <Settings size={14} /> },
   ];

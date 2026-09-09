@@ -404,6 +404,14 @@ tab is clicked, but the header computes totals immediately). Relabel: "Drop-ins"
 players", "Merge INTO the selected winner" → "Keep this one", and so on. Implement D2.
 
 ### B7. Public site
+
+> ✅ **2026-09-08: the tournament-hub half of this is done.** Three tabs that fit 320px,
+> table as rows on phones (Pts always visible, GF/GA shown), Schedule and Results merged into
+> one round-grouped Matches list, tab state in the URL, an at-a-glance card above the hub,
+> and the whole block hoisted above the description for a running tournament. The mobile
+> spine bullet was closed earlier by `702be9f`. The World Cup override stays (§10). See
+> [`docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md`](./SESSION-LOG-2026-09-08-COMMUNITY-CUP.md).
+
 Mobile spine (action bar on every page; 13 pages currently reserve 80px for a bar that only
 renders on the homepage; the WhatsApp button overlaps content). Tournament tabs (491px of tabs
 in a 327px container — "Top Scorers" is invisible and the standings **Points column is cut

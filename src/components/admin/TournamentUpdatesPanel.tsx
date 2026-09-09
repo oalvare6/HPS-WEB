@@ -13,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
+import { LOGIN_EXPIRED_MESSAGE } from "@/lib/admin-fetch";
 import { MAX_UPDATE_BODY_LENGTH, type TournamentUpdate } from "@/lib/types";
 import { ListRowsSkeleton } from "@/components/shared/skeleton";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
@@ -55,7 +56,9 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
     try {
       const res = await fetch(`/api/admin/tournaments/${tournamentId}/updates`);
       if (res.status === 401) {
-        window.location.reload();
+        // Never reload: that threw away whatever the owner had typed.
+        toast.error(LOGIN_EXPIRED_MESSAGE);
+        setError(LOGIN_EXPIRED_MESSAGE);
         return;
       }
       const data = await res.json();
@@ -90,6 +93,10 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: trimmed, pinned }),
       });
+      if (res.status === 401) {
+        toast.error(LOGIN_EXPIRED_MESSAGE);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Could not post update.");
@@ -117,6 +124,10 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
           body: JSON.stringify({ pinned: !u.pinned }),
         }
       );
+      if (res.status === 401) {
+        toast.error(LOGIN_EXPIRED_MESSAGE);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Could not update pin.");
@@ -139,6 +150,10 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
         `/api/admin/tournaments/${tournamentId}/updates/${u.id}`,
         { method: "DELETE" }
       );
+      if (res.status === 401) {
+        toast.error(LOGIN_EXPIRED_MESSAGE);
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error(data.error || "Delete failed.");
@@ -183,6 +198,10 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
           body: JSON.stringify({ body: trimmed }),
         }
       );
+      if (res.status === 401) {
+        toast.error(LOGIN_EXPIRED_MESSAGE);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Save failed.");
@@ -265,7 +284,7 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
           <AdminEmptyState
             icon={MessageSquarePlus}
             title="No updates posted yet"
-            description="Post schedule changes or announcements — pinned updates show on the public tournament page."
+            description="Everything you post here is public on the event page. Pin one to keep it at the top."
             className="py-6"
           />
         ) : (

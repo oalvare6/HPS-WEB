@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { translateDbError } from "@/lib/admin-db-errors";
 import {
   MAX_ROUND_LABEL_LENGTH,
   MAX_ROUND_NOTE_LENGTH,
@@ -119,6 +120,19 @@ export async function POST(request: Request, ctx: Ctx) {
   if (!timeEnd.ok) return NextResponse.json({ error: timeEnd.error }, { status: 400 });
   const note = parseOptionalString(b.note, "Note", MAX_ROUND_NOTE_LENGTH);
   if (!note.ok) return NextResponse.json({ error: note.error }, { status: 400 });
+  // "Does this round count toward the table?" Defaults to yes; the semis, the
+  // final and the exhibition say no.
+  if (
+    b.counts_toward_table != null &&
+    typeof b.counts_toward_table !== "boolean"
+  ) {
+    return NextResponse.json(
+      { error: "counts_toward_table must be true or false." },
+      { status: 400 }
+    );
+  }
+  const countsTowardTable =
+    typeof b.counts_toward_table === "boolean" ? b.counts_toward_table : true;
 
   // Verify tournament + grab slug for revalidate
   const { data: tournament, error: tErr } = await supabaseAdmin
@@ -154,13 +168,15 @@ export async function POST(request: Request, ctx: Ctx) {
       status: status.value,
       note: note.value,
       rescheduled_to: rescheduledTo.value,
+      counts_toward_table: countsTowardTable,
       sort_order: nextSort,
     })
     .select()
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const t = translateDbError(error, "Could not add the round.");
+    return NextResponse.json({ error: t.message }, { status: t.status });
   }
 
   revalidatePath(`/events/${tournament.slug}`);

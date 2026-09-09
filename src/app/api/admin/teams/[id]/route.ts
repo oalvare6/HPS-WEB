@@ -74,6 +74,40 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   }
 
   try {
+    // Both match FKs and the scorer FK are ON DELETE SET NULL, so deleting a
+    // team mid-season would silently turn it into "TBD" in every fixture,
+    // drop those results from the table for its opponents too, and orphan its
+    // goals. Refuse, and say what is in the way.
+    const { data: teamRow } = await supabaseAdmin
+      .from("teams")
+      .select("name")
+      .eq("id", id)
+      .maybeSingle();
+    const [{ count: matchCount }, { count: goalCount }] = await Promise.all([
+      supabaseAdmin
+        .from("matches")
+        .select("id", { count: "exact", head: true })
+        .or(`home_team_id.eq.${id},away_team_id.eq.${id}`),
+      supabaseAdmin
+        .from("match_scorers")
+        .select("id", { count: "exact", head: true })
+        .eq("team_id", id),
+    ]);
+    const inMatches = matchCount ?? 0;
+    const inGoals = goalCount ?? 0;
+    if (inMatches > 0 || inGoals > 0) {
+      const name = teamRow?.name ?? "This team";
+      const parts: string[] = [];
+      if (inMatches > 0) parts.push(`${inMatches} ${inMatches === 1 ? "match" : "matches"}`);
+      if (inGoals > 0) parts.push(`${inGoals} scorer ${inGoals === 1 ? "row" : "rows"}`);
+      return NextResponse.json(
+        {
+          error: `${name} is in ${parts.join(" and ")}. Remove or reassign those on the Schedule tab first.`,
+        },
+        { status: 409 }
+      );
+    }
+
     const { error } = await supabaseAdmin.from("teams").delete().eq("id", id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

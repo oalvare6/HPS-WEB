@@ -425,9 +425,14 @@ function RegistrationsTable({ rows }: { rows: PlayerRegistrationRow[] }) {
                 className="border-b border-border-token last:border-b-0"
               >
                 <td className="px-4 py-3 text-white">
+                  {/*
+                    Straight to the Matches tab of the event page. An open
+                    play night has no hub, so it ignores `?tab=` and there is
+                    no `#hub` to scroll to; the link still lands on the page.
+                  */}
                   {r.tournament_slug ? (
                     <Link
-                      href={`/events/${r.tournament_slug}`}
+                      href={`/events/${r.tournament_slug}?tab=matches#hub`}
                       className="hover:text-brand"
                     >
                       {r.tournament_title ?? "Untitled event"}

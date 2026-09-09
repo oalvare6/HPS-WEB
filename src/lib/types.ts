@@ -150,6 +150,17 @@ export type TournamentRound = {
   note: string | null;
   /** YYYY-MM-DD or null */
   rescheduled_to: string | null;
+  /**
+   * Whether results in this round move the league table. False for the
+   * semi-finals, the final and the exhibition. Optional on purpose: the column
+   * ships in `20260908120000_round_counts_and_scorer_identity.sql`, and a
+   * required field would turn a deploy-before-migrate into a PostgREST 42703
+   * on the most-visited page. Never read it directly; go through
+   * `roundCountsTowardTable()` in `lib/schedule.ts`, which treats a missing
+   * value as true (every round counts) so an un-migrated database degrades to
+   * today's behaviour.
+   */
+  counts_toward_table?: boolean | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -197,12 +208,44 @@ export const MAX_MATCH_NOTE_LENGTH = 280;
 export type MatchScorer = {
   id: string;
   match_id: string;
+  /**
+   * THE ONE RULE: always the team the goal COUNTED FOR. An own goal is a row on
+   * the benefiting team, never on the team that put it in its own net.
+   */
   team_id: string | null;
   scorer_name: string;
   goals: number;
+  /**
+   * True when the other side scored it into their own net. Excluded from the
+   * top-scorer list. Optional for the same deploy-order reason as
+   * `TournamentRound.counts_toward_table`; test `=== true`, never `!own_goal`.
+   */
+  own_goal?: boolean | null;
+  /**
+   * The person who scored, when picked from the roster; null for free-text
+   * names. The top-scorer list dedupes on this when present. Optional for the
+   * same deploy-order reason as above.
+   */
+  contact_id?: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
+};
+
+/** One scorer as posted to `PUT .../matches/[matchId]/result`. */
+export type MatchResultScorerInput = {
+  team_id: string;
+  scorer_name: string;
+  goals: number;
+  own_goal: boolean;
+  contact_id: string | null;
+};
+
+/** The whole result of one match, saved in one transaction. */
+export type MatchResultInput = {
+  home_score: number;
+  away_score: number;
+  scorers: MatchResultScorerInput[];
 };
 
 /**
@@ -259,11 +302,20 @@ export type StandingsRow = {
 
 /** A single row of the computed top-scorer leaderboard. Derived, never stored. */
 export type ScorerRow = {
+  /** 1-based; equal goal counts share a rank (1, 2, 2, 4). */
+  rank: number;
   scorer_name: string;
+  contact_id: string | null;
   team_id: string | null;
   team_name: string | null;
   team_color: string | null;
   goals: number;
+};
+
+/** The leaderboard plus the own goals it deliberately leaves out. */
+export type TopScorers = {
+  rows: ScorerRow[];
+  ownGoals: number;
 };
 
 // ============================================================================
