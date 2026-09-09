@@ -3,7 +3,9 @@
 **Branch:** `claude/hps-remediation-stage-1-2` (audit branch `claude/houston-premier-soccer-audit-elm2ae` @ `7d872ec` untouched).
 **Date:** 2026-09-09. **Scope:** `backend_audit_v1.md` F-01 (email-based capability issuance) and F-02 (Stripe payment / registration divergence), preceded by a read-only credential plan and a read-only schema reconciliation.
 
-**Boundaries honoured:** no production row, constraint, migration, Vercel variable, Supabase setting, Stripe object or waiver record was modified. No secret value was inspected, printed or stored. Nothing was deployed or merged. The two new migrations exist only on this branch.
+**Boundaries honoured (at the time of writing):** no production row, constraint, migration, Vercel variable, Supabase setting, Stripe object or waiver record was modified. No secret value was inspected, printed or stored. Nothing was deployed or merged. The two new migrations exist only on this branch.
+
+**Later the same day** the operator applied both migrations and asked for the deploy; the smoke-test record and the two follow-up fixes are in `docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`.
 
 ---
 
@@ -17,7 +19,7 @@
 | Phase 1 | `docs/core_schema_snapshot.sql` + `docs/core_schema_diff.md` written from live read-only introspection; the F-02 record verified and documented, not touched. |
 | Phase 4 | `scripts/reconcile-payments.ts` (dry-run by default; `--apply` + `HPS_RECONCILE_APPLY=1` required to write; not run against production). |
 | Tests | `npx tsc --noEmit` clean · `next lint` clean · **329/329** script assertions (179 original preserved + 150 new). `npm run build` result in §8. |
-| Deployment | **Blocked on one prerequisite:** no transactional email provider exists in the repository, so magic links cannot be delivered until one is wired (§12). Both migrations must be applied by hand before the code ships (§13). |
+| Deployment | **Done 2026-09-09.** Migrations applied by hand by the operator, Resend wired, merged as #4 (`838282c`), then two production fixes #5 and #6. Smoke-tested end to end in production; see `docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`. The $80 record and F-00 rotation remain open. |
 
 ---
 
