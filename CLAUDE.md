@@ -40,6 +40,7 @@ npx tsx scripts/test-resume-routes.ts
 npx tsx scripts/test-payment-finalize.ts
 npx tsx scripts/test-stripe-webhook.ts
 npx tsx scripts/test-reconcile-payments.ts
+npx tsx scripts/test-resend-sender.ts
 npm run build
 ```
 
