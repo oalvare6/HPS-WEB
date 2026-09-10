@@ -599,3 +599,86 @@ agent against a test registration on Community Cup; two defects found and fixed 
   sent-but-unsigned DocuSeal submission; leave that alone.
 - **Diagnostic warning `[resume-exchange] refused:` is token-free** (reason, token length,
   content type) and is meant to stay.
+
+## 2026-09-10 — Stage 1.4: the settlement SQL executed, and `--apply` fenced
+
+Full write-up in `docs/STAGE-1-4-STRIPE-VALIDATION.md`. Nothing was written to production.
+
+- **The two F-02 functions had never run.** They now do:
+  `scripts/test-finalize-sql.ts` (122), `scripts/test-stripe-integration.ts` (78) and
+  `scripts/test-stripe-route.ts` (10) execute them against a real PostgreSQL with a
+  production-shaped fixture. Report §17.1 is verified; §17.2 (`xmax = 0`) was verified on
+  **production's own 17.6.1** with a temp-table probe inside an aborted transaction.
+- **Fixed: a merged-away contact could throw away a payment for ever.** `contact_id` and
+  `tournament_id` reach the ledger insert straight from frozen Stripe metadata; if the row is
+  gone the foreign key raises 23503, the transaction rolls back, and every retry fails the
+  same way, so the money is never recorded. Links that cannot be honoured are now nulled with
+  a note. New migration `20260910120000_finalize_link_tolerance_and_lock_order.sql`.
+- **Fixed: two payments for one registration deadlocked.** The payments insert takes
+  FOR KEY SHARE on the registration via the FK; 4c then asked for FOR UPDATE — a lock upgrade.
+  1 concurrent pair in 12 raised 40P01. The locks are now taken in order, before the insert.
+- **Ignored Stripe events are now recorded** (`outcome = 'ignored'`, best effort). An empty
+  `stripe_webhook_events` could not distinguish "no payments yet" from "every delivery dies at
+  the edge" — the DocuSeal failure mode. One row now proves reachability.
+- **`scripts/reconcile-payments.ts --apply` no longer writes anything unnamed.** It requires
+  `--session=` / `--registration=` or an explicit `--all`, defaults to one record when scoped,
+  supports `--expect-writes` / `--expect-kind` / `--max-writes`, prints before/after and a
+  LIVE-vs-test banner, and can write a `--json=` audit record. Guards live in `planRepairs` /
+  `applyPlan` so they are tested and cannot be bypassed.
+- **The $80 row is still pending** (verified 2026-09-10) but the repair is now rehearsed
+  against its exact shape: it converges to `paid`, does not duplicate the payment row, and is
+  idempotent. Runbook in the Stage 1.4 doc §5. **Corrects report §13 step 6.**
+- **Report §15 was wrong about the other records.** The 4 unlinked payments and both
+  duplicate-payment pairs are from 2026-04/05 and fall outside the reconciler's 90-day window;
+  they do not appear in a default dry run.
+- **Report §13 step 5 should not be followed as written.** A Stripe Dashboard test event can
+  insert a junk row into the production payments ledger if its payload carries an email.
+- **Open: the pricing trap.** Checkout bills through `stripe_price_id` (Community Cup has
+  one); settlement validates against `entry_fee_cents`. Nothing keeps them in step — if they
+  diverge, every card payment for that event is charged and then *not* confirmed. The
+  reconciler now prints a pricing check; a real fix (validate against the Price, or keep them
+  in sync on save) is not done.
+- **Open: `/pay/success` settles money on an unauthenticated GET** with a session id from the
+  query string. Pre-existing, unchanged.
+- **Open: no Stripe API key exists in this environment**, so no real test-mode session has
+  ever been created. `scripts/test-stripe-integration.ts --live-sandbox` with an `sk_test_`
+  key does it and refuses any non-test key.
+- **Corrected `docs/core_schema_snapshot.sql`:** three columns are `numeric(10,2)` in
+  production, not bare `numeric`. A fixture copied from the old text rounded differently.
+
+## 2026-09-10 — Stage 1.4.1: Supabase is the price, and the quote is honoured
+
+Full write-up in `docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`. Nothing deployed, no
+production row changed, no production Stripe secret used.
+
+- **Closed the pricing drift Stage 1.4 found.** Checkout billed through
+  `tournaments.stripe_price_id` when an event had one (Community Cup did) while settlement
+  validated against `entry_fee_cents`. Every session is now created with `price_data` and a
+  server-computed `unit_amount`. `ResolvedCheckout` no longer has a price-id field and
+  `PricedTournament` no longer carries `stripe_price_id`, so there is nowhere for a second
+  price to come from. **Do not reintroduce `line_items: [{ price }]`.**
+- **New table `stripe_checkout_attempts`** (migration `20260910130000_…`, additive, NOT
+  applied). One row per Checkout Session recording the amount this server authorised.
+  Settlement prefers it over today's fee, so an owner editing an event price can no longer
+  invalidate a session a customer was already quoted. A session with no row — everything
+  created before the migration — falls back to deriving, exactly as before.
+- **A price edited mid-session now confirms with a note**, not a review flag: "Paid $80.00 —
+  the price quoted when checkout started. This event now charges $90.00." It goes through the
+  existing `notes_line`, so `append_note_line` dedupes it.
+- **The admin drop-in pay-link route records its own authorisation.** It creates its own
+  Stripe session rather than going through `createStripeCheckoutSession`; anything else that
+  ever does the same must call `recordCheckoutAttempt` too.
+- **The reconciler's pricing check is now housekeeping, not an alarm.** A stale Stripe Price
+  can no longer charge anyone; it only makes the Stripe dashboard misleading.
+- **The $80 row is unchanged and still takes the derived path** (no attempt row, entry fee
+  8000 = payment 8000), so it converges rather than landing in `needs_review`. Dry-run
+  behaviour re-proved against a real PostgreSQL; the exact scoped operator command is in the
+  Stage 1.4.1 doc §14. **Not executed.**
+- **Open: no real Stripe test-mode delivery has reached the deployed webhook.** No Stripe key
+  exists in the agent environment and the proxy blocks the production host, so the endpoint
+  could not be probed either. Procedure written out in §12; needs an operator with `sk_test_`.
+- **Open: `tournaments.stripe_price_id` / `stripe_product_id` are now written and never
+  read.** Dropping them means also removing `syncTournamentStripePricing` and its two admin
+  call sites. Deferred; it still creates a new Stripe Price on every fee change.
+- **Still deferred by instruction:** refunds/disputes, migration-ledger drift, event-state
+  work, admin UI.

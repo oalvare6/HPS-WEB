@@ -42,7 +42,6 @@ function store(): InMemoryFinalizeStore {
     slug: "community-cup-fall-2026",
     entry_fee_cents: 8000,
     drop_in_fee_cents: 0,
-    stripe_price_id: "price_x",
   });
   s.tournaments.set(OTHER_EVENT_ID, {
     id: OTHER_EVENT_ID,
@@ -50,7 +49,6 @@ function store(): InMemoryFinalizeStore {
     slug: "other",
     entry_fee_cents: 1500,
     drop_in_fee_cents: 0,
-    stripe_price_id: null,
   });
   s.registrations.set(REG_ID, {
     id: REG_ID,

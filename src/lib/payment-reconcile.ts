@@ -167,21 +167,128 @@ export async function analyzePayments(source: ReconcileSource): Promise<Reconcil
 
 export type RepairResult = { sessionId: string; kind: DiscrepancyKind; outcome: FinalizeOutcome | { status: "skipped"; reason: string } };
 
+/* ------------------------------------------------------------------ */
+/* Planning: decide what a run may write BEFORE it writes anything      */
+/* ------------------------------------------------------------------ */
+
 /**
- * Apply the `finalize` proposals. Everything else is reported only — a human
- * decides refunds and duplicates. Safe to repeat: finalisation is convergent.
+ * Narrows a run to named records. Analysis still looks at everything — the
+ * operator should see the whole picture — but only what is in scope may be
+ * written. An empty scope means "everything", which is why the script requires
+ * an explicit `--all` for it.
+ */
+export type ReconcileScope = {
+  sessionIds?: string[];
+  registrationIds?: string[];
+};
+
+/**
+ * The safety rails. Every one of these turns a surprise into a refusal instead
+ * of a write: the point is that the operator states what they expect to happen,
+ * and the run stops if reality disagrees.
+ */
+export type RepairGuards = {
+  scope?: ReconcileScope;
+  /** Refuse if the plan would write more rows than this. */
+  maxWrites?: number;
+  /** Refuse unless the plan writes exactly this many. */
+  expectWrites?: number;
+  /** Refuse unless every write is one of these kinds. */
+  expectKinds?: DiscrepancyKind[];
+};
+
+export type RepairPlan = {
+  /** Discrepancies this run would repair. */
+  writes: Discrepancy[];
+  /** In scope, but reported only — a human decides duplicates and refunds. */
+  reportedOnly: Discrepancy[];
+  /** Repairable, but outside the requested scope. */
+  outOfScope: Discrepancy[];
+  /** Non-empty means: do not apply. Each entry is a sentence for the operator. */
+  refusals: string[];
+};
+
+function inScope(d: Discrepancy, scope: ReconcileScope | undefined): boolean {
+  const sessions = scope?.sessionIds ?? [];
+  const registrations = scope?.registrationIds ?? [];
+  if (sessions.length === 0 && registrations.length === 0) return true;
+  if (sessions.includes(d.sessionId)) return true;
+  return d.registrationId !== null && registrations.includes(d.registrationId);
+}
+
+/**
+ * Turn a report into an explicit plan. Pure: it decides, it never acts. The
+ * script prints the plan and the refusals before anything is applied, so
+ * "what would this do?" is answerable without running it.
+ */
+export function planRepairs(report: ReconcileReport, guards: RepairGuards = {}): RepairPlan {
+  const writes: Discrepancy[] = [];
+  const reportedOnly: Discrepancy[] = [];
+  const outOfScope: Discrepancy[] = [];
+
+  for (const d of report.discrepancies) {
+    const scoped = inScope(d, guards.scope);
+    if (d.proposal !== "finalize") {
+      if (scoped) reportedOnly.push(d);
+      continue;
+    }
+    if (scoped) writes.push(d);
+    else outOfScope.push(d);
+  }
+
+  const refusals: string[] = [];
+  if (guards.maxWrites !== undefined && writes.length > guards.maxWrites) {
+    refusals.push(
+      `This run would repair ${writes.length} records, more than the limit of ${guards.maxWrites}. Narrow it with --session/--registration, or raise --max-writes deliberately.`
+    );
+  }
+  if (guards.expectWrites !== undefined && writes.length !== guards.expectWrites) {
+    refusals.push(
+      `Expected to repair exactly ${guards.expectWrites} record(s) but found ${writes.length}. Something has changed since you looked; re-run the dry run and read it before applying.`
+    );
+  }
+  if (guards.expectKinds && guards.expectKinds.length > 0) {
+    const unexpected = [...new Set(writes.map((w) => w.kind))].filter((k) => !guards.expectKinds!.includes(k));
+    if (unexpected.length > 0) {
+      refusals.push(
+        `Expected only ${guards.expectKinds.join(", ")} but the plan also contains ${unexpected.join(", ")}. Refusing.`
+      );
+    }
+  }
+
+  return { writes, reportedOnly, outOfScope, refusals };
+}
+
+/**
+ * Carry out a plan. Refuses outright if the plan carries any refusal, so an
+ * unchecked caller cannot skip the guards. Safe to repeat: finalisation is
+ * convergent.
+ */
+export async function applyPlan(
+  plan: RepairPlan,
+  finalize: (sessionId: string) => Promise<FinalizeOutcome>
+): Promise<RepairResult[]> {
+  if (plan.refusals.length > 0) {
+    throw new Error(`Refusing to apply:\n  - ${plan.refusals.join("\n  - ")}`);
+  }
+  const results: RepairResult[] = [];
+  for (const d of plan.writes) {
+    results.push({ sessionId: d.sessionId, kind: d.kind, outcome: await finalize(d.sessionId) });
+  }
+  for (const d of plan.reportedOnly) {
+    results.push({ sessionId: d.sessionId, kind: d.kind, outcome: { status: "skipped", reason: d.proposal } });
+  }
+  return results;
+}
+
+/**
+ * Apply every `finalize` proposal in a report, unguarded. Retained for callers
+ * that have already decided the scope; the script goes through `planRepairs` +
+ * `applyPlan` instead so that a run has to say what it expects to touch.
  */
 export async function applyRepairs(
   report: ReconcileReport,
   finalize: (sessionId: string) => Promise<FinalizeOutcome>
 ): Promise<RepairResult[]> {
-  const results: RepairResult[] = [];
-  for (const d of report.discrepancies) {
-    if (d.proposal !== "finalize") {
-      results.push({ sessionId: d.sessionId, kind: d.kind, outcome: { status: "skipped", reason: d.proposal } });
-      continue;
-    }
-    results.push({ sessionId: d.sessionId, kind: d.kind, outcome: await finalize(d.sessionId) });
-  }
-  return results;
+  return applyPlan(planRepairs(report), finalize);
 }

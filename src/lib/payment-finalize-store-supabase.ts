@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import { upsertContactByEmail } from "@/lib/contacts";
 import type { PricedTournament } from "@/lib/stripe-checkout";
 import type {
+  CheckoutAttemptRow,
   FinalizeArgs,
   FinalizeDropInRow,
   FinalizeRegistrationRow,
@@ -49,13 +50,32 @@ export class SupabaseFinalizeStore implements FinalizeStore {
   }
 
   async loadTournament(id: string): Promise<PricedTournament | null> {
+    // No `stripe_price_id`: since Stage 1.4.1 nothing prices from it.
     const { data, error } = await supabaseAdmin
       .from("tournaments")
-      .select("id, title, slug, entry_fee_cents, drop_in_fee_cents, stripe_price_id")
+      .select("id, title, slug, entry_fee_cents, drop_in_fee_cents")
       .eq("id", id)
       .maybeSingle();
     if (error) throw new Error(`load tournament: ${error.message}`);
     return (data as PricedTournament | null) ?? null;
+  }
+
+  async loadCheckoutAttempt(sessionId: string): Promise<CheckoutAttemptRow | null> {
+    const { data, error } = await supabaseAdmin
+      .from("stripe_checkout_attempts")
+      .select("stripe_session_id, amount_cents, currency, registration_id, drop_in_id, tournament_id")
+      .eq("stripe_session_id", sessionId)
+      .maybeSingle();
+    // A missing TABLE (deploy ordering) must not stop settlement: it means the
+    // same thing a missing ROW means — fall back to re-deriving the amount.
+    if (error) {
+      if (error.code === "42P01" || /stripe_checkout_attempts/i.test(error.message)) {
+        console.warn("[payment-finalize] checkout attempts unavailable; deriving the amount instead:", error.message);
+        return null;
+      }
+      throw new Error(`load checkout attempt: ${error.message}`);
+    }
+    return (data as CheckoutAttemptRow | null) ?? null;
   }
 
   async loadDropIn(id: string): Promise<FinalizeDropInRow | null> {

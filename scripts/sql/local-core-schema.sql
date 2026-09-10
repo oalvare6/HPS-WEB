@@ -1,35 +1,109 @@
 -- ============================================================================
--- Houston Premier Soccer — CORE SCHEMA SNAPSHOT (production, read-only)
+-- LOCAL TEST SCHEMA — a faithful stand-in for the production core, so that the
+-- F-02 settlement functions can be EXECUTED instead of merely reviewed.
 -- ============================================================================
--- Captured 2026-09-09 via read-only introspection of the production project
--- (information_schema.columns, pg_constraint, pg_indexes, pg_policies,
--- pg_trigger, pg_get_functiondef) — PostgreSQL 17.6.
+-- Stage 1.4. `remediation_stage_1_2_report.md` §8 and §17.1 admit the gap this
+-- file closes: `finalize_checkout_payment` and `record_stripe_webhook_event`
+-- were written, reviewed by hand and mirrored in `scripts/_test-fakes.ts`, but
+-- never run against any PostgreSQL. Everything green was green against a fake.
 --
--- THIS FILE IS DOCUMENTATION. It is NOT a migration and must never be placed
--- in supabase/migrations/ or applied anywhere. It records what production
--- actually looks like for the objects involved in registration, payment,
--- roster and waiver state, so that the forward migrations written for F-01 /
--- F-02 target the real structure rather than the repository's idea of it.
+-- This file is DERIVED FROM `docs/core_schema_snapshot.sql` (the read-only
+-- introspection of production, PostgreSQL 17.6). It is a TEST FIXTURE and must
+-- never be placed in supabase/migrations/ or applied to any hosted project.
+-- It is applied to a throwaway local database by
+-- `scripts/local-postgres.ts`, which then applies the two real migration files
+-- verbatim on top of it.
 --
--- Contains no data and no secrets. Column order is production ordinal order.
--- Scope: registrations, payments, tournaments (events), contacts, teams,
--- drop_ins, waiver_signatures, site_settings + the constraints, indexes,
--- policies, triggers and functions that touch them. Match/round tables are
--- out of scope for this remediation and are omitted.
+-- What is reproduced exactly, because settlement depends on it:
+--   * every column, type, default, CHECK constraint, FOREIGN KEY and UNIQUE
+--     index on registrations / payments / drop_ins / tournaments that
+--     `finalize_checkout_payment` reads or writes — including
+--     payments_stripe_session_id_key and the PARTIAL unique index on
+--     stripe_payment_intent_id, which is what turns a second session sharing
+--     one PaymentIntent into a 23505 instead of a duplicate ledger row;
+--   * registrations_one_live_spot_idx, so a test can prove settlement never
+--     creates a second live spot;
+--   * the updated_at triggers (payments deliberately has none in production);
+--   * RLS enabled on every table with the production policy set, and the three
+--     Supabase roles, so the migration's REVOKE/GRANT block applies as written
+--     and can be asserted.
 --
--- CORRECTED 2026-09-10 (Stage 1.4): `payments.amount`,
--- `registrations.payment_amount` and `tournaments.entry_fee` were rendered as
--- bare `numeric` with the precision only in a trailing comment. Production has
--- `numeric(10,2)` for all three (re-verified against information_schema). The
--- difference is not cosmetic — the scale is what rounds `amount_cents / 100.0`
--- to cents, and the precision is what makes an absurd amount raise 22003
--- instead of being stored. A test fixture copied from the old text behaved
--- differently from production. See docs/STAGE-1-4-STRIPE-VALIDATION.md §4.5.
+-- What is deliberately simplified, and why it cannot affect the result:
+--   * `tournament_rounds` is a stub with only the columns drop_ins references
+--     (it exists here only so drop_ins' FK is real);
+--   * matches, scorers, waiver tables and site content beyond site_settings
+--     are omitted — no settlement path reads them;
+--   * `auth.users` and the Supabase auth schema are omitted — settlement never
+--     touches them.
+--
+-- Version note: production is PostgreSQL 17.6.1; this fixture is exercised on
+-- whatever local server is available (16.13 in the sandbox). Every construct
+-- used by the migrations is stable across both, and
+-- `scripts/test-finalize-sql.ts` asserts the two that carry any version risk
+-- (`xmax = 0` after ON CONFLICT, and FOR UPDATE re-read under READ COMMITTED)
+-- against the live server rather than assuming them.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
--- tournaments  (the "events" table; defined in repo only by loose file
---               supabase/tournaments.sql + later migrations)
+-- Roles. Supabase ships these three; `service_role` bypasses RLS, which is how
+-- the application reaches every table in this file.
+-- ---------------------------------------------------------------------------
+-- Attributes and per-role settings verified against production's pg_roles on
+-- 2026-09-10. The settings are not decoration: PostgREST logs in as
+-- `authenticator` and then issues SET ROLE, and SET ROLE does NOT re-apply
+-- role settings — so every application statement, service_role included, runs
+-- under authenticator's `statement_timeout = 8s` and `lock_timeout = 8s`.
+-- A concurrency test run as a superuser with no timeouts is being made under
+-- different rules from the ones production enforces.
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then
+    create role anon nologin noinherit;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+    create role authenticated nologin noinherit;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then
+    create role service_role nologin noinherit bypassrls;
+  end if;
+  -- The role PostgREST actually connects as. LOGIN here (production uses a
+  -- password; this cluster is trust-auth and throwaway) so a test can take the
+  -- production path: connect as authenticator, SET ROLE service_role.
+  if not exists (select 1 from pg_roles where rolname = 'authenticator') then
+    create role authenticator login noinherit;
+  end if;
+end
+$$;
+
+alter role anon           set statement_timeout = '3s';
+alter role authenticated  set statement_timeout = '8s';
+alter role authenticator  set statement_timeout = '8s';
+alter role authenticator  set lock_timeout = '8s';
+grant anon, authenticated, service_role to authenticator;
+
+-- Reset. The extension is created AFTER the schema, not before: citext installs
+-- into `public`, so creating it first and then dropping the schema takes the
+-- type with it (and the failure surfaces 90 lines later as
+-- `type "citext" does not exist`).
+drop schema if exists public cascade;
+create schema public;
+grant usage on schema public to anon, authenticated, service_role;
+
+create extension if not exists citext with schema public;
+
+-- ---------------------------------------------------------------------------
+-- updated_at trigger function (production has per-table clones with identical
+-- bodies; one shared function is behaviourally the same)
+-- ---------------------------------------------------------------------------
+create or replace function public.set_updated_at() returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- tournaments (the "events" table)
 -- ---------------------------------------------------------------------------
 create table public.tournaments (
   id                         uuid        not null default gen_random_uuid(),
@@ -74,12 +148,11 @@ create table public.tournaments (
   constraint tournaments_drop_in_fee_cents_check
     check (drop_in_fee_cents >= 0)
 );
-create index tournaments_display_order_start_date_idx on public.tournaments (display_order, start_date);
-create index tournaments_is_featured_idx on public.tournaments (display_order, start_date) where is_featured = true;
-create index tournaments_status_idx on public.tournaments (status);
+create trigger tournaments_set_updated_at before update on public.tournaments
+  for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- contacts  (canonical person; email is the identity today)
+-- contacts (canonical person; email is the identity today — citext)
 -- ---------------------------------------------------------------------------
 create table public.contacts (
   id                    uuid        not null default gen_random_uuid(),
@@ -108,10 +181,8 @@ create table public.contacts (
     check (waiver_source is null or waiver_source = any (array['docuseal','admin_override','import','in_app']))
 );
 create unique index contacts_email_unique_idx on public.contacts (email);
-create index contacts_last_first_idx on public.contacts (last_name, first_name);
-create index contacts_phone_idx on public.contacts (phone) where phone is not null;
-create index contacts_tags_gin_idx on public.contacts using gin (tags);
-create index contacts_waiver_expires_idx on public.contacts (waiver_expires_at desc) where waiver_expires_at is not null;
+create trigger contacts_set_updated_at before update on public.contacts
+  for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- teams
@@ -129,12 +200,24 @@ create table public.teams (
   constraint teams_tournament_id_fkey foreign key (tournament_id) references public.tournaments(id) on delete cascade,
   constraint teams_captain_contact_id_fkey foreign key (captain_contact_id) references public.contacts(id) on delete set null
 );
-create index teams_tournament_idx on public.teams (tournament_id);
-create index teams_captain_idx on public.teams (captain_contact_id) where captain_contact_id is not null;
 create unique index teams_tournament_name_unique_idx on public.teams (tournament_id, lower(name));
+create trigger teams_set_updated_at before update on public.teams
+  for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- registrations  (the roster: one live row per person per event)
+-- tournament_rounds — STUB. Only drop_ins.round_id references it; no
+-- settlement path reads a round.
+-- ---------------------------------------------------------------------------
+create table public.tournament_rounds (
+  id             uuid        not null default gen_random_uuid(),
+  tournament_id  uuid        not null,
+  created_at     timestamptz not null default now(),
+  constraint tournament_rounds_pkey primary key (id),
+  constraint tournament_rounds_tournament_id_fkey foreign key (tournament_id) references public.tournaments(id) on delete cascade
+);
+
+-- ---------------------------------------------------------------------------
+-- registrations (the roster: one live row per person per event)
 -- ---------------------------------------------------------------------------
 create table public.registrations (
   id                         uuid        not null default gen_random_uuid(),
@@ -173,7 +256,6 @@ create table public.registrations (
   constraint registrations_contact_id_fkey foreign key (contact_id) references public.contacts(id) on delete set null,
   constraint registrations_team_id_fkey foreign key (team_id) references public.teams(id) on delete set null,
   constraint registrations_free_entry_tournament_id_fkey foreign key (free_entry_tournament_id) references public.tournaments(id) on delete set null,
-  -- NOTE: production still permits the legacy values 'team' and 'freeagent'
   constraint registrations_registration_type_check
     check (registration_type = any (array['team','adult','youth','freeagent'])),
   constraint registrations_waiver_type_check
@@ -184,21 +266,17 @@ create table public.registrations (
     check (docuseal_status = any (array['pending','sent','signed']))
 );
 create unique index registrations_waiver_match_key_idx on public.registrations (waiver_match_key);
+-- The roster invariant: settlement must never be able to create a second live spot.
 create unique index registrations_one_live_spot_idx on public.registrations (tournament_id, contact_id)
   where cancelled_at is null and contact_id is not null;
-create index registrations_active_idx on public.registrations (tournament_id, contact_id) where cancelled_at is null;
-create index registrations_contact_idx on public.registrations (contact_id) where contact_id is not null;
-create index registrations_docuseal_submission_id_idx on public.registrations (docuseal_submission_id);
-create index registrations_email_idx on public.registrations (email);
 create index registrations_email_tournament_idx on public.registrations (email, tournament_id) where email is not null;
 create index registrations_needs_admin_review_idx on public.registrations (needs_admin_review) where needs_admin_review = true;
 create index registrations_payment_status_idx on public.registrations (payment_status);
-create index registrations_team_idx on public.registrations (team_id) where team_id is not null;
-create index registrations_tournament_contact_status_idx on public.registrations (tournament_id, contact_id, payment_status);
-create index registrations_tournament_idx on public.registrations (tournament_id) where tournament_id is not null;
+create trigger registrations_set_updated_at before update on public.registrations
+  for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- drop_ins  (one-night guests; 0 rows in production, still wired in code)
+-- drop_ins (one-night guests)
 -- ---------------------------------------------------------------------------
 create table public.drop_ins (
   id                   uuid        not null default gen_random_uuid(),
@@ -220,22 +298,26 @@ create table public.drop_ins (
   constraint drop_ins_payment_status_check
     check (payment_status = any (array['pending','paid','waived','refunded']))
 );
-create index drop_ins_contact_idx on public.drop_ins (contact_id);
-create index drop_ins_paid_by_idx on public.drop_ins (paid_by_contact_id) where paid_by_contact_id is not null;
-create index drop_ins_payment_status_idx on public.drop_ins (payment_status);
-create index drop_ins_round_idx on public.drop_ins (round_id) where round_id is not null;
-create index drop_ins_tournament_idx on public.drop_ins (tournament_id, created_at desc);
+create trigger drop_ins_set_updated_at before update on public.drop_ins
+  for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- payments  (the Stripe ledger; defined in repo only by loose file
---            supabase/payments.sql + 20260513120700_alter_payments_links)
+-- payments (the Stripe ledger). No updated_at and no trigger in production —
+-- reproduced faithfully, because a test that expected one would pass here and
+-- fail there.
 -- ---------------------------------------------------------------------------
 create table public.payments (
   id                         uuid        not null default gen_random_uuid(),
   created_at                 timestamptz not null default now(),
   registration_id            uuid,
   email                      text        not null,
-  amount                     numeric(10,2) not null,        -- dollars
+  -- numeric(10,2), not bare numeric. Verified against production's
+  -- information_schema on 2026-09-10: the scale is what rounds
+  -- `amount_cents / 100.0` to cents and what makes an absurd amount raise
+  -- 22003 instead of being stored. docs/core_schema_snapshot.sql renders this
+  -- column as bare `numeric` with the precision only in a comment; a fixture
+  -- copied from it literally would round differently from production.
+  amount                     numeric(10,2) not null,
   currency                   text        not null default 'usd',
   tournament_name            text,
   stripe_session_id          text,
@@ -254,39 +336,11 @@ create table public.payments (
   constraint payments_status_check
     check (status = any (array['pending','succeeded','failed','refunded']))
 );
+-- PARTIAL unique index: this is what makes a second Checkout Session sharing one
+-- PaymentIntent raise 23505 rather than write a second ledger row.
 create unique index payments_stripe_payment_intent_unique_idx on public.payments (stripe_payment_intent_id)
   where stripe_payment_intent_id is not null;
-create index payments_contact_idx on public.payments (contact_id) where contact_id is not null;
-create index payments_drop_in_idx on public.payments (drop_in_id) where drop_in_id is not null;
-create index payments_email_idx on public.payments (email);
 create index payments_registration_id_idx on public.payments (registration_id);
-create index payments_tournament_idx on public.payments (tournament_id) where tournament_id is not null;
--- Observed: every production payment row has status='succeeded', currency='usd',
--- a 'cs_' stripe_session_id and a stripe_payment_intent_id (60/60).
--- NO Stripe event id column exists; NO updated_at; NO trigger.
-
--- ---------------------------------------------------------------------------
--- waiver_signatures  (in-app signing evidence; 0 rows in production)
--- ---------------------------------------------------------------------------
-create table public.waiver_signatures (
-  id                   uuid        not null default gen_random_uuid(),
-  created_at           timestamptz not null default now(),
-  registration_id      uuid,
-  contact_id           uuid,
-  waiver_type          text        not null,
-  signed_name          text        not null,
-  signed_at            timestamptz not null default now(),
-  signer_relationship  text,
-  ip                   inet,
-  user_agent           text,
-  waiver_version       text        not null,
-  constraint waiver_signatures_pkey primary key (id),
-  constraint waiver_signatures_registration_id_fkey foreign key (registration_id) references public.registrations(id) on delete cascade,
-  constraint waiver_signatures_contact_id_fkey foreign key (contact_id) references public.contacts(id) on delete set null,
-  constraint waiver_signatures_waiver_type_check check (waiver_type = any (array['adult','youth']))
-);
-create index waiver_signatures_contact_id_idx on public.waiver_signatures (contact_id);
-create index waiver_signatures_registration_id_idx on public.waiver_signatures (registration_id);
 
 -- ---------------------------------------------------------------------------
 -- site_settings
@@ -297,9 +351,12 @@ create table public.site_settings (
   updated_at  timestamptz not null default now(),
   constraint site_settings_pkey primary key (key)
 );
+create trigger site_settings_set_updated_at before update on public.site_settings
+  for each row execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- Row Level Security (all tables above: enabled, not forced)
+-- Row Level Security, exactly as production has it: enabled everywhere, with
+-- SELECT-only public policies on two tables and NO policies on the rest.
 -- ---------------------------------------------------------------------------
 alter table public.tournaments        enable row level security;
 alter table public.contacts           enable row level security;
@@ -307,73 +364,13 @@ alter table public.teams              enable row level security;
 alter table public.registrations      enable row level security;
 alter table public.drop_ins           enable row level security;
 alter table public.payments           enable row level security;
-alter table public.waiver_signatures  enable row level security;
 alter table public.site_settings      enable row level security;
--- Policies that exist (all PERMISSIVE, role {public}, SELECT only):
+alter table public.tournament_rounds  enable row level security;
+
 create policy "Public read tournaments"   on public.tournaments   for select using (is_draft = false);
 create policy "Public read site_settings" on public.site_settings for select using (true);
--- contacts, teams, registrations, drop_ins, payments, waiver_signatures:
---   RLS enabled and ZERO policies -> anon/authenticated are denied; the app
---   reaches them only through the service role. (Default table GRANTs to
---   anon/authenticated still exist — 14 per table — but RLS blocks every row.)
--- No INSERT/UPDATE/DELETE policy exists on any table.
 
--- ---------------------------------------------------------------------------
--- Triggers (all BEFORE UPDATE, updated_at setters)
--- ---------------------------------------------------------------------------
-create or replace function public.set_updated_at() returns trigger language plpgsql as $$
-begin new.updated_at = now(); return new; end; $$;
-create trigger tournaments_set_updated_at   before update on public.tournaments   for each row execute function public.set_updated_at();
-create trigger registrations_set_updated_at before update on public.registrations for each row execute function public.set_updated_at();
--- Per-table clones with identical bodies:
---   set_updated_at_contacts (contacts), set_updated_at_teams (teams),
---   set_updated_at_drop_ins (drop_ins), set_updated_at_site_settings (site_settings).
--- payments and waiver_signatures have NO trigger.
-
--- ---------------------------------------------------------------------------
--- Functions/RPCs in the payment / roster / waiver workflows
--- ---------------------------------------------------------------------------
--- open_play_attendees(p_event_id uuid) returns table(first_name text, last_initial text, joined_at timestamptz)
---   language sql, STABLE, SECURITY INVOKER, set search_path = public.
---   Reads live registrations of an open_play event (cancelled_at is null),
---   truncating last names in SQL. Executable by service_role only.
---
--- save_match_result(...) / clear_match_result(...)  — plpgsql, SECURITY INVOKER,
---   service_role only. Match-result transaction; not part of F-01/F-02 and
---   not reproduced here (see supabase/migrations/20260908120000_*.sql, whose
---   body matches production verbatim).
---
--- There is NO database function for: recording a payment, confirming a
--- registration, issuing or consuming a resume/magic-link token, or rate
--- limiting. Those exist only as multi-statement application code in
--- src/lib/stripe-payments.ts and src/lib/pay-eligibility.ts as of the audit.
-
--- ---------------------------------------------------------------------------
--- Migration ledger (supabase_migrations.schema_migrations) — 22 rows
--- ---------------------------------------------------------------------------
--- 20260319215600 create_registrations
--- 20260319224900 add_docuseal_columns_to_registrations
--- 20260513120000 create_tournament_rounds
--- 20260513120100 enable_citext
--- 20260513120200 create_contacts
--- 20260513120300 create_teams
--- 20260513120400 create_drop_ins
--- 20260513120500 alter_tournaments_pricing
--- 20260513120600 alter_registrations_links
--- 20260513120700 alter_payments_links
--- 20260513120800 backfill_contacts
--- 20260513120900 backfill_tournament_links
--- 20260513121000 rls_policies
--- 20260619201109 create_matches_and_scorers          (file: 20260619140000)
--- 20260812170137 add_tournaments_is_draft            (file: 20260812190000)
--- 20260813000824 create_waiver_signatures            (file: 20260812210000)
--- 20260814174433 add_tournaments_kind                (file: 20260814230000)
--- 20260814184245 add_registrations_cancelled_at      (file: 20260814234500)
--- 20260814185600 dedupe_registrations_and_guard      (file: 20260815001500)
--- 20260814211133 add_open_play_free_entry_config     (file: 20260815030000)
--- 20260814211247 open_play_attendance_and_free_entry (file: 20260815031000)
--- 20260909004333 round_counts_and_scorer_identity    (file: 20260908120000)
--- Not in the ledger although their objects exist in production:
---   20260513121100, 20260513121200, 20260521124500, 20260521150000,
---   20260521170000, 20260521203000, 20260603120000, 20260908120100
--- ============================================================================
+-- Production still carries the default table grants to anon/authenticated
+-- (RLS is what actually blocks them). Reproduced so a test can prove that RLS,
+-- not a missing grant, is the thing standing in the way.
+grant select, insert, update, delete on all tables in schema public to anon, authenticated, service_role;

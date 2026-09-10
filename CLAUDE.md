@@ -41,8 +41,18 @@ npx tsx scripts/test-payment-finalize.ts
 npx tsx scripts/test-stripe-webhook.ts
 npx tsx scripts/test-reconcile-payments.ts
 npx tsx scripts/test-resend-sender.ts
+npx tsx scripts/test-stripe-route.ts
+npx tsx scripts/test-checkout-pricing.ts
+npx tsx scripts/test-finalize-sql.ts        # needs a PostgreSQL; see below
+npx tsx scripts/test-stripe-integration.ts  # needs a PostgreSQL; see below
 npm run build
 ```
+
+The last two **execute the settlement SQL**. They provision a throwaway database: they use
+`HPS_TEST_DATABASE_URL` if it is set, otherwise a server on port 54329, otherwise they start
+their own cluster with `initdb`. If none of that is possible they **fail rather than skip** —
+a silent skip is how a suite stops proving what its name says. `HPS_SKIP_PG_TESTS=1` skips
+them deliberately and prints that the SQL was not executed.
 
 **Two remediation invariants (2026-09-09, `remediation_stage_1_2_report.md`).** Knowing an
 email address never authorises anything: `POST /api/pay/eligibility` answers every caller
@@ -54,6 +64,41 @@ through exactly one path, the database function `finalize_checkout_payment`
 before a registration is confirmed, replays converge, and the webhook answers 5xx on a
 local failure so Stripe retries. Do not add a second writer of `payments` or of
 `registrations.payment_status = 'paid'` for card money.
+
+**Three settlement rules learned by running the SQL (2026-09-10,
+[`docs/STAGE-1-4-STRIPE-VALIDATION.md`](docs/STAGE-1-4-STRIPE-VALIDATION.md)).**
+
+- **Recording the money outranks recording the link.** `payments` has foreign keys to
+  registrations, drop-ins, contacts and tournaments, and two of those ids reach the insert
+  straight from Stripe metadata, which is frozen at checkout. A contact deleted by a *merge*
+  in the admin used to make the settlement raise `23503` — for ever, because every retry
+  carried the same metadata, so the payment was never recorded at all. An unresolvable link is
+  now nulled with a note. Never add a link to that insert without asking what happens when the
+  row it names is gone.
+- **Lock the registration before inserting the payment.** The insert takes `FOR KEY SHARE` on
+  the registration through the foreign key; asking the same row for `FOR UPDATE` afterwards is
+  an upgrade, and two concurrent settlements for one registration deadlock on it (1 pair in
+  12, measured). Order the locks, don't add more.
+- **Supabase decides the price, and what was quoted is remembered** (closed 2026-09-10 by
+  Stage 1.4.1, [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md)).
+  Checkout used to bill through `stripe_price_id` while settlement validated against
+  `entry_fee_cents`, so a drifted Price charged a customer and then refused to confirm them.
+  Every session is now created with `price_data` and a server-computed `unit_amount` from
+  `priceTournamentCheckout` — the same function settlement calls — and `ResolvedCheckout` has
+  no price-id field, so there is nowhere for a second price to come from. Do not reintroduce
+  `line_items: [{ price }]`. `tournaments.stripe_price_id` / `stripe_product_id` are still
+  written for the Stripe dashboard and read by nothing; they are queued for schema cleanup.
+  Separately, `stripe_checkout_attempts` records the amount each session was authorised for,
+  and settlement prefers it over today's fee — so editing an event's price cannot invalidate a
+  session a customer was already quoted. A session with no attempt row (everything created
+  before that migration) falls back to re-deriving, exactly as before.
+
+**Repairing production payments is scoped, not blanket.** `scripts/reconcile-payments.ts
+--apply` refuses to start unless the run names what it may write (`--session=`,
+`--registration=`, or an explicit `--all`), defaults to one record when scoped, and supports
+`--expect-writes` / `--expect-kind` so a surprise is a refusal instead of a write. The banner
+says whether the Stripe key is LIVE or test before anything happens. If a run refuses, read
+the refusal — do not remove the guard.
 
 **Two FKs now run from `registrations` to `tournaments`** — `tournament_id` and D7's
 `free_entry_tournament_id`. PostgREST will not choose between them: any `.select()` that
@@ -131,7 +176,9 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`](docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md) | **Most recent session.** F-01/F-02 deployed and smoke-tested in production: the `formData()` runtime trap, the cookie-clearing reuse bug, and the database evidence. Read with `remediation_stage_1_2_report.md`. |
+| [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md) | **Most recent session.** Supabase made the single source of price, the authorised amount recorded per Checkout Session, and the Stripe sandbox procedure written down. **Closes the pricing trap Stage 1.4 opened.** |
+| [`docs/STAGE-1-4-STRIPE-VALIDATION.md`](docs/STAGE-1-4-STRIPE-VALIDATION.md) | The settlement SQL executed for the first time (against a real PostgreSQL, and `xmax` checked on production's own 17.6): two defects found and fixed, the $80 repair rehearsed, and `--apply` fenced. **Corrects §13 and §15 of the Stage 1.2 report.** |
+| [`docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`](docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md) | F-01/F-02 deployed and smoke-tested in production: the `formData()` runtime trap, the cookie-clearing reuse bug, and the database evidence. Read with `remediation_stage_1_2_report.md`. |
 | [`docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md`](docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md) | Community Cup schedule, scores and table: the round-centric admin, the phone-first public hub, the one-transaction result save, the own-goal rule, and the spreadsheet import. Read after the plan. |
 | [`docs/COMMUNITY-CUP-ACCEPTANCE.md`](docs/COMMUNITY-CUP-ACCEPTANCE.md) | The owner's Friday-night checklist for the new Schedule & scores tab and the public page. |
 | [`docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md`](docs/SESSION-LOG-2026-08-17-ADMIN-DATA-CLEANUP.md) | Production data cleanup (B1 done), the four-way waiver-display contradiction, and the B6 admin consolidation (one page per event). |

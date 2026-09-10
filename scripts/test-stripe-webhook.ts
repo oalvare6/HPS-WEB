@@ -44,7 +44,7 @@ function sign(payload: string, secret = SECRET) {
 
 function store() {
   const s = new InMemoryFinalizeStore();
-  s.tournaments.set(EVENT_ID, { id: EVENT_ID, title: "Community Cup", slug: "community-cup-fall-2026", entry_fee_cents: 8000, drop_in_fee_cents: 0, stripe_price_id: null });
+  s.tournaments.set(EVENT_ID, { id: EVENT_ID, title: "Community Cup", slug: "community-cup-fall-2026", entry_fee_cents: 8000, drop_in_fee_cents: 0 });
   s.registrations.set(REG_ID, { id: REG_ID, email: "player@example.com", tournament_id: EVENT_ID, contact_id: null, payment_status: "pending", cancelled_at: null, needs_admin_review: false, notes: null, team_name: null });
   return s;
 }
@@ -73,7 +73,17 @@ async function main() {
     const payload = event("customer.created", "evt_irrelevant", { id: "cus_1", object: "customer" });
     const res = await handleStripeWebhook(payload, sign(payload), deps(s));
     t.eq("irrelevant event → 200, ignored", [res.status, (await res.json()).ignored], [200, true]);
-    t.check("irrelevant event touched nothing", s.finalizeCalls === 0 && s.events.size === 0);
+    t.check("irrelevant event settles nothing", s.finalizeCalls === 0 && s.payments.size === 0);
+    t.eq(
+      "but it IS recorded, so the table can answer 'does Stripe reach us at all?'",
+      [s.events.size, s.events.get("evt_irrelevant")?.outcome],
+      [1, "ignored"]
+    );
+
+    const s2 = store();
+    s2.failNextRecordEvent = true;
+    const still = await handleStripeWebhook(payload, sign(payload), deps(s2));
+    t.eq("and failing to record one is not worth a retry", still.status, 200);
   }
 
   {

@@ -17,6 +17,7 @@ import type {
   StoredSession,
 } from "../src/lib/resume-access";
 import type {
+  CheckoutAttemptRow,
   FinalizeArgs,
   FinalizeDropInRow,
   FinalizeRegistrationRow,
@@ -325,6 +326,8 @@ export class InMemoryFinalizeStore implements FinalizeStore {
   tournaments = new Map<string, PricedTournament>();
   dropIns = new Map<string, FinalizeDropInRow>();
   payments = new Map<string, FakePayment>(); // by session id
+  /** What checkout authorised, by session id (Stage 1.4.1). */
+  checkoutAttempts = new Map<string, CheckoutAttemptRow>();
   events = new Map<string, { type: string; processed: boolean; outcome: string | null; detail: string | null }>();
   contacts = new Map<string, string>(); // email -> id
   finalizeCalls = 0;
@@ -346,6 +349,9 @@ export class InMemoryFinalizeStore implements FinalizeStore {
   }
   async loadDropIn(id: string) {
     return this.dropIns.get(id) ?? null;
+  }
+  async loadCheckoutAttempt(sessionId: string) {
+    return this.checkoutAttempts.get(sessionId) ?? null;
   }
   async ensureContactByEmail(email: string) {
     let id = this.contacts.get(email);

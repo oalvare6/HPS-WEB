@@ -52,6 +52,27 @@ export async function handleStripeWebhook(
   }
 
   if (!(HANDLED_STRIPE_EVENTS as readonly string[]).includes(event.type)) {
+    // Recorded, not discarded. `stripe_webhook_events` is the only durable
+    // evidence that Stripe reaches this app at all — Vercel Hobby keeps about an
+    // hour of runtime logs — and while ignored types wrote nothing, an empty
+    // table could not tell "no payments yet" apart from "the endpoint is
+    // configured against a host that redirects and every delivery dies at the
+    // edge". That is the failure CLAUDE.md records for DocuSeal, which logged a
+    // month of successful 307s while never once reaching this app.
+    //
+    // Best effort: nothing here needs to persist for Stripe's sake, so a write
+    // failure is logged and still acknowledged rather than provoking a retry.
+    try {
+      await deps.store.recordEvent({
+        eventId: event.id,
+        type: event.type,
+        objectId: null,
+        outcome: "ignored",
+        detail: null,
+      });
+    } catch (err) {
+      console.warn("Stripe webhook: could not record an ignored event", err instanceof Error ? err.message : err);
+    }
     return json({ received: true, ignored: true, type: event.type });
   }
 
