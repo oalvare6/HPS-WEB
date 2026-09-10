@@ -22,9 +22,9 @@ row was touched, the $80 record was not reconciled, and nothing was deployed or 
 | The fresh build matches production | **Yes, object for object,** except seven differences that are listed, explained and pinned by a test (§3.4, §5.3) |
 | Migration files created | 5 baselines for the loose-file objects, 2 ported byte-identical from unmerged branches (§4) |
 | Loose SQL under `supabase/` | Retired to `docs/archive/loose-sql/` with a README saying where each one went |
-| Supabase Preview branch | **Blocked by plan:** `PaymentRequiredException: Branching is supported only on the Pro plan or above`. Nothing was created (§6) |
-| Production migration ledger | **Not repaired, deliberately.** Exact commands and their order in §8 |
-| Tests | `tsc` clean · `lint` clean · `build` clean · **641/641** assertions, 18 suites (§9) |
+| Supabase Preview branch | **PASS on PostgreSQL 17.6.** The platform migrated an empty database through all 41 files; ledger 41/41, last applied `20260910130000` (§6). It failed on the first attempt and found a real defect — see §12 |
+| Production migration ledger | **Not repaired, deliberately — still 22 rows for 41 files.** `supabase db push` and `supabase migration repair` must NOT be run against production yet. Exact commands and their order in §8 |
+| Tests | `tsc` clean · `lint` clean · `build` clean · **645/645** assertions, 18 suites (§9) |
 
 ---
 
@@ -275,9 +275,13 @@ PASS  the catalogs are the same size within the allow-list (production 524, fres
 
 ### 5.4 What this does not prove
 
-- **PostgreSQL 16.13 is not 17.6.1.** Nothing in the chain is version-specific (the one
-  construct that was, `xmax = 0`, was checked on production in Stage 1.4), but the platform's
-  own image has not run these files — that is what the Preview branch was for (§6).
+- **PostgreSQL 16.13 is not 17.6.1.** ~~Nothing in the chain is version-specific~~ — **this
+  bullet was wrong, and §12 is the proof.** Something in the chain *was* version-specific:
+  `drop trigger if exists … on <a relation that never existed>` is a skipped statement on 16
+  and a hard `42P01` on 17. The Preview branch caught it, this suite had not. Now closed both
+  ways: the migration no longer names an absent relation, and the suite fails on that class on
+  either major and proves its own tripwire is armed first (§12.5). The Preview branch has since
+  run these files on the platform's own image and passed (§6).
 - **The Storage schema here is a stub.** The bucket migration's guard, inserts and policy ran,
   but against four columns of `storage.buckets`, not Supabase's real table. On a Supabase
   project the same statements are the ones the loose scripts ran by hand in March and May.
@@ -288,38 +292,40 @@ PASS  the catalogs are the same size within the allow-list (production 524, fres
 
 ---
 
-## 6. Preview environment result
+## 6. Preview environment result — **PASS**
 
-**Not restored — the organisation cannot create branches.** With the branch pushed and no
-automatic branch appearing, the cost was fetched ($0.01344 per hour) and confirmed, and
-`create_branch` was called for a branch named after the git branch:
+**Exercised, on the platform's own PostgreSQL 17.6, and it passes.** The organisation was
+upgraded the same day this stage was written, PR #9 was opened, and the GitHub integration
+created preview branch `ddjfsqqaywmmtvaqnfqn` from an **empty** database (`with_data: false`)
+and applied `supabase/migrations/` to it.
 
-```
-PaymentRequiredException: Branching is supported only on the Pro plan or above
-```
+**It failed on the first attempt** — `42P01` at file 19 of 41 — which is the whole point of
+having the environment. That defect and its fix are §12. After commit `00c7830` the integration
+re-ran and the branch reached `FUNCTIONS_DEPLOYED`. Read back from the preview database itself:
 
-Nothing was created. The organisation `HPS SUPABASE` is on the Free plan today; the two branch
-entries that exist (`main`, `MIGRATIONS_FAILED` since 2026-05-13; the June preview for PR #2,
-`MIGRATIONS_FAILED`, `INACTIVE`) are leftovers from when branching was available.
+| | Before `00c7830` | After `00c7830` |
+|---|---|---|
+| Branch status | `MIGRATIONS_FAILED` | `FUNCTIONS_DEPLOYED` |
+| `supabase_migrations.schema_migrations` | **18 rows**, last `20260513121000` | **41 rows**, last `20260910130000` |
+| Tables in `public` | 10 | **19** |
+| `to_regclass('public.league_round_overrides')` | — | `null` (correctly never created) |
+| `finalize_checkout_payment`, `save_match_result`, `consume_registration_access_token` | — | all 3 present |
 
-What the operator can do, in order of cost:
+So the claim this stage set out to make — **`supabase/migrations/` builds the whole schema from
+an empty database** — is now proved on Supabase's own image and not only on a local PostgreSQL.
 
-1. **Upgrade the organisation to Pro** (branching is a Pro feature, billed per branch-hour),
-   then either open a pull request from this branch — the GitHub integration creates the
-   preview branch and runs these 41 files on the platform's own Postgres 17 — or create a
-   branch from the dashboard and link it to this git branch. Read the branch's "View logs"
-   for the Migrate step. Delete the dead June branch (`vwgdxrjkhpvuyokydtyf`) at the same
-   time; PR #2 is four months stale.
-2. **Or create a second Free-plan project** as the isolated environment for the Stripe sandbox
-   test, and apply the chain to it from a trusted machine:
-   `supabase db push --db-url "<that project's session-pooler URL>"`. It is a real Supabase
-   Postgres 17 with the real Storage schema, it has no production data, and it is what the
-   sandbox test needs. It costs one of the two free project slots.
+Two operational notes for whoever drives this next:
 
-Either path uses the same 41 files this stage proved. Neither touches production.
+- The Supabase bot says *"only new migration files are pushed. Close and reopen this PR if you
+  want to apply changes from existing seed or migration files."* The fix in `00c7830` **edited**
+  an existing migration, and it was re-applied only because the branch's ledger had stopped
+  **at** that file, so it was still unrecorded there. If a future edit to an already-applied
+  migration appears to be ignored by a preview branch, close and reopen the pull request.
+- The dead June preview branch for PR #2 (`vwgdxrjkhpvuyokydtyf`, `MIGRATIONS_FAILED`,
+  `INACTIVE`) is still worth deleting; PR #2 is four months stale. **Do not** reset or reuse it:
+  it tracks the `cursor/…` git branch, whose migration set is the broken one.
 
-**Do not** reset or reuse the June branch: it tracks the `cursor/…` git branch, whose
-migration set is the broken one, and it would fail the same way.
+None of this touches production. A preview branch is a separate, disposable project.
 
 ---
 
@@ -429,12 +435,17 @@ Then:
 | test-checkout-pricing | 65/65 |
 | test-finalize-sql | 122/122 (executed, PostgreSQL 16.13) |
 | test-stripe-integration | 90/90 (executed, PostgreSQL 16.13) |
-| **test-migrations-from-empty** | **44/44 — new** (executed, PostgreSQL 16.13) |
-| **Total** | **641/641** |
+| **test-migrations-from-empty** | **48/48 — new** (executed, PostgreSQL 16.13) |
+| **Total** | **645/645** |
 
 No existing test was changed, skipped or weakened. The settlement suites still build their
 fixture the same way; only the provisioning helper they call was split so the new suite could
 start from nothing.
+
+**Counts as of `00c7830`.** The new suite was 44/44 when this stage was first written; §12 adds
+four assertions — the armed tripwire, the version-order check, and the missing-relation guard on
+each of the two passes — taking it to 48/48 and the total from 641 to 645. `node_modules` must be
+installed (`npm ci`) before `lint` and `build`, or `next` is not found.
 
 ---
 
@@ -451,7 +462,7 @@ Every interaction with the production project, in order:
 | `execute_sql` ×14 — `pg_class`/`pg_proc`/`pg_constraint`/`pg_indexes`/`pg_policies`/`pg_trigger`/`pg_attribute`/`information_schema` grants, `storage.buckets`, aggregate `min(created_at)` and `count(*)` values, the ledger's stored statements as digests and first lines, and the full catalog query | none — every statement was a `SELECT`; no row values beyond aggregates and timestamps were read, and no name, email or phone was retrieved |
 | `search_docs` ×2 | documentation only |
 | `get_cost`, `confirm_cost` | none (a quote) |
-| `create_branch` | **refused by the platform** (`PaymentRequiredException`); nothing created |
+| `create_branch` | **refused by the platform** (`PaymentRequiredException`); nothing created. The preview branch that exists today was created later by the GitHub integration on PR #9, not by this call (§6, §12.7) |
 
 Not called: `apply_migration`, `merge_branch`, `rebase_branch`, `reset_branch`,
 `delete_branch`, `deploy_edge_function`, `create_project`, `pause_project`, `restore_project`,
@@ -485,11 +496,15 @@ deploy.
 
 ---
 
-## 12. Stage 1.6.1 — what the Preview branch found (2026-09-10)
+## 12. Stage 1.6.1 — what the Preview branch found, and the fix (2026-09-10)
 
-§6 said branching was refused on the Free plan and that the platform's own image had never run
-these files. That changed the same day: the organisation was upgraded, PR #9 was opened, and the
-GitHub integration created preview branch `ddjfsqqaywmmtvaqnfqn` and ran the chain.
+**Status: resolved. Preview is PASS on PostgreSQL 17.6 as of commit `00c7830`** — 41/41
+migrations from an empty database (§6 has the before/after read back from the branch itself).
+
+When this stage was first written, branching was refused on the Free plan and the platform's own
+image had never run these files. That changed the same day: the organisation was upgraded, PR #9
+was opened, and the GitHub integration created preview branch `ddjfsqqaywmmtvaqnfqn` and ran the
+chain.
 
 **It failed at file 19 of 41**, and §5.4's first bullet — *"PostgreSQL 16.13 is not 17.6.1"* —
 turned out to name the exact reason.
@@ -598,9 +613,37 @@ if exists`. There is no `alter table if exists` anywhere. Every parent relation 
 | original (broken) | updated | **46/48, exit 1** — `no migration reaches for a relation that does not exist on a clean database … got ["20260513121100_drop_legacy_overrides.sql: public.league_round_overrides"] expected []` |
 | fixed | updated | **48/48 passed** |
 
-### 12.6 What is still not proved
+### 12.6 What is still not proved, and what must still NOT be run
 
 The tripwire closes *this* 16↔17 difference on either version. It is not a claim that every other
-one is covered. **The Preview branch on the pull request remains the last word**, and nothing
-below §8 changed: the production ledger is still drifted, and `supabase db push` against
-production is still forbidden.
+one is covered. **The Preview branch on the pull request remains the last word.**
+
+**Nothing in §8 changed, and a green Preview does not change it.** Preview passing means the 41
+files build a correct schema *from empty*. Production is not empty and its ledger does not agree
+with the files:
+
+> **The production migration ledger is still 22 rows for 41 files.** Thirteen rows match a file,
+> nine carry MCP-assigned versions, and nineteen files are unlisted although their objects already
+> exist. **Do NOT run `supabase db push` against production. Do NOT run `supabase migration
+> repair` against production yet.** A push today would re-run nineteen files, one of them
+> data-bearing (`20260815001500_dedupe_registrations_and_guard.sql`). §8 has the exact repair
+> commands and the order they must be run in, from a trusted machine, deliberately — not as a
+> side effect of merging this branch. §11's hazard about the GitHub integration writing to
+> production on merge still stands.
+
+### 12.7 Every call made during Stage 1.6.1
+
+Same standard as §10. **Production (`jqkiswwunrnyqjgroqtn`) was not touched at all** — not read,
+not written; the only production-scoped call was `list_branches`, which reads branch metadata.
+
+| Call | Target | Effect |
+|---|---|---|
+| `list_branches` ×3 | production project (metadata) | none (read) |
+| `execute_sql` ×2 — `version()`, `shared_preload_libraries`, ledger and table counts, `to_regclass` | **preview branch** `ddjfsqqaywmmtvaqnfqn` | none (`SELECT` only) |
+| `execute_sql` ×2 — `drop trigger/policy if exists … on public.hps_probe_relation_does_not_exist` | **preview branch** `ddjfsqqaywmmtvaqnfqn` | none — a provably absent relation; both raised `42P01` and changed nothing. This is the measurement §12.2 rests on |
+| GitHub: read PR #9, its status checks and its comments | — | none (read) |
+
+Not called against anything: `apply_migration`, `merge_branch`, `rebase_branch`, `reset_branch`,
+`delete_branch`, `create_branch`, `create_project`, `supabase db push`, `supabase migration
+repair`. No pull request was created or merged; the fix was pushed to the existing branch.
+Local PostgreSQL 16.13 databases on `127.0.0.1` did all the rest.
