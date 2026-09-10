@@ -123,7 +123,7 @@ async function seed(db: PgDb) {
   await db.exec(`
     truncate table public.payments, public.drop_ins, public.registrations,
                   public.teams, public.contacts, public.tournaments,
-                  public.stripe_webhook_events,
+                  public.stripe_webhook_events, public.stripe_checkout_attempts,
                   public.registration_sessions, public.registration_access_tokens,
                   public.resume_link_requests
       restart identity cascade;
@@ -302,30 +302,147 @@ async function main() {
   }
 
   /* ---------------------------------------------------------------- */
-  /* 5b. The pricing trap: billed by Stripe Price, validated by column  */
+  /* 5b. A fee edited while a session is open (Stage 1.4.1)             */
   /* ---------------------------------------------------------------- */
-  // Community Cup has a `stripe_price_id` in production, so checkout bills
-  // through the Stripe Price object (src/lib/stripe-checkout.ts `line_items`)
-  // while settlement re-derives the expected amount from
-  // `tournaments.entry_fee_cents`. Nothing keeps the two in step. Edit the fee
-  // in the admin without regenerating the Price — or the reverse — and every
-  // card payment for that event is charged, recorded, and then NOT confirmed.
-  // `scripts/reconcile-payments.ts` prints a pricing check for exactly this.
+  // The owner can edit an event's fee at any time, including while somebody has
+  // a Checkout Session open. Two cases, and they must end differently.
+  //
+  // (a) LEGACY session — created before stripe_checkout_attempts existed, so
+  //     there is no record of what was authorised. Settlement can only re-derive
+  //     from the event, sees the new price, and refuses to confirm. This is the
+  //     old behaviour, kept deliberately: with nothing recorded there is no
+  //     honest way to know what the customer was quoted.
   {
     await seed(db);
     const store = new PgFinalizeStore(db);
-    await db.exec(
-      `update public.tournaments
-          set entry_fee_cents = 9000, entry_fee = 90, stripe_price_id = 'price_stale_8000'
-        where id = ${lit(EVENT_ID)}`
-    );
-    // The player is charged what the Stripe Price says: the old 8000.
-    const payload = eventEnvelope("checkout.session.completed", "evt_price_drift", sessionFixture({ id: "cs_price_drift" }));
+    await db.exec(`update public.tournaments set entry_fee_cents = 9000, entry_fee = 90 where id = ${lit(EVENT_ID)}`);
+
+    const payload = eventEnvelope("checkout.session.completed", "evt_legacy_drift", sessionFixture({ id: "cs_legacy_drift" }));
     const res = await handleStripeWebhook(payload, sign(payload), deps(store));
-    t.eq("a fee edited without regenerating the Stripe Price → needs_review", (await res.json()).outcome, "needs_review");
+    t.eq("a legacy session paid at the old price → needs_review", (await res.json()).outcome, "needs_review");
     t.eq("the player paid but is not confirmed", (await reg(db))!.payment_status, "pending");
-    t.check("the owner is told the amounts disagree", ((await reg(db))!.notes ?? "").includes("amount_mismatch: got 8000, expected 9000"));
+    t.check(
+      "the owner is told the amounts disagree",
+      ((await reg(db))!.notes ?? "").includes("amount_mismatch: got 8000, expected 9000")
+    );
     t.eq("the money is recorded either way", await count(db, "payments"), 1);
+  }
+
+  // (b) A session created NOW records what it authorised, so the same edit no
+  //     longer punishes the customer: they paid exactly what we quoted them.
+  {
+    await seed(db);
+    const store = new PgFinalizeStore(db);
+    await db.exec(`
+      insert into public.stripe_checkout_attempts
+        (stripe_session_id, amount_cents, currency, registration_id, tournament_id, pay_kind)
+      values ('cs_authorized_80', 8000, 'usd', ${lit(REG_ID)}, ${lit(EVENT_ID)}, 'entry');
+    `);
+    // ...and only afterwards does the owner put the price up.
+    await db.exec(`update public.tournaments set entry_fee_cents = 9000, entry_fee = 90 where id = ${lit(EVENT_ID)}`);
+
+    const payload = eventEnvelope("checkout.session.completed", "evt_authorized", sessionFixture({ id: "cs_authorized_80" }));
+    const res = await handleStripeWebhook(payload, sign(payload), deps(store));
+    t.eq("the session settles at the price it was authorised for", (await res.json()).outcome, "finalized");
+    t.eq("the player is confirmed", (await reg(db))!.payment_status, "paid");
+    t.eq("and not flagged — nothing went wrong", (await reg(db))!.needs_admin_review, false);
+    t.check(
+      "the row explains the difference in plain language",
+      ((await reg(db))!.notes ?? "").includes("Paid $80.00") && ((await reg(db))!.notes ?? "").includes("now charges $90.00"),
+      `notes: ${(await reg(db))!.notes}`
+    );
+
+    // Convergence must not restate the note every time it runs.
+    const notesOnce = (await reg(db))!.notes;
+    await db.exec(`update public.registrations set payment_status = 'pending' where id = ${lit(REG_ID)}`);
+    const again = eventEnvelope("checkout.session.completed", "evt_authorized_2", sessionFixture({ id: "cs_authorized_80" }));
+    await handleStripeWebhook(again, sign(again), deps(store));
+    t.eq("re-settling does not repeat the note", (await reg(db))!.notes, notesOnce);
+  }
+
+  // (c) The authorisation is not a blank cheque: paying something OTHER than
+  //     the authorised amount is still refused.
+  {
+    await seed(db);
+    const store = new PgFinalizeStore(db);
+    await db.exec(`
+      insert into public.stripe_checkout_attempts
+        (stripe_session_id, amount_cents, currency, registration_id, tournament_id, pay_kind)
+      values ('cs_authorized_80b', 8000, 'usd', ${lit(REG_ID)}, ${lit(EVENT_ID)}, 'entry');
+    `);
+    const payload = eventEnvelope(
+      "checkout.session.completed",
+      "evt_underpaid",
+      sessionFixture({ id: "cs_authorized_80b", amount_total: 100 })
+    );
+    const res = await handleStripeWebhook(payload, sign(payload), deps(store));
+    t.eq("paying less than the authorised amount → needs_review", (await res.json()).outcome, "needs_review");
+    t.eq("not confirmed", (await reg(db))!.payment_status, "pending");
+    t.check(
+      "and the reason names the authorised figure",
+      ((await reg(db))!.notes ?? "").includes("authorised 8000"),
+      `notes: ${(await reg(db))!.notes}`
+    );
+  }
+
+  // (d) An authorisation belonging to a different registration cannot be
+  //     borrowed to confirm this one.
+  {
+    await seed(db);
+    const store = new PgFinalizeStore(db);
+    await db.exec(`
+      insert into public.stripe_checkout_attempts
+        (stripe_session_id, amount_cents, currency, registration_id, tournament_id, pay_kind)
+      values ('cs_wrong_owner', 8000, 'usd', ${lit(OTHER_REG_ID)}, ${lit(OTHER_EVENT_ID)}, 'entry');
+    `);
+    const payload = eventEnvelope("checkout.session.completed", "evt_wrong_owner", sessionFixture({ id: "cs_wrong_owner" }));
+    const res = await handleStripeWebhook(payload, sign(payload), deps(store));
+    t.eq("an authorisation for another registration → needs_review", (await res.json()).outcome, "needs_review");
+    t.check(
+      "and says so",
+      ((await reg(db))!.notes ?? "").includes("authorization_mismatch"),
+      `notes: ${(await reg(db))!.notes}`
+    );
+  }
+
+  // (e) The same protection for a drop-in whose fee an admin edits after
+  //     texting the pay link.
+  {
+    await seed(db);
+    const store = new PgFinalizeStore(db);
+    await db.exec(`
+      insert into public.stripe_checkout_attempts
+        (stripe_session_id, amount_cents, currency, drop_in_id, tournament_id, pay_kind)
+      values ('cs_dropin_authorized', 1500, 'usd', ${lit(DROP_IN_ID)}, ${lit(OTHER_EVENT_ID)}, 'drop_in');
+      update public.drop_ins set amount_cents = 2000 where id = ${lit(DROP_IN_ID)};
+    `);
+    const dropIn = sessionFixture({
+      id: "cs_dropin_authorized",
+      amount_total: 1500,
+      amount_subtotal: 1500,
+      client_reference_id: null,
+      customer_email: "guest@example.com",
+      customer_details: { email: "guest@example.com", name: "Guest Player" },
+      metadata: {
+        email: "guest@example.com",
+        tournament_id: OTHER_EVENT_ID,
+        tournament_name: "Friday Open Play",
+        registration_id: "",
+        drop_in_id: DROP_IN_ID,
+        contact_id: GUEST_CONTACT_ID,
+        pay_kind: "drop_in",
+        team_name: "",
+        roster_size: "",
+      },
+    });
+    const payload = eventEnvelope("checkout.session.completed", "evt_dropin_authorized", dropIn);
+    const res = await handleStripeWebhook(payload, sign(payload), deps(store));
+    t.eq("a drop-in settles at the amount its link was created for", (await res.json()).outcome, "finalized");
+    t.eq(
+      "the guest is marked paid",
+      await db.scalar(`select payment_status from public.drop_ins where id = ${lit(DROP_IN_ID)}`),
+      "paid"
+    );
   }
 
   /* ---------------------------------------------------------------- */

@@ -10,7 +10,38 @@
  *
  * `priceTournamentCheckout` is pure (no I/O) and is the function both the
  * route and the webhook validation call, so the two can never drift.
+ *
+ * ## Supabase is the price (Stage 1.4.1)
+ *
+ * Until 2026-09-10 this file did something that quietly broke rule 2: when an
+ * event carried a `stripe_price_id`, the Checkout Session was created with
+ * `line_items: [{ price: <that id> }]`, so **Stripe's Price object decided what
+ * the customer was charged** while validation kept using `entry_fee_cents`.
+ * Nothing kept the two in step, and Community Cup had exactly that shape in
+ * production. Edit the fee in the admin without regenerating the Price — or the
+ * reverse — and every card payment for the event is charged, recorded, and then
+ * refused confirmation.
+ *
+ * The operator's decision, 2026-09-10: **`tournaments.entry_fee_cents` (and
+ * `drop_ins.amount_cents`) are authoritative.** Stripe Price objects do not
+ * define HPS pricing. Every session is now created with `price_data` and a
+ * server-computed `unit_amount`, so the amount charged is by construction the
+ * amount `priceTournamentCheckout` decided — the same function settlement calls.
+ *
+ * `tournaments.stripe_price_id` and `stripe_product_id` are still written by
+ * `syncTournamentStripePricing` for the Stripe dashboard's benefit, but nothing
+ * reads them to price anything. They are obsolete for pricing and are listed for
+ * schema cleanup in docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md §17.
+ *
+ * ## What the customer was quoted is remembered
+ *
+ * Deciding the price correctly is not enough on its own: the owner can edit the
+ * fee between the moment a session is created and the moment it is paid.
+ * `createStripeCheckoutSession` therefore records the authorised amount in
+ * `stripe_checkout_attempts`, and settlement validates against that row when it
+ * exists. See supabase/migrations/20260910130000_stripe_checkout_attempts.sql.
  */
+import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { acceptsPayments } from "@/lib/tournament-state";
@@ -24,11 +55,16 @@ import {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * The outcome of pricing. There is deliberately no Stripe Price id here: a
+ * resolved checkout carries an amount this server computed and nothing that
+ * could stand in for it. Removing that field is what makes "one price source"
+ * structural rather than a convention someone has to remember.
+ */
 export type ResolvedCheckout = {
   amountCents: number;
   productName: string;
   productDescription: string;
-  stripePriceId: string | null;
   tournamentId: string | null;
   tournamentName: string | null;
   dropInId: string | null;
@@ -39,18 +75,21 @@ export type ResolvedCheckout = {
 
 export type CheckoutError = { error: string; status: number };
 
-/** The tournament columns pricing needs. Everything else is irrelevant here. */
+/**
+ * The tournament columns pricing needs. Everything else is irrelevant here —
+ * `stripe_price_id` most of all: it used to be on this type, and its presence
+ * is what made it possible to price from Stripe instead of from Supabase.
+ */
 export type PricedTournament = {
   id: string;
   title: string;
   slug: string;
   entry_fee_cents: number | null;
   drop_in_fee_cents: number | null;
-  stripe_price_id: string | null;
 };
 
 const TOURNAMENT_CHECKOUT_SELECT =
-  "id, title, slug, entry_fee_cents, drop_in_fee_cents, stripe_price_id, payments_open, registration_open, is_draft, status, start_date, end_date";
+  "id, title, slug, entry_fee_cents, drop_in_fee_cents, payments_open, registration_open, is_draft, status, start_date, end_date";
 
 export function mergeNotes(existing: string | null, line: string): string {
   if (!existing?.trim()) return line;
@@ -103,7 +142,6 @@ export function priceTournamentCheckout(
         amountCents: WORLD_CUP_TEAM_FEE_CENTS,
         productName: `${t.title} — Full team`,
         productDescription: "Houston Premier Soccer — World Cup 7v7 full team fee ($960)",
-        stripePriceId: null,
         tournamentId: t.id,
         tournamentName: t.title,
         dropInId: null,
@@ -127,7 +165,6 @@ export function priceTournamentCheckout(
       amountCents: shareCents,
       productName: `${t.title} — Team share (${rosterSize} players)`,
       productDescription: `Houston Premier Soccer — World Cup 7v7 share ($960 ÷ ${rosterSize})`,
-      stripePriceId: null,
       tournamentId: t.id,
       tournamentName: t.title,
       dropInId: null,
@@ -171,7 +208,6 @@ export function priceTournamentCheckout(
       kind === "drop_in"
         ? "Houston Premier Soccer — Single-night drop-in"
         : "Houston Premier Soccer — Tournament Entry Fee",
-    stripePriceId: kind === "entry" ? (t.stripe_price_id ?? null) : null,
     tournamentId: t.id,
     tournamentName: t.title,
     dropInId: null,
@@ -247,7 +283,6 @@ export async function resolveDropInCheckout(
     amountCents: data.amount_cents,
     productName: tour?.title ? `${tour.title} — Drop-in` : "Drop-in",
     productDescription: "Houston Premier Soccer — Single-night drop-in",
-    stripePriceId: null,
     tournamentId: data.tournament_id ?? null,
     tournamentName: tour?.title ?? null,
     dropInId: data.id,
@@ -308,15 +343,90 @@ export type CreateCheckoutSessionInput = {
 };
 
 /**
- * Create the Stripe Checkout Session. Metadata is written server-side and is
- * the only thing the webhook later trusts to IDENTIFY the local records; the
- * amount is re-derived from the database at finalisation, never from here.
+ * Seams for tests only. Production passes nothing and gets the real Stripe
+ * client and the real attempt recorder. They exist so the invariant that
+ * matters most here — the charged amount is the one this server computed — can
+ * be asserted against the exact parameters Stripe receives, rather than assumed.
+ */
+export type CreateCheckoutSessionDeps = {
+  createSession?: (
+    params: Stripe.Checkout.SessionCreateParams
+  ) => Promise<{ id: string; url: string | null }>;
+  recordAttempt?: typeof recordCheckoutAttempt;
+};
+
+/**
+ * Record what this server authorised for a Checkout Session, so settlement can
+ * honour the price the customer was actually quoted rather than the price the
+ * event happens to carry when the webhook lands.
+ *
+ * Best effort on purpose. If this write fails the player must still be able to
+ * pay: settlement falls back to re-deriving the amount from the event rows,
+ * which is exactly what it did before this table existed. A failure is logged,
+ * never raised.
+ */
+export async function recordCheckoutAttempt(input: {
+  sessionId: string;
+  amountCents: number;
+  currency?: string;
+  registrationId?: string | null;
+  dropInId?: string | null;
+  tournamentId?: string | null;
+  payKind?: string | null;
+  rosterSize?: number | null;
+}): Promise<void> {
+  try {
+    const { error } = await supabaseAdmin.from("stripe_checkout_attempts").upsert(
+      {
+        stripe_session_id: input.sessionId,
+        amount_cents: input.amountCents,
+        currency: (input.currency ?? "usd").toLowerCase(),
+        registration_id: input.registrationId ?? null,
+        drop_in_id: input.dropInId ?? null,
+        tournament_id: input.tournamentId ?? null,
+        pay_kind: input.payKind ?? null,
+        roster_size: input.rosterSize ?? null,
+      },
+      { onConflict: "stripe_session_id" }
+    );
+    if (error) throw new Error(error.message);
+  } catch (err) {
+    console.error(
+      "[checkout] could not record the authorised amount for",
+      input.sessionId,
+      "-",
+      err instanceof Error ? err.message : err,
+      "- settlement will fall back to re-deriving it from the event."
+    );
+  }
+}
+
+/**
+ * Create the Stripe Checkout Session.
+ *
+ * The amount is ALWAYS `price_data` with a server-computed `unit_amount`. There
+ * is no branch that hands Stripe a Price id, because that is what let a Stripe
+ * Price object decide the charge while validation used `entry_fee_cents`
+ * (Stage 1.4.1). Nothing the browser sends reaches this number: callers pass a
+ * `ResolvedCheckout` produced by `priceTournamentCheckout` /
+ * `resolveDropInCheckout`, both of which read the amount from Supabase.
+ *
+ * Metadata is written server-side and is the only thing the webhook later
+ * trusts to IDENTIFY the local records — never to price them.
  */
 export async function createStripeCheckoutSession(
-  input: CreateCheckoutSessionInput
+  input: CreateCheckoutSessionInput,
+  deps: CreateCheckoutSessionDeps = {}
 ): Promise<{ url: string | null; sessionId: string }> {
   const { resolved } = input;
   const origin = input.baseUrl.replace(/\/$/, "");
+  const createSession =
+    deps.createSession ??
+    (async (params: Stripe.Checkout.SessionCreateParams) => {
+      const created = await getStripe().checkout.sessions.create(params);
+      return { id: created.id, url: created.url };
+    });
+  const recordAttempt = deps.recordAttempt ?? recordCheckoutAttempt;
 
   const metadata: Record<string, string> = {
     email: input.email,
@@ -330,30 +440,39 @@ export async function createStripeCheckoutSession(
     roster_size: resolved.rosterSize ? String(resolved.rosterSize) : "",
   };
 
-  const session = await getStripe().checkout.sessions.create({
+  const session = await createSession({
     mode: "payment",
     customer_email: input.email,
     // Ties the session to the registration on Stripe's side too, so the
     // Stripe dashboard and the reconciler can find it without metadata.
     client_reference_id: input.registrationId ?? undefined,
-    line_items: resolved.stripePriceId
-      ? [{ quantity: 1, price: resolved.stripePriceId }]
-      : [
-          {
-            quantity: 1,
-            price_data: {
-              currency: "usd",
-              unit_amount: resolved.amountCents,
-              product_data: {
-                name: resolved.productName,
-                description: resolved.productDescription,
-              },
-            },
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: resolved.amountCents,
+          product_data: {
+            name: resolved.productName,
+            description: resolved.productDescription,
           },
-        ],
+        },
+      },
+    ],
     metadata,
     success_url: `${origin}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: input.cancelUrl,
+  });
+
+  await recordAttempt({
+    sessionId: session.id,
+    amountCents: resolved.amountCents,
+    currency: "usd",
+    registrationId: input.registrationId,
+    dropInId: resolved.dropInId,
+    tournamentId: resolved.tournamentId,
+    payKind: resolved.payKind,
+    rosterSize: resolved.rosterSize,
   });
 
   return { url: session.url, sessionId: session.id };

@@ -187,16 +187,20 @@ async function main() {
   };
 
   /**
-   * The trap this check exists for: checkout BILLS through the Stripe Price
-   * object when the event has a `stripe_price_id`
-   * (src/lib/stripe-checkout.ts `line_items`), but settlement VALIDATES the
-   * amount against `tournaments.entry_fee_cents`
-   * (src/lib/payment-finalize.ts → `priceTournamentCheckout`). While the two
-   * agree, nothing is wrong. The moment they diverge — a fee edited in the
-   * admin without the Stripe Price being regenerated, or the other way round —
-   * every card payment for that event charges one amount and then fails
-   * validation, landing in `needs_review` with the registration NOT confirmed.
-   * Nothing in the app compares them, so this is the only place it is checked.
+   * Stale Stripe Price objects, reported as housekeeping rather than as a
+   * hazard.
+   *
+   * Until Stage 1.4.1 this was a live danger: checkout BILLED through the Price
+   * object when an event had a `stripe_price_id` while settlement VALIDATED
+   * against `entry_fee_cents`, so a drifted Price meant a customer was charged
+   * and then refused confirmation. Checkout now always bills the amount this
+   * server computes from Supabase, so a stale Price can no longer charge
+   * anybody anything.
+   *
+   * The check is kept because the rows are still written by
+   * `syncTournamentStripePricing` and still visible in the Stripe dashboard, and
+   * a Price that says $90 next to an event that charges $80 will confuse
+   * whoever looks there. It is a cleanup list, not an alarm.
    */
   async function reportPriceDrift() {
     const { data, error } = await supabase
@@ -210,22 +214,24 @@ async function main() {
     const rows = (data ?? []) as { id: string; title: string; slug: string; entry_fee_cents: number | null; stripe_price_id: string }[];
     if (rows.length === 0) return;
 
-    console.log("\nPricing check — Stripe Price vs entry_fee_cents:");
+    const stale: string[] = [];
+    console.log("\nStripe Price objects (informational — HPS prices from entry_fee_cents):");
     for (const row of rows) {
       try {
         const price = await stripe.prices.retrieve(row.stripe_price_id);
         const agrees = price.unit_amount === row.entry_fee_cents && price.currency === "usd" && price.active;
         console.log(
-          `  ${agrees ? "ok  " : "DRIFT"} ${row.slug.padEnd(28)} stripe=${price.unit_amount ?? "?"}${price.active ? "" : " (inactive)"} ${price.currency}  db=${row.entry_fee_cents ?? "null"}`
+          `  ${agrees ? "ok   " : "stale"} ${row.slug.padEnd(28)} stripe=${price.unit_amount ?? "?"}${price.active ? "" : " (inactive)"} ${price.currency}  db=${row.entry_fee_cents ?? "null"}`
         );
-        if (!agrees) {
-          console.log(
-            `        Card payments for this event will be charged the Stripe amount and then fail validation → needs_review.`
-          );
-        }
+        if (!agrees) stale.push(row.slug);
       } catch (err) {
         console.log(`  ERROR ${row.slug.padEnd(28)} could not read ${row.stripe_price_id}: ${err instanceof Error ? err.message : err}`);
       }
+    }
+    if (stale.length > 0) {
+      console.log(
+        `        ${stale.length} Price object(s) disagree with the event fee. Nothing is charged from them — this only\n        makes the Stripe dashboard misleading. Safe to archive in Stripe when convenient.`
+      );
     }
   }
 

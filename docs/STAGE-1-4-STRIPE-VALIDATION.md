@@ -4,6 +4,12 @@
 **Read after** `remediation_stage_1_2_report.md` and
 [`SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`](SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md).
 
+> **Partly superseded 2026-09-10 by
+> [`STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md).**
+> The pricing trap this document opens in §5 and leaves open in §7 is closed there: checkout
+> no longer bills through a Stripe Price object, and the amount each session was authorised
+> for is now recorded so a later fee edit cannot invalidate it. Everything else here stands.
+
 Stage 1.2 shipped F-02: one settlement path, one transaction, `finalize_checkout_payment`.
 Its own report ends with an asterisk (§8): *"the two SQL functions were reviewed by hand and
 mirrored in `scripts/_test-fakes.ts`, but **not executed**"*, and §17 lists six assumptions

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { getStripe } from "@/lib/stripe";
+import { recordCheckoutAttempt } from "@/lib/stripe-checkout";
 import { acceptsPayments, type StatefulTournament } from "@/lib/tournament-state";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -107,6 +108,20 @@ export async function POST(req: NextRequest, { params }: Ctx) {
       },
       success_url: `${baseUrl}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/pay?cancelled=true`,
+    });
+
+    // This route creates its own session rather than going through
+    // `createStripeCheckoutSession`, so it has to record the authorised amount
+    // itself — otherwise an admin who edits the drop-in fee after texting the
+    // link would leave settlement validating against the new amount. The
+    // `unit_amount` above and this row read the same `data.amount_cents`.
+    await recordCheckoutAttempt({
+      sessionId: session.id,
+      amountCents: data.amount_cents,
+      currency: "usd",
+      dropInId: data.id,
+      tournamentId: data.tournament_id ?? null,
+      payKind: "drop_in",
     });
 
     return NextResponse.json({ url: session.url });

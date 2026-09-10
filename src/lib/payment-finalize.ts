@@ -112,6 +112,21 @@ export type FinalizeDropInRow = {
   payment_status: string;
 };
 
+/**
+ * What this server authorised when it created the Checkout Session
+ * (`stripe_checkout_attempts`, Stage 1.4.1). Present for every session created
+ * after that migration; null for older ones, which fall back to re-deriving the
+ * amount from the event rows.
+ */
+export type CheckoutAttemptRow = {
+  stripe_session_id: string;
+  amount_cents: number;
+  currency: string;
+  registration_id: string | null;
+  drop_in_id: string | null;
+  tournament_id: string | null;
+};
+
 export type FinalizeArgs = {
   event_id: string | null;
   event_type: string;
@@ -147,6 +162,11 @@ export interface FinalizeStore {
   findRegistrationByEmail(email: string, tournamentId: string): Promise<FinalizeRegistrationRow | null>;
   loadTournament(id: string): Promise<PricedTournament | null>;
   loadDropIn(id: string): Promise<FinalizeDropInRow | null>;
+  /**
+   * The amount this server authorised for this Checkout Session, if it was
+   * recorded. Null means an older session: fall back to re-deriving.
+   */
+  loadCheckoutAttempt(sessionId: string): Promise<CheckoutAttemptRow | null>;
   /** Enrichment only; a failure must not block settlement. */
   ensureContactByEmail(email: string): Promise<string | null>;
   /** MUST be one database transaction. Throws on infrastructure failure. */
@@ -192,19 +212,48 @@ function readMetaUuid(meta: Record<string, string>, key: string): string | null 
   return UUID_RE.test(raw) ? raw.toLowerCase() : null;
 }
 
-type Validation = { confirm: true } | { confirm: false; reason: string };
+type Validation =
+  | {
+      confirm: true;
+      /** Where the expected amount came from. */
+      source: "authorized" | "derived";
+      expectedCents: number;
+      /** What the event would charge for this today; null when it cannot be priced. */
+      currentDerivedCents: number | null;
+    }
+  | { confirm: false; reason: string };
 
 /**
- * Compare Stripe's verified amount/currency with what the server-side rows say
- * this payment should have cost. Pure.
+ * Compare Stripe's verified amount and currency with what this payment should
+ * have cost. Pure.
+ *
+ * ## Which "should have cost" (Stage 1.4.1)
+ *
+ * Two answers exist and they are not always the same:
+ *
+ *   the amount we AUTHORISED    what the customer was quoted when the Checkout
+ *                               Session was created (`stripe_checkout_attempts`)
+ *   the amount we would DERIVE  what the event's fee says today
+ *
+ * They diverge whenever the owner edits an event fee while a session is open.
+ * The authorised amount wins: the customer paid exactly what we asked them for,
+ * and refusing to confirm that is not financial correctness, it is a bug. The
+ * derived amount is still computed, so the caller can note the difference on the
+ * registration.
+ *
+ * Sessions created before that table existed have no authorisation row, and fall
+ * back to deriving — which is the behaviour every payment in production today
+ * was settled under, the known $80 record included.
  */
 export function validateBusinessFacts(input: {
   facts: CheckoutSessionFacts;
   registration: FinalizeRegistrationRow | null;
   tournament: PricedTournament | null;
   dropIn: FinalizeDropInRow | null;
+  attempt?: CheckoutAttemptRow | null;
 }): Validation {
   const { facts, registration, tournament, dropIn } = input;
+  const attempt = input.attempt ?? null;
   const metaTournamentId = readMetaUuid(facts.metadata, "tournament_id");
 
   if ((facts.currency ?? "").toLowerCase() !== EXPECTED_CURRENCY) {
@@ -214,45 +263,126 @@ export function validateBusinessFacts(input: {
     return { confirm: false, reason: "amount_missing" };
   }
 
-  let expectedCents: number | null = null;
+  // What the event would charge for this today. Computed either way: on the
+  // authorised path it is only used to describe the difference.
+  let derivedCents: number | null = null;
+  let deriveFailure: string | null = null;
 
   if (dropIn) {
     if (metaTournamentId && dropIn.tournament_id && metaTournamentId !== dropIn.tournament_id) {
       return { confirm: false, reason: "event_mismatch: drop-in belongs to a different event" };
     }
-    expectedCents = dropIn.amount_cents;
+    derivedCents = dropIn.amount_cents;
   } else if (registration) {
     if (!registration.tournament_id) {
-      return { confirm: false, reason: "registration_has_no_event: cannot price" };
-    }
-    if (metaTournamentId && metaTournamentId !== registration.tournament_id) {
+      deriveFailure = "registration_has_no_event: cannot price";
+    } else if (metaTournamentId && metaTournamentId !== registration.tournament_id) {
       return { confirm: false, reason: "event_mismatch: registration is on a different event" };
+    } else if (!tournament || tournament.id !== registration.tournament_id) {
+      deriveFailure = "event_not_found: cannot price";
+    } else {
+      const priced = priceTournamentCheckout(
+        tournament,
+        parseCheckoutPayKind(facts.metadata.pay_kind),
+        parseWorldCupRosterSize(facts.metadata.roster_size),
+        facts.metadata.team_name || undefined
+      );
+      if ("error" in priced) {
+        deriveFailure = `pricing_failed: ${priced.error}`;
+      } else {
+        derivedCents = priced.amountCents;
+      }
     }
-    if (!tournament || tournament.id !== registration.tournament_id) {
-      return { confirm: false, reason: "event_not_found: cannot price" };
-    }
-    const priced = priceTournamentCheckout(
-      tournament,
-      parseCheckoutPayKind(facts.metadata.pay_kind),
-      parseWorldCupRosterSize(facts.metadata.roster_size),
-      facts.metadata.team_name || undefined
-    );
-    if ("error" in priced) {
-      return { confirm: false, reason: `pricing_failed: ${priced.error}` };
-    }
-    expectedCents = priced.amountCents;
   } else {
-    return { confirm: false, reason: "no_local_record: payment recorded unlinked" };
+    deriveFailure = "no_local_record: payment recorded unlinked";
   }
 
-  if (facts.amountTotal !== expectedCents) {
+  if (attempt) {
+    // The authorisation must be for the thing we identified, or it is not this
+    // payment's authorisation.
+    if (registration && attempt.registration_id && attempt.registration_id !== registration.id) {
+      return { confirm: false, reason: "authorization_mismatch: session was authorised for a different registration" };
+    }
+    if (dropIn && attempt.drop_in_id && attempt.drop_in_id !== dropIn.id) {
+      return { confirm: false, reason: "authorization_mismatch: session was authorised for a different drop-in" };
+    }
+    if (
+      registration?.tournament_id &&
+      attempt.tournament_id &&
+      attempt.tournament_id !== registration.tournament_id
+    ) {
+      return { confirm: false, reason: "authorization_mismatch: session was authorised for a different event" };
+    }
+    if ((attempt.currency ?? EXPECTED_CURRENCY).toLowerCase() !== (facts.currency ?? "").toLowerCase()) {
+      return {
+        confirm: false,
+        reason: `currency_mismatch: got ${facts.currency ?? "none"}, authorised ${attempt.currency}`,
+      };
+    }
+    if (facts.amountTotal !== attempt.amount_cents) {
+      return {
+        confirm: false,
+        reason: `amount_mismatch: got ${facts.amountTotal}, authorised ${attempt.amount_cents}`,
+      };
+    }
+    // Money that matches its authorisation but has nothing local to confirm is
+    // still recorded, not confirmed — the same rule as the derived path.
+    if (!registration && !dropIn) {
+      return { confirm: false, reason: "no_local_record: payment recorded unlinked" };
+    }
     return {
-      confirm: false,
-      reason: `amount_mismatch: got ${facts.amountTotal}, expected ${expectedCents}`,
+      confirm: true,
+      source: "authorized",
+      expectedCents: attempt.amount_cents,
+      currentDerivedCents: derivedCents,
     };
   }
 
-  return { confirm: true };
+  if (deriveFailure) return { confirm: false, reason: deriveFailure };
+  if (derivedCents == null) return { confirm: false, reason: "no_local_record: payment recorded unlinked" };
+
+  if (facts.amountTotal !== derivedCents) {
+    return {
+      confirm: false,
+      reason: `amount_mismatch: got ${facts.amountTotal}, expected ${derivedCents}`,
+    };
+  }
+
+  return { confirm: true, source: "derived", expectedCents: derivedCents, currentDerivedCents: derivedCents };
+}
+
+/** Money as the owner reads it. */
+function usd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+/**
+ * The line to append to a registration's notes when it settles. Combines the
+ * World Cup share note with a plain-language explanation when the customer paid
+ * a price the event no longer charges — so a roster reading "$80 paid" on a $90
+ * event is explained on the row rather than looking like an error.
+ */
+export function settlementNotesLine(
+  facts: CheckoutSessionFacts,
+  validation: Extract<Validation, { confirm: true }>
+): string | null {
+  const lines: string[] = [];
+
+  if (facts.metadata.pay_kind === "team_share" && facts.metadata.roster_size) {
+    lines.push(`World Cup: paid roster share (${facts.metadata.roster_size} players).`);
+  }
+
+  if (
+    validation.source === "authorized" &&
+    validation.currentDerivedCents !== null &&
+    validation.currentDerivedCents !== validation.expectedCents
+  ) {
+    lines.push(
+      `Paid ${usd(validation.expectedCents)} — the price quoted when checkout started. This event now charges ${usd(validation.currentDerivedCents)}.`
+    );
+  }
+
+  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 /**
@@ -338,8 +468,10 @@ export async function finalizeCheckoutSession(
       }
     }
 
-    // 4. Validate the money against the rows.
-    const validation = validateBusinessFacts({ facts, registration, tournament, dropIn });
+    // 4. Validate the money against the rows — preferring the amount this
+    //    server authorised for this session over the event's price today.
+    const attempt = await store.loadCheckoutAttempt(facts.sessionId);
+    const validation = validateBusinessFacts({ facts, registration, tournament, dropIn, attempt });
 
     // Enrichment, outside the transaction and never blocking it.
     let contactId: string | null = metaContactId ?? registration?.contact_id ?? dropIn?.contact_id ?? null;
@@ -367,10 +499,7 @@ export async function finalizeCheckoutSession(
       confirm: validation.confirm,
       review_note: validation.confirm ? null : `Stripe session ${facts.sessionId}: ${validation.reason}`,
       team_name: validation.confirm ? facts.metadata.team_name?.trim() || null : null,
-      notes_line:
-        validation.confirm && facts.metadata.pay_kind === "team_share" && facts.metadata.roster_size
-          ? `World Cup: paid roster share (${facts.metadata.roster_size} players).`
-          : null,
+      notes_line: validation.confirm ? settlementNotesLine(facts, validation) : null,
     };
 
     // 5. One transaction.

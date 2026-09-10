@@ -66,7 +66,7 @@ async function seed(db: PgDb) {
   await db.exec(`
     truncate table public.payments, public.drop_ins, public.registrations,
                   public.teams, public.contacts, public.tournaments,
-                  public.stripe_webhook_events,
+                  public.stripe_webhook_events, public.stripe_checkout_attempts,
                   public.registration_sessions, public.registration_access_tokens,
                   public.resume_link_requests
       restart identity cascade;

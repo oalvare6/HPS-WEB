@@ -44,7 +44,7 @@ function sign(payload: string, secret = SECRET) {
 
 function store() {
   const s = new InMemoryFinalizeStore();
-  s.tournaments.set(EVENT_ID, { id: EVENT_ID, title: "Community Cup", slug: "community-cup-fall-2026", entry_fee_cents: 8000, drop_in_fee_cents: 0, stripe_price_id: null });
+  s.tournaments.set(EVENT_ID, { id: EVENT_ID, title: "Community Cup", slug: "community-cup-fall-2026", entry_fee_cents: 8000, drop_in_fee_cents: 0 });
   s.registrations.set(REG_ID, { id: REG_ID, email: "player@example.com", tournament_id: EVENT_ID, contact_id: null, payment_status: "pending", cancelled_at: null, needs_admin_review: false, notes: null, team_name: null });
   return s;
 }

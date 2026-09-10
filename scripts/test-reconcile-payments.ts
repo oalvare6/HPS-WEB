@@ -32,7 +32,7 @@ const SESSION_MISSING: CheckoutSessionFacts = { ...SESSION_ORPHAN, sessionId: "c
 
 function fixture() {
   const s = new InMemoryFinalizeStore();
-  s.tournaments.set(EVENT_ID, { id: EVENT_ID, title: "Community Cup", slug: "community-cup-fall-2026", entry_fee_cents: 8000, drop_in_fee_cents: 0, stripe_price_id: null });
+  s.tournaments.set(EVENT_ID, { id: EVENT_ID, title: "Community Cup", slug: "community-cup-fall-2026", entry_fee_cents: 8000, drop_in_fee_cents: 0 });
   s.registrations.set(REG_ID, { id: REG_ID, email: "player@example.com", tournament_id: EVENT_ID, contact_id: null, payment_status: "pending", cancelled_at: null, needs_admin_review: false, notes: null, team_name: null });
   s.registrations.set(REG_OK, { id: REG_OK, email: "ok@example.com", tournament_id: EVENT_ID, contact_id: null, payment_status: "paid", cancelled_at: null, needs_admin_review: false, notes: null, team_name: null });
   s.registrations.set(REG_MISSING, { id: REG_MISSING, email: "missing@example.com", tournament_id: EVENT_ID, contact_id: null, payment_status: "pending", cancelled_at: null, needs_admin_review: false, notes: null, team_name: null });
@@ -157,9 +157,32 @@ async function main() {
       const facts = sessions.find((x) => x.sessionId === sessionId)!;
       return finalizeCheckoutSession(facts, fresh, { eventId: null, eventType: "reconcile" });
     };
+    const paymentBefore = { ...fresh.payments.get("cs_live_orphan")! };
     await applyPlan(exact, scopedFinalize);
     t.eq("the known registration converged", fresh.registrations.get(REG_ID)!.payment_status, "paid");
     t.check("the out-of-scope session was not written", !fresh.payments.has("cs_live_missing"));
+
+    // The identity of the money must survive a repair untouched.
+    const paymentAfter = fresh.payments.get("cs_live_orphan")!;
+    t.eq("the payment row keeps its id", paymentAfter.id, paymentBefore.id);
+    t.eq("and its amount", paymentAfter.amount, paymentBefore.amount);
+    t.eq("and its Stripe identifiers", [paymentAfter.stripe_session_id, paymentAfter.stripe_payment_intent_id], [
+      paymentBefore.stripe_session_id,
+      paymentBefore.stripe_payment_intent_id,
+    ]);
+    t.eq("no second payment row appeared for this registration", fresh.payments.size, 2);
+
+    // Running the same scoped runbook command again must find nothing to do.
+    const afterScoped = fresh.snapshot();
+    const rerun = await analyzePayments(sourceFor(fresh, sessions));
+    const rerunPlan = planRepairs(rerun, {
+      scope: { registrationIds: [REG_ID] },
+      maxWrites: 1,
+      expectKinds: ["registration_pending_with_payment"],
+    });
+    t.eq("a second scoped dry run proposes nothing for that registration", rerunPlan.writes.length, 0);
+    await applyPlan(rerunPlan, scopedFinalize);
+    t.check("and applying it changes nothing", fresh.snapshot() === afterScoped);
   }
 
   t.done();

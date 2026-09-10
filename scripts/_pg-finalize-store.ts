@@ -21,6 +21,7 @@
  *     failure must not be acknowledged" branch is reached for real.
  */
 import type {
+  CheckoutAttemptRow,
   FinalizeArgs,
   FinalizeDropInRow,
   FinalizeRegistrationRow,
@@ -62,8 +63,16 @@ export class PgFinalizeStore implements FinalizeStore {
   async loadTournament(id: string): Promise<PricedTournament | null> {
     this.calls.push(`loadTournament:${id}`);
     return this.db.row<PricedTournament>(
-      `select id, title, slug, entry_fee_cents, drop_in_fee_cents, stripe_price_id
+      `select id, title, slug, entry_fee_cents, drop_in_fee_cents
          from public.tournaments where id = ${lit(id)}`
+    );
+  }
+
+  async loadCheckoutAttempt(sessionId: string): Promise<CheckoutAttemptRow | null> {
+    this.calls.push(`loadCheckoutAttempt:${sessionId}`);
+    return this.db.row<CheckoutAttemptRow>(
+      `select stripe_session_id, amount_cents, currency, registration_id, drop_in_id, tournament_id
+         from public.stripe_checkout_attempts where stripe_session_id = ${lit(sessionId)}`
     );
   }
 

@@ -645,3 +645,40 @@ Full write-up in `docs/STAGE-1-4-STRIPE-VALIDATION.md`. Nothing was written to p
   key does it and refuses any non-test key.
 - **Corrected `docs/core_schema_snapshot.sql`:** three columns are `numeric(10,2)` in
   production, not bare `numeric`. A fixture copied from the old text rounded differently.
+
+## 2026-09-10 — Stage 1.4.1: Supabase is the price, and the quote is honoured
+
+Full write-up in `docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`. Nothing deployed, no
+production row changed, no production Stripe secret used.
+
+- **Closed the pricing drift Stage 1.4 found.** Checkout billed through
+  `tournaments.stripe_price_id` when an event had one (Community Cup did) while settlement
+  validated against `entry_fee_cents`. Every session is now created with `price_data` and a
+  server-computed `unit_amount`. `ResolvedCheckout` no longer has a price-id field and
+  `PricedTournament` no longer carries `stripe_price_id`, so there is nowhere for a second
+  price to come from. **Do not reintroduce `line_items: [{ price }]`.**
+- **New table `stripe_checkout_attempts`** (migration `20260910130000_…`, additive, NOT
+  applied). One row per Checkout Session recording the amount this server authorised.
+  Settlement prefers it over today's fee, so an owner editing an event price can no longer
+  invalidate a session a customer was already quoted. A session with no row — everything
+  created before the migration — falls back to deriving, exactly as before.
+- **A price edited mid-session now confirms with a note**, not a review flag: "Paid $80.00 —
+  the price quoted when checkout started. This event now charges $90.00." It goes through the
+  existing `notes_line`, so `append_note_line` dedupes it.
+- **The admin drop-in pay-link route records its own authorisation.** It creates its own
+  Stripe session rather than going through `createStripeCheckoutSession`; anything else that
+  ever does the same must call `recordCheckoutAttempt` too.
+- **The reconciler's pricing check is now housekeeping, not an alarm.** A stale Stripe Price
+  can no longer charge anyone; it only makes the Stripe dashboard misleading.
+- **The $80 row is unchanged and still takes the derived path** (no attempt row, entry fee
+  8000 = payment 8000), so it converges rather than landing in `needs_review`. Dry-run
+  behaviour re-proved against a real PostgreSQL; the exact scoped operator command is in the
+  Stage 1.4.1 doc §14. **Not executed.**
+- **Open: no real Stripe test-mode delivery has reached the deployed webhook.** No Stripe key
+  exists in the agent environment and the proxy blocks the production host, so the endpoint
+  could not be probed either. Procedure written out in §12; needs an operator with `sk_test_`.
+- **Open: `tournaments.stripe_price_id` / `stripe_product_id` are now written and never
+  read.** Dropping them means also removing `syncTournamentStripePricing` and its two admin
+  call sites. Deferred; it still creates a new Stripe Price on every fee change.
+- **Still deferred by instruction:** refunds/disputes, migration-ledger drift, event-state
+  work, admin UI.

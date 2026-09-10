@@ -80,6 +80,7 @@ const MIGRATIONS = [
   join(REPO_ROOT, "supabase", "migrations", "20260909120000_registration_resume_access.sql"),
   join(REPO_ROOT, "supabase", "migrations", "20260909120100_stripe_payment_finalization.sql"),
   join(REPO_ROOT, "supabase", "migrations", "20260910120000_finalize_link_tolerance_and_lock_order.sql"),
+  join(REPO_ROOT, "supabase", "migrations", "20260910130000_stripe_checkout_attempts.sql"),
 ];
 
 /* ------------------------------------------------------------------ */
