@@ -3,15 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import {
-  ExternalLink,
-  LayoutDashboard,
-  LogOut,
-  Settings,
-  Shield,
-  Trophy,
-  Users,
-} from "lucide-react";
+import { LayoutDashboard, Settings, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
 
 type NavItem = {
@@ -29,7 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/admin/contacts", label: "People", icon: Users },
   // No Drop-ins item: guests are rows on each event's Roster. The old page
   // fronted a table that has held zero rows ever (B3 deletes it).
-  { href: "/admin/site", label: "Site", icon: Settings },
+  { href: "/admin/site", label: "Settings", icon: Settings },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
@@ -55,56 +47,61 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <nav className="sticky top-0 z-40 border-b border-border-token bg-base/95 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto px-4 md:px-6 flex items-center gap-1 md:gap-2 h-14 overflow-x-auto">
+      <nav className="admin-nav" aria-label="Admin navigation">
+        <div className="admin-nav-inner">
           <Link
             href="/admin"
-            className="flex items-center gap-2 mr-2 md:mr-4 text-white font-semibold tracking-tight"
+            className="flex items-center gap-3 shrink-0"
+            aria-label="Houston Premier Soccer admin"
           >
-            <Shield size={16} className="text-brand" />
-            <span className="hidden sm:inline">HPS Admin</span>
-            <span className="sm:hidden">Admin</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/hps-badge.png"
+              alt=""
+              width="36"
+              height="36"
+              className="bg-white rounded-full"
+            />
+            <span className="text-sm font-semibold leading-tight">
+              HOUSTON PREMIER
+              <span className="block text-[10px] tracking-[.2em] text-zinc-400 mt-1">
+                SOCCER / OPERATIONS
+              </span>
+            </span>
           </Link>
-
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = item.exact
-              ? pathname === item.href
-              : pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-                  active
-                    ? "bg-surface-2 text-white"
-                    : "text-zinc-400 hover:text-white hover:bg-surface-2/60"
-                }`}
-              >
-                <Icon size={14} />
-                {item.label}
-              </Link>
-            );
-          })}
-
-          <div className="ml-auto flex items-center gap-1 md:gap-2">
+          <div className="admin-nav-links">
+            {NAV_ITEMS.map((item) => {
+              const active = item.exact
+                ? pathname === item.href
+                : pathname === item.href ||
+                  pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+          <div className="ml-auto flex items-center gap-4 text-xs text-zinc-400">
             <Link
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-zinc-400 hover:text-white hover:bg-surface-2/60 transition-colors whitespace-nowrap"
+              className="hidden sm:inline hover:text-white"
             >
-              <ExternalLink size={14} />
-              View site
+              Public site ↗
             </Link>
             <button
               type="button"
-              onClick={handleLogout}
               disabled={loggingOut}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-zinc-400 hover:text-white hover:bg-surface-2/60 transition-colors disabled:opacity-50 whitespace-nowrap"
+              onClick={handleLogout}
+              className="min-h-10 hover:text-white"
             >
-              <LogOut size={14} />
-              <span className="hidden sm:inline">{loggingOut ? "Logging out…" : "Log out"}</span>
+              {loggingOut ? "Signing out…" : "Sign out"}
             </button>
           </div>
         </div>

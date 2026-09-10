@@ -1,605 +1,446 @@
 "use client";
-
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { Section } from "@/components/shared/section";
-import { useScrollRestoration } from "@/lib/use-scroll-restoration";
+import { Suspense, useEffect, useState } from "react";
+import type { Tournament, TournamentMatch, TournamentRound } from "@/lib/types";
 import {
-  CheckCircle,
-  XCircle,
-  Download,
-  CreditCard,
-  Users,
-  DollarSign,
-  ClipboardList,
-  RefreshCw,
-  ArrowRight,
-} from "lucide-react";
-import { StatCardsSkeleton, TableSkeleton } from "@/components/shared/skeleton";
-import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
-import { EventStateBadge } from "@/components/admin/EventStateBadge";
-import { resolveEventState } from "@/lib/tournament-state";
+  rosterFullName,
+  type RosterPayload,
+  type RosterRow,
+} from "@/lib/admin-roster";
+import { resolveEventView, todayInHouston } from "@/lib/tournament-state";
 import { formatTournamentDateRange } from "@/lib/admin-tournaments";
-import type { Tournament } from "@/lib/types";
+import { useQueryParam } from "@/lib/admin-url-state";
+import {
+  playerLink,
+  playerMatches,
+  paymentLabel,
+  outstandingMatches,
+} from "@/components/admin/workspace";
+import { EventStateBadge } from "@/components/admin/EventStateBadge";
+import { MessagePreview } from "@/components/admin/MessagePreview";
 
-type LinkedContact = {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  tags: string[];
+type EventWork = {
+  event: Tournament;
+  roster: RosterPayload;
+  matches: TournamentMatch[];
+  rounds: TournamentRound[];
 };
-
-type LinkedTournament = {
-  id: string;
-  title: string;
-  slug: string;
-};
-
-type Payment = {
-  id: string;
-  created_at: string;
-  email: string;
-  amount: number;
-  currency: string;
-  tournament_id: string | null;
-  tournament_name: string | null;
-  contact_id: string | null;
-  drop_in_id: string | null;
-  stripe_session_id: string | null;
-  stripe_payment_intent_id: string | null;
-  status: string;
-  notes: string | null;
-  registrations: { first_name: string; last_name: string } | null;
-  tournament: LinkedTournament | null;
-  contact: LinkedContact | null;
-};
-
-/** The slice of the registrations API this page needs for per-event counts. */
-type RegistrationSlim = {
-  id: string;
-  tournament_id: string | null;
-  payment_status: string;
-  waiver_ok: boolean;
-};
-
-type EventCounts = { signedUp: number; paid: number; noWaiver: number };
-
-/**
- * If the cookie expired mid-session, the API returns 401. Force a reload so the
- * AdminGate in the layout re-checks `/api/admin/me` and shows the login form.
- */
-function handleAuthLost() {
-  if (typeof window !== "undefined") window.location.reload();
-}
-
-const SETTLED = new Set(["paid", "waived"]);
-
-export default function AdminPage() {
+type AttentionRow = RosterRow & { eventId: string; eventTitle: string };
+const ATTENTION = [
+  ["all", "All attention"],
+  ["unpaid", "Still unpaid"],
+  ["waiver-missing", "Missing waiver"],
+  ["review", "Needs review"],
+  ["no-emergency", "Missing details"],
+] as const;
+export default function AdminOverview() {
   return (
-    <Suspense fallback={null}>
-      <AdminPageContent />
+    <Suspense fallback={<div className="admin-page">Loading workspace…</div>}>
+      <Overview />
     </Suspense>
   );
 }
-
-/**
- * The Overview answers the owner's actual questions, immediately and with
- * numbers that agree with every other screen: what's coming up, who has
- * signed up and paid, and how much money has come in.
- *
- * What it deliberately no longer has (B6): the "Manage" cards duplicating
- * the nav bar 40 pixels above them, the global registrations list (people
- * live on each event's Roster), and the header that read $0.00 until the
- * Payments tab was clicked — money now loads with the page.
- */
-function AdminPageContent() {
-  useScrollRestoration("admin-overview");
-
-  const [tournaments, setTournaments] = useState<Tournament[]>([]);
-  const [registrations, setRegistrations] = useState<RegistrationSlim[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(true);
-
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [payLoading, setPayLoading] = useState(true);
-  const [payError, setPayError] = useState("");
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
-
-  const loadPayments = useCallback(() => {
-    setPayLoading(true);
-    fetch("/api/admin/payments")
-      .then((res) => {
-        if (res.status === 401) {
-          handleAuthLost();
-          return null;
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (!data) return;
-        if (data.error) {
-          setPayError(data.error);
-          return;
-        }
-        setPayments(data.payments);
-        setPayError("");
-      })
-      .catch(() => setPayError("Failed to load payments."))
-      .finally(() => setPayLoading(false));
-  }, []);
-
-  useEffect(() => {
-    loadPayments();
-    Promise.all([
-      fetch("/api/admin/tournaments").then((res) =>
-        res.status === 401 ? (handleAuthLost(), null) : res.json()
-      ),
-      fetch("/api/admin/registrations").then((res) =>
-        res.status === 401 ? (handleAuthLost(), null) : res.json()
-      ),
-    ])
-      .then(([tournamentsBody, registrationsBody]) => {
-        if (tournamentsBody?.tournaments) {
-          setTournaments(tournamentsBody.tournaments as Tournament[]);
-        }
-        if (registrationsBody?.registrations) {
-          setRegistrations(
-            registrationsBody.registrations as RegistrationSlim[]
-          );
-        }
-      })
-      .catch(() => {})
-      .finally(() => setEventsLoading(false));
-  }, [loadPayments]);
-
-  const countsByEvent = useMemo(() => {
-    const map = new Map<string, EventCounts>();
-    for (const r of registrations) {
-      if (!r.tournament_id) continue;
-      const counts =
-        map.get(r.tournament_id) ?? { signedUp: 0, paid: 0, noWaiver: 0 };
-      counts.signedUp++;
-      if (SETTLED.has(r.payment_status)) counts.paid++;
-      if (!r.waiver_ok) counts.noWaiver++;
-      map.set(r.tournament_id, counts);
-    }
-    return map;
-  }, [registrations]);
-
-  const { currentEvents, pastEvents } = useMemo(() => {
-    const current: Tournament[] = [];
-    const past: Tournament[] = [];
-    for (const t of tournaments) {
-      if (resolveEventState(t) === "finished") past.push(t);
-      else current.push(t);
-    }
-    // Most recent finished events first — the archive reads newest-down.
-    past.sort((a, b) =>
-      (b.end_date ?? b.start_date ?? "").localeCompare(
-        a.end_date ?? a.start_date ?? ""
-      )
+async function read<T>(url: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(url, { signal, cache: "no-store" });
+  if (!response.ok)
+    throw new Error(
+      response.status === 401
+        ? "Your session has expired. Reload to sign in."
+        : "Some event records could not be loaded. Retry to see complete counts.",
     );
-    return { currentEvents: current, pastEvents: past };
-  }, [tournaments]);
-
-  const totalRevenue = payments
-    .filter((p) => p.status === "succeeded")
-    .reduce((sum, p) => sum + Number(p.amount), 0);
-  const succeededPayments = payments.filter(
-    (p) => p.status === "succeeded"
-  ).length;
-
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-
-  const formatDateTime = (dateStr: string) =>
-    new Date(dateStr).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-
-  const formatCurrency = (amount: number, currency = "usd") =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency.toUpperCase(),
-    }).format(amount);
-
-  const runStripeCheck = async () => {
-    setSyncing(true);
-    setSyncResult(null);
-    try {
-      const res = await fetch("/api/admin/sync-payments", { method: "POST" });
-      const data = await res.json();
-      if (data.error) {
-        setSyncResult(`Error: ${data.error}`);
-      } else {
-        setSyncResult(
-          data.synced > 0
-            ? `Found ${data.synced} payment(s) we were missing. ${data.skipped} were already recorded.`
-            : `Nothing missing — all ${data.skipped} recent Stripe payments are already recorded.`
+  return response.json();
+}
+function Overview() {
+  const [work, setWork] = useState<EventWork[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  const [scope, setScope] = useQueryParam("scope", "current");
+  const [attentionParam, setAttention] = useQueryParam("attention", "all");
+  const attention = ATTENTION.some(([key]) => key === attentionParam)
+    ? attentionParam
+    : "all";
+  const [search, setSearch] = useState("");
+  const [messaging, setMessaging] = useState<AttentionRow[] | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    (async () => {
+      const { tournaments } = await read<{ tournaments: Tournament[] }>(
+        "/api/admin/tournaments",
+        controller.signal,
+      );
+      const events = tournaments
+        .filter((event) => {
+          const view = resolveEventView(event);
+          return (
+            scope === "all" ||
+            view.bucket === "current" ||
+            view.bucket === "upcoming"
+          );
+        })
+        .sort(
+          (a, b) =>
+            Number(resolveEventView(b).bucket === "current") -
+              Number(resolveEventView(a).bucket === "current") ||
+            (a.start_date ?? "").localeCompare(b.start_date ?? ""),
         );
-        if (data.synced > 0) loadPayments();
-      }
-    } catch {
-      setSyncResult("Could not reach Stripe. Try again.");
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const handleExportPaymentsCsv = () => {
-    const headers = [
-      "Name",
-      "Email",
-      "Event",
-      "Amount",
-      "Currency",
-      "Status",
-      "Reference",
-      "Date",
-    ];
-    const rows = payments.map((p) => [
-      p.registrations
-        ? `${p.registrations.first_name} ${p.registrations.last_name}`
-        : "",
-      p.email,
-      p.tournament_name ?? "",
-      p.amount,
-      p.currency,
-      p.status,
-      p.stripe_session_id ?? "",
-      formatDate(p.created_at),
-    ]);
-    const csv = [headers, ...rows]
-      .map((row) => row.map((v) => `"${v}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `payments-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
+      const results = await Promise.all(
+        events.map(async (event) => {
+          const [roster, schedule, rounds] = await Promise.all([
+            read<RosterPayload>(
+              `/api/admin/tournaments/${event.id}/roster`,
+              controller.signal,
+            ),
+            event.kind === "open_play"
+              ? Promise.resolve({ matches: [] })
+              : read<{ matches: TournamentMatch[] }>(
+                  `/api/admin/tournaments/${event.id}/matches`,
+                  controller.signal,
+                ),
+            event.kind === "open_play"
+              ? Promise.resolve({ rounds: [] })
+              : read<{ rounds: TournamentRound[] }>(
+                  `/api/admin/tournaments/${event.id}/rounds`,
+                  controller.signal,
+                ),
+          ]);
+          return {
+            event,
+            roster,
+            matches: schedule.matches,
+            rounds: rounds.rounds,
+          };
+        }),
+      );
+      if (!controller.signal.aborted) setWork(results);
+    })()
+      .catch((e) => {
+        if (!controller.signal.aborted) setError(e.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [attempt, scope]);
+  const rows: AttentionRow[] = work.flatMap(({ event, roster }) =>
+    roster.rows.map((row) => ({
+      ...row,
+      eventId: event.id,
+      eventTitle: event.title,
+    })),
+  );
+  const needsAttention = (r: RosterRow) =>
+    !r.paid || !r.waiverOk || r.needsReview || r.missing.length > 0;
+  const visible = rows.filter(
+    (r) =>
+      (attention === "all" ? needsAttention(r) : playerMatches(r, attention)) &&
+      `${rosterFullName(r)} ${r.teamName ?? ""} ${r.eventTitle} ${r.phone ?? ""}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
+  const today = todayInHouston();
+  const outstanding = work
+    .flatMap(({ event, matches, roster, rounds }) =>
+      (resolveEventView(event).isCancelled
+        ? []
+        : outstandingMatches(matches, rounds)
+      ).map((match) => ({ event, match, teams: roster.teams })),
+    )
+    .sort((a, b) =>
+      (a.match.match_date ?? "9999").localeCompare(
+        b.match.match_date ?? "9999",
+      ),
+    );
+  const missingResults = outstanding.filter(
+    ({ match }) => match.match_date && match.match_date < today,
+  );
+  const upcoming = outstanding
+    .filter(({ match }) => !match.match_date || match.match_date >= today)
+    .slice(0, 5);
   return (
-    <>
-      {/* Header */}
-      <section className="bg-base text-white py-12 md:py-16 bg-tactical-grid">
-        <div className="max-w-6xl mx-auto px-6">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
-            Overview
-          </h1>
-          <p className="text-zinc-400">
-            {payLoading
-              ? "Loading…"
-              : `${formatCurrency(totalRevenue)} collected by card · ${succeededPayments} card payments`}
+    <div className="admin-page space-y-7">
+      <header className="flex flex-wrap justify-between items-end gap-4">
+        <div>
+          <p className="admin-kicker mb-2">Houston Premier Soccer</p>
+          <h1>Tournament workspace</h1>
+          <p className="text-sm text-zinc-400 mt-2">
+            Players, teams and the next round. Start with what needs your
+            attention.
           </p>
         </div>
-      </section>
-
-      <Section dark className="bg-surface !py-8 md:!py-12" container={false}>
-        <div className="max-w-6xl mx-auto px-6 space-y-10">
-          {/* ── EVENTS ── */}
-          <div className="space-y-4">
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">
-              Your events
-            </h2>
-            {eventsLoading ? (
-              <StatCardsSkeleton count={2} />
-            ) : currentEvents.length === 0 ? (
-              <AdminEmptyState
-                icon={Users}
-                title="No upcoming events"
-                description="Create an event to start taking signups."
-                actionLabel="Add event"
-                actionHref="/admin/tournaments/new"
-              />
+        <Link href="/admin/tournaments/new" className="btn-primary">
+          Create event
+        </Link>
+      </header>
+      <div className="flex flex-wrap justify-between gap-3 text-xs">
+        <label className="flex items-center gap-2 text-zinc-400">
+          Showing
+          <select
+            className="bg-surface-2 border border-border-token px-3 py-2 text-white"
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+          >
+            <option value="current">Current & upcoming events</option>
+            <option value="all">All events, including history</option>
+          </select>
+        </label>
+        <Link href="/admin/payments" className="admin-link self-center">
+          Card payment records ↗
+        </Link>
+      </div>
+      {loading ? (
+        <p role="status" className="py-16 text-zinc-400">
+          Loading events and player records…
+        </p>
+      ) : error ? (
+        <div role="alert" className="border-l-2 border-amber-300 pl-4 py-4">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="btn-secondary mt-3"
+            onClick={() => setAttempt((n) => n + 1)}
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <>
+          <section>
+            <div className="admin-section-heading">
+              <h2>Events in focus</h2>
+              <Link className="admin-link text-xs" href="/admin/tournaments">
+                Manage all events
+              </Link>
+            </div>
+            {work.length === 0 ? (
+              <p className="text-sm text-zinc-400 py-6">
+                No events in this view. Create an event or switch to all events.
+              </p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {currentEvents.map((t) => (
-                  <EventCard
-                    key={t.id}
-                    tournament={t}
-                    counts={countsByEvent.get(t.id)}
-                  />
+              <div className="divide-y divide-border-token border-y border-border-token">
+                {work.map(({ event, roster }) => (
+                  <div
+                    key={event.id}
+                    className="flex flex-wrap justify-between gap-4 py-4"
+                  >
+                    <div>
+                      <Link
+                        href={playerLink(event.id)}
+                        className="font-medium hover:text-brand"
+                      >
+                        {event.title}
+                      </Link>
+                      <p className="text-xs text-zinc-400 mt-1">
+                        {formatTournamentDateRange(
+                          event.start_date,
+                          event.end_date,
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+                      <EventStateBadge tournament={event} />
+                      <Link className="admin-link" href={playerLink(event.id)}>
+                        {roster.totals.signedUp} registered
+                      </Link>
+                      <Link
+                        className="admin-link"
+                        href={playerLink(event.id, { filter: "unpaid" })}
+                      >
+                        {roster.totals.unpaid} unpaid
+                      </Link>
+                      <Link
+                        className="admin-link"
+                        href={playerLink(event.id, {
+                          filter: "waiver-missing",
+                        })}
+                      >
+                        {roster.totals.waiverMissing} missing waiver
+                      </Link>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
-            {pastEvents.length > 0 && (
-              <details className="group">
-                <summary className="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200 transition-colors select-none">
-                  Past events ({pastEvents.length})
-                </summary>
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {pastEvents.map((t) => (
-                    <EventCard
-                      key={t.id}
-                      tournament={t}
-                      counts={countsByEvent.get(t.id)}
-                    />
-                  ))}
-                </div>
-              </details>
-            )}
-          </div>
-
-          {/* ── MONEY ── */}
-          <div className="space-y-6">
-            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">
-              Money
-            </h2>
-
-            {payError && <p className="text-red-400">{payError}</p>}
-            {payLoading ? (
-              <div className="space-y-6">
-                <StatCardsSkeleton count={4} />
-                <TableSkeleton rows={6} columns={6} />
+          </section>
+          <div className="grid lg:grid-cols-2 gap-8">
+            <section>
+              <div className="admin-section-heading">
+                <h2>Next games</h2>
               </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="dashboard-card p-4 text-center">
-                    <div className="flex justify-center mb-1">
-                      <DollarSign size={18} className="text-brand" />
-                    </div>
-                    <p className="text-2xl font-bold text-brand">
-                      {formatCurrency(totalRevenue)}
-                    </p>
-                    <p className="text-xs text-zinc-400 uppercase tracking-wide">
-                      Collected by card
-                    </p>
-                  </div>
-                  <div className="dashboard-card p-4 text-center">
-                    <div className="flex justify-center mb-1">
-                      <CheckCircle size={18} className="text-brand" />
-                    </div>
-                    <p className="text-2xl font-bold text-white">
-                      {succeededPayments}
-                    </p>
-                    <p className="text-xs text-zinc-400 uppercase tracking-wide">
-                      Card payments
-                    </p>
-                  </div>
-                  <div className="dashboard-card p-4 text-center">
-                    <div className="flex justify-center mb-1">
-                      <ClipboardList size={18} className="text-yellow-400" />
-                    </div>
-                    <p className="text-2xl font-bold text-yellow-400">
-                      {payments.filter((p) => p.status === "pending").length}
-                    </p>
-                    <p className="text-xs text-zinc-400 uppercase tracking-wide">
-                      Not completed
-                    </p>
-                  </div>
-                  <div className="dashboard-card p-4 text-center">
-                    <div className="flex justify-center mb-1">
-                      <XCircle size={18} className="text-red-400" />
-                    </div>
-                    <p className="text-2xl font-bold text-red-400">
-                      {
-                        payments.filter(
-                          (p) =>
-                            p.status === "refunded" || p.status === "failed"
-                        ).length
-                      }
-                    </p>
-                    <p className="text-xs text-zinc-400 uppercase tracking-wide">
-                      Refunded / failed
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3 justify-end">
-                  <button
-                    onClick={() => void runStripeCheck()}
-                    disabled={syncing}
-                    className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-border-token rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+              {upcoming.length ? (
+                upcoming.map(({ event, match, teams }) => (
+                  <Link
+                    key={match.id}
+                    href={`/admin/tournaments/${event.id}?tab=schedule&round=${match.round_id ?? ""}`}
+                    className="block border-b border-border-token py-3 hover:bg-surface"
                   >
-                    <RefreshCw
-                      size={14}
-                      className={syncing ? "animate-spin" : ""}
-                    />
-                    {syncing ? "Checking…" : "Check Stripe for missed payments"}
-                  </button>
-                  <button
-                    onClick={handleExportPaymentsCsv}
-                    className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white border border-border-token rounded-lg px-3 py-1.5 transition-colors"
+                    <p className="text-sm">
+                      {teams.find((t) => t.id === match.home_team_id)?.name ||
+                        match.home_team_label ||
+                        "TBD"}{" "}
+                      vs{" "}
+                      {teams.find((t) => t.id === match.away_team_id)?.name ||
+                        match.away_team_label ||
+                        "TBD"}
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      {event.title} · Match {match.match_number ?? "—"}
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      {match.match_date || "Date to be set"} ·{" "}
+                      {match.kickoff_time || "Kickoff to be set"}
+                    </p>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm text-zinc-400">
+                  No upcoming fixtures in this view. Open an event to manage its
+                  schedule.
+                </p>
+              )}
+            </section>
+            <section>
+              <div className="admin-section-heading">
+                <h2>Results to enter</h2>
+                <span className="text-xs text-zinc-400">
+                  {missingResults.length} past fixtures
+                </span>
+              </div>
+              {missingResults.length ? (
+                missingResults.map(({ event, match }) => (
+                  <Link
+                    key={match.id}
+                    href={`/admin/tournaments/${event.id}?tab=schedule&result=${match.id}`}
+                    className="block border-b border-border-token py-3 admin-link text-sm"
                   >
-                    <Download size={14} />
-                    Download spreadsheet
-                  </button>
-                </div>
-                {syncResult && (
-                  <p
-                    className={`text-sm ${
-                      syncResult.startsWith("Error")
-                        ? "text-red-400"
-                        : "text-brand"
-                    }`}
-                  >
-                    {syncResult}
-                  </p>
-                )}
-
-                {payments.length === 0 ? (
-                  <AdminEmptyState
-                    icon={CreditCard}
-                    title="No payments yet"
-                    description="When players pay by card, the payments appear here."
-                    actionLabel="Check Stripe for missed payments"
-                    onAction={() => void runStripeCheck()}
-                  />
-                ) : (
-                  <div className="dashboard-card overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-border-token text-left">
-                            <th className="px-4 py-3 text-zinc-400 font-medium">
-                              Player
-                            </th>
-                            <th className="px-4 py-3 text-zinc-400 font-medium hidden md:table-cell">
-                              Email
-                            </th>
-                            <th className="px-4 py-3 text-zinc-400 font-medium hidden lg:table-cell">
-                              Event
-                            </th>
-                            <th className="px-4 py-3 text-zinc-400 font-medium">
-                              Amount
-                            </th>
-                            <th className="px-4 py-3 text-zinc-400 font-medium">
-                              Status
-                            </th>
-                            <th className="px-4 py-3 text-zinc-400 font-medium hidden sm:table-cell">
-                              Date
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {payments.map((p) => (
-                            <tr
-                              key={p.id}
-                              className="border-b border-border-token hover:bg-surface-2/30 transition-colors"
-                            >
-                              <td className="px-4 py-3 text-white font-medium">
-                                {p.contact ? (
-                                  <Link
-                                    href={`/admin/contacts?q=${encodeURIComponent(p.contact.email)}`}
-                                    className="hover:text-brand"
-                                  >
-                                    {p.contact.first_name} {p.contact.last_name}
-                                  </Link>
-                                ) : p.registrations ? (
-                                  `${p.registrations.first_name} ${p.registrations.last_name}`
-                                ) : (
-                                  <span className="text-zinc-500 italic">
-                                    Unknown
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-zinc-300 hidden md:table-cell">
-                                {p.email}
-                              </td>
-                              <td className="px-4 py-3 text-zinc-300 hidden lg:table-cell">
-                                {p.tournament ? (
-                                  <Link
-                                    href={`/admin/tournaments/${p.tournament.id}`}
-                                    className="text-brand hover:underline"
-                                  >
-                                    {p.tournament.title}
-                                  </Link>
-                                ) : (
-                                  <span className="text-zinc-300">
-                                    {p.tournament_name ?? "—"}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-white font-semibold">
-                                {formatCurrency(p.amount, p.currency)}
-                              </td>
-                              <td className="px-4 py-3">
-                                <PaymentStatusPill status={p.status} />
-                              </td>
-                              <td className="px-4 py-3 text-zinc-400 hidden sm:table-cell">
-                                {formatDateTime(p.created_at)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+                    {event.title} · Match {match.match_number ?? "—"}
+                    <span className="block text-xs text-zinc-400">
+                      {match.match_date} · Enter or review result
+                    </span>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm text-zinc-400">
+                  No past fixtures awaiting results.
+                </p>
+              )}
+            </section>
           </div>
-        </div>
-      </Section>
-    </>
-  );
-}
-
-/** Stripe's internal words translated for the person reading them. */
-function PaymentStatusPill({ status }: { status: string }) {
-  const label =
-    status === "succeeded"
-      ? "Paid"
-      : status === "pending"
-        ? "Not completed"
-        : status === "refunded"
-          ? "Refunded"
-          : "Failed";
-  const cls =
-    status === "succeeded"
-      ? "bg-brand/20 text-brand"
-      : status === "pending"
-        ? "bg-yellow-500/20 text-yellow-400"
-        : "bg-red-500/20 text-red-400";
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${cls}`}
-    >
-      {status === "succeeded" ? <CheckCircle size={12} /> : <XCircle size={12} />}
-      {label}
-    </span>
-  );
-}
-
-function EventCard({
-  tournament,
-  counts,
-}: {
-  tournament: Tournament;
-  counts: EventCounts | undefined;
-}) {
-  const dates = formatTournamentDateRange(
-    tournament.start_date,
-    tournament.end_date
-  );
-  const signedUp = counts?.signedUp ?? 0;
-  const paid = counts?.paid ?? 0;
-  const owes = signedUp - paid;
-  const noWaiver = counts?.noWaiver ?? 0;
-  return (
-    <Link href={`/admin/tournaments/${tournament.id}`} className="block group">
-      <div className="dashboard-card p-5 h-full hover:border-brand/50 transition-colors">
-        <div className="flex items-start justify-between gap-3 mb-1.5">
-          <h3 className="text-base font-semibold text-white min-w-0">
-            {tournament.title}
-          </h3>
-          <EventStateBadge tournament={tournament} />
-        </div>
-        {dates && dates !== "—" && (
-          <p className="text-sm text-zinc-400 mb-3">{dates}</p>
-        )}
-        <p className="text-sm text-zinc-300">
-          {signedUp === 0 ? (
-            "Nobody signed up yet"
-          ) : (
-            <>
-              {signedUp} signed up · {paid} paid
-              {owes > 0 && (
-                <span className="text-yellow-400"> · {owes} still owe</span>
-              )}
-              {noWaiver > 0 && (
-                <span className="text-red-400"> · {noWaiver} no waiver</span>
-              )}
-            </>
-          )}
-        </p>
-        <span className="mt-3 inline-flex items-center gap-1 text-xs text-brand group-hover:gap-2 transition-all">
-          Open <ArrowRight size={12} />
-        </span>
-      </div>
-    </Link>
+          <section className="space-y-4">
+            <div className="admin-section-heading">
+              <h2>Players needing attention</h2>
+              <span className="text-xs text-zinc-400">
+                Across the events shown above
+              </span>
+            </div>
+            <div className="admin-filters">
+              {ATTENTION.map(([key, label]) => (
+                <button
+                  type="button"
+                  key={key}
+                  aria-pressed={attention === key}
+                  onClick={() => {
+                    setAttention(key);
+                    setSearch("");
+                  }}
+                >
+                  {label}{" "}
+                  <span className="ml-1 text-white">
+                    {
+                      rows.filter((r) =>
+                        key === "all"
+                          ? needsAttention(r)
+                          : playerMatches(r, key),
+                      ).length
+                    }
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap justify-between gap-3">
+              <input
+                aria-label="Search attention list"
+                placeholder="Find player, team or event"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="bg-surface-2 border border-border-token px-3 py-2 text-sm w-full sm:w-80"
+              />
+              <button
+                type="button"
+                className="admin-link text-xs"
+                disabled={!visible.length}
+                onClick={() => setMessaging(visible)}
+              >
+                Preview message to these players
+              </button>
+            </div>
+            {visible.length === 0 ? (
+              <p className="text-sm text-zinc-400 py-8">
+                No players match this view.
+              </p>
+            ) : (
+              <table className="admin-table admin-players">
+                <thead>
+                  <tr>
+                    <th>Player / team</th>
+                    <th>Event</th>
+                    <th>Waiver</th>
+                    <th>Payment</th>
+                    <th>Other attention</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((row) => (
+                    <tr key={`${row.eventId}:${row.id}`}>
+                      <td>
+                        <Link
+                          className="admin-link font-medium"
+                          href={playerLink(row.eventId, {
+                            filter: attention === "all" ? undefined : attention,
+                            player: row.id,
+                          })}
+                        >
+                          {rosterFullName(row)}
+                        </Link>
+                        <p className="text-xs text-zinc-400">
+                          {row.teamName || "No team"}
+                        </p>
+                      </td>
+                      <td data-label="Event">{row.eventTitle}</td>
+                      <td data-label="Waiver">
+                        {row.waiverOk ? "Complete" : "Needed"}
+                      </td>
+                      <td data-label="Payment">
+                        {paymentLabel(row.paymentStatus)}
+                      </td>
+                      <td
+                        data-label="Details"
+                        className="text-zinc-400 text-xs"
+                      >
+                        {[
+                          row.needsReview ? "Flagged for review" : "",
+                          ...row.missing.map((m) => `Missing ${m}`),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        </>
+      )}
+      {messaging && (
+        <MessagePreview
+          rows={messaging}
+          initial={attention === "waiver-missing" ? "waiver" : "payment"}
+          onClose={() => setMessaging(null)}
+        />
+      )}
+    </div>
   );
 }

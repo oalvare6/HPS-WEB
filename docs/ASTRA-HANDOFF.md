@@ -1,5 +1,7 @@
 # Handoff: the current system, for the next product/design agent
 
+> **Stage 2 update:** Stage 2.1 is now the owner-approved frontend direction. For the current handoff and Stage 2.2 boundaries, read [CLAUDE-STAGE-2-HANDOFF.md](CLAUDE-STAGE-2-HANDOFF.md), [STAGE-2-2-SETUP-CHECKLIST.md](STAGE-2-2-SETUP-CHECKLIST.md) and [STAGE-2-2-INTEGRATION-READINESS.md](STAGE-2-2-INTEGRATION-READINESS.md). The Stage 2.0 account below remains architectural background, not the current task status.
+
 **Written 2026-09-10, after Stage 2.0.** This is the primary context document. Read it before
 touching product, UI or admin code. It describes what exists now, what you must not break, and
 what you are free to redesign.

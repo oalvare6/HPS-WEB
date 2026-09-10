@@ -8,8 +8,6 @@ import {
   DollarSign,
   Users,
   UsersRound,
-  CreditCard,
-  ReceiptText,
   Star,
   ListOrdered,
   Megaphone,
@@ -21,10 +19,7 @@ import type { Tournament } from "@/lib/types";
 import { EventStateBadge } from "@/components/admin/EventStateBadge";
 import {
   fetchTournamentById,
-  fetchTournamentStats,
-  formatPaymentTotal,
   formatTournamentDateRange,
-  type TournamentStats,
 } from "@/lib/admin-tournaments";
 import RosterScreen from "@/components/admin/RosterScreen";
 import TournamentTeamsPanel from "@/components/admin/TournamentTeamsPanel";
@@ -33,7 +28,7 @@ import { SchedulePanel } from "@/components/admin/SchedulePanel";
 import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { eventKindCopy } from "@/lib/event-kind";
-import { eventLastDay } from "@/lib/tournament-state";
+import { eventLastDay, resolveEventView } from "@/lib/tournament-state";
 import { useQueryParam } from "@/lib/admin-url-state";
 import { TournamentDetailSkeleton } from "@/components/shared/skeleton";
 
@@ -72,7 +67,6 @@ export default function AdminTournamentViewPage({
 
 function ViewContent({ id }: { id: string }) {
   const [tournament, setTournament] = useState<Tournament | null>(null);
-  const [stats, setStats] = useState<TournamentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // Old ?roster= links (bookmarks, back buttons) still resolve: "registrants"
@@ -93,18 +87,15 @@ function ViewContent({ id }: { id: string }) {
       : tab;
 
   const load = useCallback(() => {
-    return Promise.all([fetchTournamentById(id), fetchTournamentStats(id)]).then(
-      ([tournamentRes, statsRes]) => {
-        if (tournamentRes.error || !tournamentRes.data) {
-          setError(tournamentRes.error ?? "Failed to load this event.");
-          setTournament(null);
-        } else {
-          setTournament(tournamentRes.data);
-          setError("");
-        }
-        setStats(statsRes.data ?? null);
+    return fetchTournamentById(id).then((tournamentRes) => {
+      if (tournamentRes.error || !tournamentRes.data) {
+        setError(tournamentRes.error ?? "Failed to load this event.");
+        setTournament(null);
+      } else {
+        setTournament(tournamentRes.data);
+        setError("");
       }
-    );
+    });
   }, [id]);
 
   useEffect(() => {
@@ -137,18 +128,24 @@ function ViewContent({ id }: { id: string }) {
               {tournament && <MetaLine tournament={tournament} />}
             </div>
             {tournament && (
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex max-w-full flex-wrap items-center gap-2">
                 <EventStateBadge tournament={tournament} />
-                <a
-                  href={`/events/${tournament.slug}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border-token bg-surface/60 px-3 text-sm text-zinc-200 hover:border-brand/50 hover:text-white transition-colors"
-                >
-                  <ExternalLink size={14} />
-                  View public page
-                </a>
-                {tournament.is_featured && (
+                {resolveEventView(tournament).isVisible ? (
+                  <a
+                    href={`/events/${tournament.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border-token bg-surface/60 px-3 text-sm text-zinc-200 hover:border-brand/50 hover:text-white transition-colors"
+                  >
+                    <ExternalLink size={14} />
+                    View public page
+                  </a>
+                ) : (
+                  <span className="text-xs text-zinc-400">
+                    Hidden from public view
+                  </span>
+                )}
+                {resolveEventView(tournament).isFeatured && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-brand/20 text-brand">
                     <Star size={12} className="fill-current" />
                     On homepage
@@ -172,14 +169,11 @@ function ViewContent({ id }: { id: string }) {
 
           {!loading && tournament && (
             <>
-              {/* Money and headcount belong to the roster, not above every tab. */}
-              {effectiveTab === "roster" && <StatsCards stats={stats} />}
-
               <EventTabs
                 value={effectiveTab}
                 onChange={setTab}
                 showTeams={kindCopy.hasTeams}
-                rosterLabel={kindCopy.rosterHeading}
+                rosterLabel="Players"
               />
 
               {effectiveTab === "roster" && (
@@ -231,7 +225,7 @@ function MetaLine({ tournament }: { tournament: Tournament }) {
   const parts: { icon: React.ReactNode; text: string }[] = [];
   const dates = formatTournamentDateRange(
     tournament.start_date,
-    tournament.end_date
+    tournament.end_date,
   );
   if (dates && dates !== "—") {
     parts.push({ icon: <CalendarRange size={13} />, text: dates });
@@ -285,16 +279,20 @@ function EventTabs({
     { id: "roster", label: rosterLabel, icon: <Users size={14} /> },
     ...(showTeams
       ? [
-          { id: "teams" as const, label: "Teams", icon: <UsersRound size={14} /> },
+          {
+            id: "teams" as const,
+            label: "Teams",
+            icon: <UsersRound size={14} />,
+          },
           {
             id: "schedule" as const,
-            label: "Schedule & scores",
+            label: "Schedule & results",
             icon: <ListOrdered size={14} />,
           },
         ]
       : []),
     { id: "updates", label: "Announcements", icon: <Megaphone size={14} /> },
-    { id: "settings", label: "Settings", icon: <Settings size={14} /> },
+    { id: "settings", label: "Event settings", icon: <Settings size={14} /> },
   ];
   return (
     <div
@@ -312,7 +310,9 @@ function EventTabs({
             aria-selected={active}
             onClick={() => onChange(t.id)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors ${
-              active ? "bg-base text-white" : "text-zinc-400 hover:text-zinc-200"
+              active
+                ? "bg-base text-white"
+                : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
             {t.icon}
@@ -320,66 +320,6 @@ function EventTabs({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-/**
- * "Paid" (a status the owner sets, cash included) and "Card payments" (rows
- * Stripe recorded) are different measurements and routinely differ — cash
- * marked paid creates no card payment. The labels now say which is which
- * instead of presenting two unexplained disagreeing numbers.
- */
-function StatsCards({ stats }: { stats: TournamentStats | null }) {
-  const registrantCount = stats?.registrantCount ?? 0;
-  const paidCount = stats?.paidRegistrantCount ?? 0;
-  const paymentCount = stats?.paymentCount ?? 0;
-  const totalLabel = stats
-    ? formatPaymentTotal(stats)
-    : formatPaymentTotal({ paymentTotalCents: 0, currency: "usd" });
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <StatCard
-        icon={<Users size={16} />}
-        label="Signed up"
-        value={String(registrantCount)}
-      />
-      <StatCard
-        icon={<CreditCard size={16} />}
-        label="Paid (cash or card)"
-        value={`${paidCount} / ${registrantCount}`}
-      />
-      <StatCard
-        icon={<ReceiptText size={16} />}
-        label="Card payments"
-        value={String(paymentCount)}
-      />
-      <StatCard
-        icon={<DollarSign size={16} />}
-        label="Collected by card"
-        value={totalLabel}
-      />
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="dashboard-card p-4">
-      <div className="flex items-center gap-2 text-zinc-400 mb-2">
-        {icon}
-        <p className="text-xs uppercase tracking-wider font-medium">{label}</p>
-      </div>
-      <p className="data-display text-2xl">{value}</p>
     </div>
   );
 }

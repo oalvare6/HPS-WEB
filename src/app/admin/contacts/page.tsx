@@ -190,8 +190,8 @@ function AdminContactsContent() {
               </p>
               <p className="text-xs text-zinc-400 mt-1">
                 Now click &ldquo;This is the duplicate&rdquo; on the other copy
-                of the same person. Their signups and payments move onto the
-                one you&apos;re keeping.
+                of the same person. Their signups and payments move onto the one
+                you&apos;re keeping.
               </p>
             </div>
             <button
@@ -245,7 +245,7 @@ function AdminContactsContent() {
                     if (winnerId === c.id) return;
                     const keeper = contacts.find((k) => k.id === winnerId);
                     const ok = confirm(
-                      `Combine these two entries for the same person?\n\nEverything on "${fullName(c)}" (signups, payments, waiver) moves onto "${keeper ? fullName(keeper) : "the one you're keeping"}", and the duplicate goes away.`
+                      `Combine these two entries for the same person?\n\nEverything on "${fullName(c)}" (signups, payments, waiver) moves onto "${keeper ? fullName(keeper) : "the one you're keeping"}", and the duplicate goes away.`,
                     );
                     if (!ok) return;
                     const res = await fetch("/api/admin/contacts/merge", {
@@ -438,7 +438,7 @@ function ContactEditor({
   const handleDelete = async () => {
     if (
       !confirm(
-        "Delete this person permanently? This cannot be undone. If they have any signups or payments, the delete will be refused — merge duplicates instead of deleting them."
+        "Delete this person permanently? This cannot be undone. If they have any signups or payments, the delete will be refused — merge duplicates instead of deleting them.",
       )
     )
       return;
@@ -465,50 +465,71 @@ function ContactEditor({
 
   return (
     <div className="px-4 pb-4 pt-1 grid gap-3 md:grid-cols-2 bg-base/40">
-      <input
-        className={inputCls}
-        placeholder="First name"
-        value={firstName}
-        onChange={(e) => setFirstName(e.target.value)}
-      />
-      <input
-        className={inputCls}
-        placeholder="Last name"
-        value={lastName}
-        onChange={(e) => setLastName(e.target.value)}
-      />
-      <input
-        className={inputCls}
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <input
-        className={inputCls}
-        placeholder="Phone"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-      />
-      <input
-        className={inputCls}
-        type="date"
-        value={dob}
-        onChange={(e) => setDob(e.target.value)}
-      />
-      <input
-        className={inputCls}
-        placeholder="tags (comma separated)"
-        value={tagsText}
-        onChange={(e) => setTagsText(e.target.value)}
-      />
-      <textarea
-        className={`${inputCls} md:col-span-2`}
-        placeholder="Notes"
-        rows={2}
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-      />
+      <label className="admin-field ">
+        First name
+        <input
+          className={inputCls}
+          placeholder="First name"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+        />
+      </label>
+      <label className="admin-field ">
+        Last name
+        <input
+          className={inputCls}
+          placeholder="Last name"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+        />
+      </label>
+      <label className="admin-field ">
+        Email
+        <input
+          className={inputCls}
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </label>
+      <label className="admin-field ">
+        Phone
+        <input
+          className={inputCls}
+          placeholder="Phone"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
+      </label>
+      <label className="admin-field ">
+        Date of birth
+        <input
+          className={inputCls}
+          type="date"
+          value={dob}
+          onChange={(e) => setDob(e.target.value)}
+        />
+      </label>
+      <label className="admin-field ">
+        tags (comma separated)
+        <input
+          className={inputCls}
+          placeholder="tags (comma separated)"
+          value={tagsText}
+          onChange={(e) => setTagsText(e.target.value)}
+        />
+      </label>
+      <label className="admin-field md:col-span-2">
+        Notes
+        <textarea
+          className={`${inputCls} md:col-span-2`}
+          placeholder="Notes"
+          rows={2}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </label>
       <label className="md:col-span-2 inline-flex items-center gap-2 text-sm text-zinc-300">
         <input
           type="checkbox"
@@ -525,7 +546,11 @@ function ContactEditor({
           disabled={saving}
           className="btn-primary text-sm inline-flex items-center gap-1.5 disabled:opacity-60"
         >
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          {saving ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Save size={14} />
+          )}
           Save changes
         </button>
         <button
@@ -594,34 +619,46 @@ function CreateContactModal({
       >
         <h2 className="text-xl font-bold text-white">New contact</h2>
         <div className="grid grid-cols-2 gap-3">
+          <label className="admin-field ">
+            First name
+            <input
+              className={inputCls}
+              placeholder="First name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              required
+            />
+          </label>
+          <label className="admin-field ">
+            Last name
+            <input
+              className={inputCls}
+              placeholder="Last name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+            />
+          </label>
+        </div>
+        <label className="admin-field ">
+          Email
           <input
             className={inputCls}
-            placeholder="First name"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
           />
+        </label>
+        <label className="admin-field ">
+          Phone (optional)
           <input
             className={inputCls}
-            placeholder="Last name"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
+            placeholder="Phone (optional)"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
           />
-        </div>
-        <input
-          className={inputCls}
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          className={inputCls}
-          placeholder="Phone (optional)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
+        </label>
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"

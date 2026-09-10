@@ -3,14 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  Banknote,
-  Ticket,
   Check,
   X,
   Search,
   UserPlus,
   Loader2,
-  AlertTriangle,
   RefreshCw,
   PenLine,
   ExternalLink,
@@ -18,34 +15,16 @@ import {
   Download,
 } from "lucide-react";
 import {
-  progressByTeam,
   rosterFullName,
   type RosterPayload,
   type RosterRow,
   type RosterTeam,
-  type RosterTotals,
-  type TeamProgress,
 } from "@/lib/admin-roster";
-import { showsCashPending } from "@/lib/payment-method";
-
-type Filter =
-  | "all"
-  | "unpaid"
-  | "paying-cash"
-  | "waiver-missing"
-  | "no-emergency"
-  | "no-team";
-
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "Everyone" },
-  { id: "unpaid", label: "Still owes money" },
-  // The collection list for match night: everyone who told us they'd bring it.
-  { id: "paying-cash", label: "Paying cash" },
-  { id: "waiver-missing", label: "No waiver" },
-  // The list to clear before the first whistle — nobody to call if they're hurt.
-  { id: "no-emergency", label: "No emergency contact" },
-  { id: "no-team", label: "No team" },
-];
+import { useQueryParam, useQueryParamsSetter } from "@/lib/admin-url-state";
+import { PlayersTable } from "./PlayersTable";
+import { PlayerDetail } from "./PlayerDetail";
+import { MessagePreview } from "./MessagePreview";
+import { PLAYER_FILTERS, playerMatches, type PlayerFilter } from "./workspace";
 
 /**
  * The owner's daily driver (A3). One row per person playing this event:
@@ -69,21 +48,32 @@ export default function RosterScreen({
   const [data, setData] = useState<RosterPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useQueryParam("q", "");
+  const [filterValue, setFilter] = useQueryParam("filter", "all");
+  const filter = PLAYER_FILTERS.some(([key]) => key === filterValue)
+    ? filterValue
+    : "all";
+  const [selectedId, setSelectedId] = useQueryParam("player", "");
+  const setParams = useQueryParamsSetter();
+  const [messaging, setMessaging] = useState<RosterRow[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [signing, setSigning] = useState<RosterRow | null>(null);
   const [fixing, setFixing] = useState<RosterRow | null>(null);
   const [checkingWaivers, setCheckingWaivers] = useState(false);
   /** `undefined` = no team filter; `null` = the unassigned bucket. */
-  const [teamFilter, setTeamFilter] = useState<string | null | undefined>(undefined);
+  const [teamValue, setTeamValue] = useQueryParam("team", "");
+  const teamFilter = teamValue === "unassigned" ? null : teamValue || undefined;
+  const setTeamFilter = (value: string | null | undefined) =>
+    setTeamValue(value === null ? "unassigned" : (value ?? null));
 
   const load = useCallback(
     async (opts: { quiet?: boolean } = {}) => {
       if (!opts.quiet) setLoading(true);
       try {
-        const res = await fetch(`/api/admin/tournaments/${tournamentId}/roster`);
+        const res = await fetch(
+          `/api/admin/tournaments/${tournamentId}/roster`,
+        );
         const body = (await res.json()) as RosterPayload & { error?: string };
         if (!res.ok) {
           setError(body.error ?? "Failed to load the roster.");
@@ -97,7 +87,7 @@ export default function RosterScreen({
         setLoading(false);
       }
     },
-    [tournamentId]
+    [tournamentId],
   );
 
   useEffect(() => {
@@ -109,16 +99,10 @@ export default function RosterScreen({
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const teams = useMemo(() => data?.teams ?? [], [data]);
 
-  const teamProgress = useMemo(
-    () => progressByTeam(rows, teams),
-    [rows, teams]
+  const visibleFilters = PLAYER_FILTERS.filter(
+    ([key]) => showTeams || key !== "no-team",
   );
-
-  const visibleFilters = useMemo(
-    () => (showTeams ? FILTERS : FILTERS.filter((f) => f.id !== "no-team")),
-    [showTeams]
-  );
-
+  const selected = rows.find((row) => row.id === selectedId);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -128,21 +112,7 @@ export default function RosterScreen({
         if (r.role === "guest") return false;
         if ((r.teamId ?? null) !== teamFilter) return false;
       }
-      if (filter === "unpaid" && r.paid) return false;
-      if (
-        filter === "paying-cash" &&
-        !showsCashPending(r.paymentMethod, r.paymentStatus)
-      ) {
-        return false;
-      }
-      if (filter === "waiver-missing" && r.waiverOk) return false;
-      if (
-        filter === "no-emergency" &&
-        !r.missing.includes("emergency contact")
-      ) {
-        return false;
-      }
-      if (filter === "no-team" && (r.teamId || r.role === "guest")) return false;
+      if (!playerMatches(r, filter)) return false;
       if (!q) return true;
       return (
         rosterFullName(r).toLowerCase().includes(q) ||
@@ -161,13 +131,16 @@ export default function RosterScreen({
   const patchRow = async (
     row: RosterRow,
     patch: Record<string, unknown>,
-    optimistic: (r: RosterRow) => RosterRow
+    optimistic: (r: RosterRow) => RosterRow,
   ) => {
     setBusyId(row.id);
     setData((prev) =>
       prev
-        ? { ...prev, rows: prev.rows.map((r) => (r.id === row.id ? optimistic(r) : r)) }
-        : prev
+        ? {
+            ...prev,
+            rows: prev.rows.map((r) => (r.id === row.id ? optimistic(r) : r)),
+          }
+        : prev,
     );
     const url =
       row.role === "guest"
@@ -195,12 +168,35 @@ export default function RosterScreen({
     }
   };
 
-  const togglePaid = (row: RosterRow) =>
-    patchRow(
-      row,
-      { payment_status: row.paid ? "pending" : "paid" },
-      (r) => ({ ...r, paid: !row.paid, paymentStatus: row.paid ? "pending" : "paid" })
-    );
+  const changeStatus = (row: RosterRow, status: string) =>
+    patchRow(row, { payment_status: status }, (r) => ({
+      ...r,
+      paid: status === "paid" || status === "waived",
+      paymentStatus: status,
+    }));
+  const removePlayer = async (row: RosterRow) => {
+    setBusyId(row.id);
+    try {
+      const response = await fetch(`/api/admin/registrations/${row.id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const body = await response.json();
+        throw new Error(body.error || "Could not remove this player.");
+      }
+      setSelectedId(null);
+      await load({ quiet: true });
+      toast.success("Player removed from the event. History retained.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not remove this player.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const changeTeam = (row: RosterRow, teamId: string) => {
     const team = teams.find((t) => t.id === teamId) ?? null;
@@ -233,10 +229,12 @@ export default function RosterScreen({
         return;
       }
       if ((body.total ?? 0) === 0) {
-        toast.success("Nothing to fetch — every waiver we know about is already recorded.");
+        toast.success(
+          "Nothing to fetch — every waiver we know about is already recorded.",
+        );
       } else {
         toast.success(
-          `Checked ${body.total} waiver(s): recovered ${body.synced ?? 0}, ${body.withDocument ?? 0} with the signed document.`
+          `Checked ${body.total} waiver(s): recovered ${body.synced ?? 0}, ${body.withDocument ?? 0} with the signed document.`,
         );
       }
       await load({ quiet: true });
@@ -249,8 +247,18 @@ export default function RosterScreen({
 
   /** The roster as a spreadsheet — name, phone, team, waiver, payment. */
   const downloadCsv = () => {
-    const headers = ["First name", "Last name", "Phone", "Email", "Team", "Role", "Waiver", "Paid", "Payment note"];
-    const csvRows = rows.map((r) => [
+    const headers = [
+      "First name",
+      "Last name",
+      "Phone",
+      "Email",
+      "Team",
+      "Role",
+      "Waiver",
+      "Paid",
+      "Payment note",
+    ];
+    const csvRows = visible.map((r) => [
       r.firstName,
       r.lastName,
       r.phone ?? "",
@@ -259,10 +267,16 @@ export default function RosterScreen({
       r.role === "guest" ? "Guest" : "Player",
       r.waiverOk ? "On file" : "Needed",
       r.paid ? "Yes" : "No",
-      r.freeEntryVia ? `Free via ${r.freeEntryVia}` : r.paymentMethod === "cash" && !r.paid ? "Bringing cash" : "",
+      r.freeEntryVia
+        ? `Free via ${r.freeEntryVia}`
+        : r.paymentMethod === "cash" && !r.paid
+          ? "Bringing cash"
+          : "",
     ]);
     const csv = [headers, ...csvRows]
-      .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+      .map((row) =>
+        row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","),
+      )
       .join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -275,19 +289,37 @@ export default function RosterScreen({
 
   return (
     <div className="space-y-4">
-      <TotalsBar totals={data?.totals} loading={loading} />
-
-      {showTeams && !loading && teamProgress.length > 0 && (
-        <TeamProgressPanel
-          progress={teamProgress}
-          selected={teamFilter}
-          onSelect={(id) =>
-            setTeamFilter((prev) => (prev === id ? undefined : id))
-          }
-        />
-      )}
-
-      <div className="dashboard-card p-4 space-y-4">
+      <div className="admin-summary" aria-label="Player totals">
+        {(
+          [
+            ["all", "Registered", data?.totals.signedUp],
+            ["accounted", "Paid or waived", data?.totals.paid],
+            ["unpaid", "Still unpaid", data?.totals.unpaid],
+            ["waiver-missing", "Missing waiver", data?.totals.waiverMissing],
+          ] as [PlayerFilter, string, number | undefined][]
+        ).map(([key, label, value]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={filter === key}
+            onClick={() =>
+              setParams({
+                filter: key === "all" ? null : key,
+                team: null,
+                q: null,
+              })
+            }
+          >
+            <strong>{loading || error ? "—" : (value ?? "—")}</strong>
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-zinc-400">
+        Paid and waived/free registrations are financially accounted for.
+        Progress is informational.
+      </p>
+      <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px]">
             <Search
@@ -299,25 +331,28 @@ export default function RosterScreen({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, phone or team"
+              aria-label="Search players"
               className="w-full pl-9 pr-3 py-2 bg-surface-2 border border-border-token text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand/50"
             />
           </div>
-          <div className="flex flex-wrap gap-1 bg-surface-2 rounded-lg p-1">
-            {visibleFilters.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFilter(f.id)}
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  filter === f.id
-                    ? "bg-base text-white"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
+          {showTeams && (
+            <label className="admin-field">
+              <span className="sr-only">Filter by team</span>
+              <select
+                aria-label="Filter by team"
+                value={teamValue}
+                onChange={(e) => setTeamValue(e.target.value || null)}
               >
-                {f.label}
-              </button>
-            ))}
-          </div>
+                <option value="">All teams</option>
+                <option value="unassigned">Unassigned</option>
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <button
             type="button"
             onClick={() => void load({ quiet: true })}
@@ -357,6 +392,41 @@ export default function RosterScreen({
           </button>
         </div>
 
+        <div className="admin-filters" aria-label="Player filters">
+          {visibleFilters.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={filter === key}
+              onClick={() => setFilter(key === "all" ? null : key)}
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setParams({ q: null, filter: null, team: null })}
+          >
+            Clear filters
+          </button>
+        </div>
+        <div className="flex items-center justify-between gap-3 text-xs text-zinc-400">
+          <span>
+            {loading
+              ? "Loading players…"
+              : error
+                ? "Player list unavailable"
+                : `Showing ${visible.length} of ${rows.length} players`}
+          </span>
+          <button
+            type="button"
+            className="admin-link"
+            disabled={!visible.length || !!error}
+            onClick={() => setMessaging(visible)}
+          >
+            Preview message to this list
+          </button>
+        </div>
         {adding && (
           <WalkInForm
             teams={teams}
@@ -371,8 +441,20 @@ export default function RosterScreen({
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
-        {loading ? (
-          <p className="py-8 text-center text-sm text-zinc-500">Loading roster…</p>
+        {error ? (
+          <div className="py-6">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void load()}
+            >
+              Retry loading players
+            </button>
+          </div>
+        ) : loading ? (
+          <p className="py-8 text-center text-sm text-zinc-500">
+            Loading roster…
+          </p>
         ) : visible.length === 0 ? (
           <p className="py-8 text-center text-sm text-zinc-500">
             {rows.length === 0
@@ -380,18 +462,49 @@ export default function RosterScreen({
               : "Nobody matches that filter."}
           </p>
         ) : (
-          <RosterTable
+          <PlayersTable
             rows={visible}
-            teams={teams}
             showTeams={showTeams}
-            busyId={busyId}
-            onTogglePaid={togglePaid}
-            onChangeTeam={changeTeam}
-            onSignWaiver={setSigning}
-            onFixDetails={setFixing}
+            onOpen={(row) => setSelectedId(row.id)}
           />
         )}
 
+        {selected && !signing && !fixing && !messaging && (
+          <PlayerDetail
+            key={selected.id}
+            row={selected}
+            teams={teams}
+            eventId={tournamentId}
+            showTeams={showTeams}
+            busy={busyId === selected.id}
+            onClose={() => setSelectedId(null)}
+            onTeam={(id) => void changeTeam(selected, id)}
+            onStatus={(status) => changeStatus(selected, status)}
+            onWaiver={() => setSigning(selected)}
+            onDetails={() => setFixing(selected)}
+            onMessage={() => setMessaging([selected])}
+            onRemove={() => removePlayer(selected)}
+          />
+        )}
+        {selectedId && !selected && !loading && !error && (
+          <p role="status" className="text-sm text-zinc-400">
+            This player is no longer on this event roster.{" "}
+            <button
+              type="button"
+              className="admin-link"
+              onClick={() => setSelectedId(null)}
+            >
+              Close record
+            </button>
+          </p>
+        )}
+        {messaging && (
+          <MessagePreview
+            rows={messaging}
+            initial={filter === "waiver-missing" ? "waiver" : "payment"}
+            onClose={() => setMessaging(null)}
+          />
+        )}
         {signing && (
           <SignWaiverModal
             row={signing}
@@ -411,435 +524,8 @@ export default function RosterScreen({
             }}
           />
         )}
-
-        {!loading && rows.length > 0 && (
-          <p className="text-xs text-zinc-500">
-            Showing {visible.length} of {rows.length}
-            {teamFilter !== undefined && (
-              <>
-                {" "}
-                ·{" "}
-                <button
-                  type="button"
-                  onClick={() => setTeamFilter(undefined)}
-                  className="underline underline-offset-2 hover:text-zinc-300"
-                >
-                  clear team filter
-                </button>
-              </>
-            )}
-            .
-          </p>
-        )}
       </div>
     </div>
-  );
-}
-
-function TotalsBar({
-  totals,
-  loading,
-}: {
-  totals: RosterTotals | undefined;
-  loading: boolean;
-}) {
-  const cells: {
-    label: string;
-    value: number | string;
-    tone?: string;
-    hint?: string;
-  }[] = [
-    { label: "Signed up", value: totals?.signedUp ?? "—" },
-    { label: "Paid", value: totals?.paid ?? "—", tone: "text-green-400" },
-    {
-      label: "Still owes",
-      value: totals?.unpaid ?? "—",
-      tone: (totals?.unpaid ?? 0) > 0 ? "text-yellow-400" : undefined,
-      /*
-        Deliberately a sub-line under "Still owes" rather than a sixth number.
-        Cash-expected is a *subset* of what is outstanding, and a card of its own
-        would read as a separate bucket to add up — which is how a total that
-        does not tally gets in front of somebody at the field.
-      */
-      hint:
-        (totals?.payingCash ?? 0) > 0
-          ? `${totals!.payingCash} bringing cash`
-          : undefined,
-    },
-    {
-      label: "Waiver on file",
-      value: totals?.waiverOnFile ?? "—",
-      tone: (totals?.waiverMissing ?? 0) > 0 ? "text-yellow-400" : "text-green-400",
-    },
-    { label: "No team", value: totals?.unassigned ?? "—" },
-  ];
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-      {cells.map((c) => (
-        <div key={c.label} className="dashboard-card p-4">
-          <p className="data-label">{c.label}</p>
-          <p
-            className={`text-2xl font-bold ${c.tone ?? "text-white"} ${
-              loading ? "opacity-40" : ""
-            }`}
-          >
-            {c.value}
-          </p>
-          {c.hint && (
-            <p
-              className={`text-[11px] text-amber-300/80 mt-0.5 ${
-                loading ? "opacity-40" : ""
-              }`}
-            >
-              {c.hint}
-            </p>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Payment progress per team — the pay-later view.
- *
- * Players sign up now and pay over the following weeks, so the question that
- * matters between signup and match day is "how far along is each team", not
- * "how many people paid in total". Deliberately reports; it does not enforce.
- * Nothing here blocks a player or a team, because being locked out on the day
- * over a payment deadline is a worse failure than chasing someone by text.
- */
-function TeamProgressPanel({
-  progress,
-  selected,
-  onSelect,
-}: {
-  progress: TeamProgress[];
-  selected: string | null | undefined;
-  onSelect: (teamId: string | null) => void;
-}) {
-  return (
-    <div className="dashboard-card p-4 space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold text-white">By team</h3>
-        <p className="text-xs text-zinc-500">Tap a team to filter the list</p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {progress.map((p) => {
-          const isSelected = selected === p.teamId;
-          const done = p.players > 0 && p.unpaid === 0;
-          return (
-            <button
-              key={p.teamId ?? "__unassigned"}
-              type="button"
-              aria-pressed={isSelected}
-              onClick={() => onSelect(p.teamId)}
-              className={`text-left rounded-lg border p-3 transition-colors ${
-                isSelected
-                  ? "border-brand bg-brand/10"
-                  : "border-border-token bg-surface-2 hover:border-zinc-600"
-              }`}
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span
-                  className={`text-sm font-medium truncate ${
-                    p.teamId === null ? "text-yellow-400" : "text-white"
-                  }`}
-                >
-                  {p.teamName}
-                </span>
-                <span
-                  className={`text-xs font-mono shrink-0 ${
-                    done ? "text-green-400" : "text-zinc-400"
-                  }`}
-                >
-                  {p.paid}/{p.players} paid
-                </span>
-              </div>
-
-              <div
-                className="mt-2 h-1.5 rounded-full bg-base overflow-hidden"
-                role="progressbar"
-                aria-valuenow={p.paidPercent}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={`${p.teamName} payment progress`}
-              >
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    done ? "bg-green-500" : "bg-brand"
-                  }`}
-                  style={{ width: `${p.paidPercent}%` }}
-                />
-              </div>
-
-              <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-zinc-500">
-                <span>{p.paidPercent}%</span>
-                {p.unpaid > 0 && (
-                  <span className="text-yellow-400">{p.unpaid} still owes</span>
-                )}
-                {p.waiverMissing > 0 && (
-                  <span className="text-red-400">
-                    {p.waiverMissing} no waiver
-                  </span>
-                )}
-                {p.players === 0 && <span>nobody yet</span>}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function RosterTable({
-  rows,
-  teams,
-  showTeams,
-  busyId,
-  onTogglePaid,
-  onChangeTeam,
-  onSignWaiver,
-  onFixDetails,
-}: {
-  rows: RosterRow[];
-  teams: RosterTeam[];
-  showTeams: boolean;
-  busyId: string | null;
-  onTogglePaid: (r: RosterRow) => void;
-  onChangeTeam: (r: RosterRow, teamId: string) => void;
-  onSignWaiver: (r: RosterRow) => void;
-  onFixDetails: (r: RosterRow) => void;
-}) {
-  return (
-    <div className="overflow-x-auto -mx-4 px-4">
-      <table className={`w-full text-sm ${showTeams ? "min-w-[640px]" : "min-w-[480px]"}`}>
-        <thead>
-          <tr className="text-left border-b border-border-token">
-            <th className="py-2 pr-3 text-zinc-400 font-medium">Player</th>
-            {showTeams && (
-              <th className="py-2 px-3 text-zinc-400 font-medium">Team</th>
-            )}
-            <th className="py-2 px-3 text-zinc-400 font-medium">Waiver</th>
-            <th className="py-2 pl-3 text-zinc-400 font-medium text-right">Paid</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.id}
-              className="border-b border-border-token/50 last:border-0"
-            >
-              <td className="py-2.5 pr-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-white font-medium">
-                    {rosterFullName(r) || "(no name)"}
-                  </span>
-                  {r.role === "guest" && (
-                    <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-surface-2 text-zinc-400 border border-border-token">
-                      Guest
-                    </span>
-                  )}
-                  {r.needsReview && (
-                    <span
-                      title="Email and phone point at different people — check this one."
-                      className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400"
-                    >
-                      <AlertTriangle size={10} />
-                      Check
-                    </span>
-                  )}
-                  {r.missing.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => onFixDetails(r)}
-                      title={
-                        r.missing.includes("emergency contact")
-                          ? "No emergency contact on file — nobody to call if they get hurt. Click to add one."
-                          : `Still needed: ${r.missing.join(", ")}. Click to fill in.`
-                      }
-                      className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-surface-2 text-zinc-400 border border-dashed border-border-token hover:text-white hover:border-zinc-500 transition-colors"
-                    >
-                      No {r.missing[0]}
-                    </button>
-                  )}
-                </div>
-                <div className="text-xs text-zinc-500">
-                  {r.phone || r.email || "—"}
-                </div>
-              </td>
-
-              {showTeams && (
-                <td className="py-2.5 px-3">
-                  {r.role === "guest" ? (
-                    <span className="text-zinc-500">—</span>
-                  ) : teams.length === 0 ? (
-                    <span className="text-zinc-500 text-xs">No teams yet</span>
-                  ) : (
-                    <select
-                      value={r.teamId ?? ""}
-                      disabled={busyId === r.id}
-                      onChange={(e) => onChangeTeam(r, e.target.value)}
-                      className="px-2 py-1 bg-surface-2 border border-border-token text-white rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 disabled:opacity-50"
-                    >
-                      <option value="">— No team —</option>
-                      {teams.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </td>
-              )}
-
-              <td className="py-2.5 px-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <WaiverCell row={r} />
-                  {/*
-                    Loud only when the person actually needs one. A covered
-                    row keeps the pen as a quiet icon so real signatures can
-                    still be collected at the field without the screen
-                    nagging people who are already cleared.
-                  */}
-                  {r.role === "player" && !r.waiverOk && (
-                    <button
-                      type="button"
-                      onClick={() => onSignWaiver(r)}
-                      title="Sign the waiver here, now, on this laptop"
-                      className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded border border-brand/40 text-brand hover:bg-brand/10 transition-colors"
-                    >
-                      <PenLine size={11} />
-                      Sign now
-                    </button>
-                  )}
-                  {r.role === "player" &&
-                    r.waiverOk &&
-                    r.waiverEvidence !== "document" && (
-                      <button
-                        type="button"
-                        onClick={() => onSignWaiver(r)}
-                        title="Collect a real signed document to replace the hand-recorded one"
-                        aria-label="Collect a real signature"
-                        className="p-1 text-zinc-500 hover:text-brand transition-colors"
-                      >
-                        <PenLine size={11} />
-                      </button>
-                    )}
-                </div>
-              </td>
-
-              <td className="py-2.5 pl-3 text-right">
-                <div className="inline-flex items-center gap-1.5">
-                  {/*
-                    The chip only ever appears beside "Unpaid" — `showsCashPending`
-                    drops it the moment the money lands, so nobody gets asked for
-                    cash they have already handed over. Marking them paid is the
-                    override; there is no second control to learn.
-                  */}
-                  {showsCashPending(r.paymentMethod, r.paymentStatus) && (
-                    <span
-                      title="This player said they're bringing cash to the field"
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                    >
-                      <Banknote size={11} />
-                      Cash
-                    </span>
-                  )}
-                  {/*
-                    D7: this person owes nothing, and the chip says why.
-
-                    The tournament title is in the tooltip rather than the label
-                    because the answer is only needed when somebody asks — but
-                    when they do ask, at the field, mid-argument, it has to be
-                    right there and not two screens away.
-                  */}
-                  {r.freeEntryVia && (
-                    <span
-                      title={`Free entry — on the roster for ${r.freeEntryVia}`}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                    >
-                      <Ticket size={11} />
-                      Free
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    disabled={busyId === r.id}
-                    onClick={() => onTogglePaid(r)}
-                    title={r.paid ? "Mark as not paid" : "Mark as paid"}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50 ${
-                      r.paid
-                        ? "bg-green-500/15 text-green-400 hover:bg-green-500/25"
-                        : "bg-surface-2 text-zinc-400 border border-border-token hover:text-white"
-                    }`}
-                  >
-                    {busyId === r.id ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : r.paid ? (
-                      <Check size={12} />
-                    ) : (
-                      <X size={12} />
-                    )}
-                    {r.paid ? "Paid" : "Unpaid"}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/**
- * A covered person reads as covered — a green check — whatever the paper
- * trail looks like (owner's decision, 2026-08-17). The audit's trigger case:
- * the operator himself, waiver valid through 2027, shown as "needs to sign"
- * because his record was an admin tick. Coverage and evidence are different
- * questions, so the evidence gap is a quiet tag, not an alarm.
- */
-function WaiverCell({ row }: { row: RosterRow }) {
-  if (!row.waiverOk) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-zinc-400">
-        <X size={12} className="text-red-400" />
-        Needs waiver
-      </span>
-    );
-  }
-  const expires = row.waiverExpiresAt
-    ? new Date(row.waiverExpiresAt).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : null;
-  const noDocument = row.waiverEvidence !== "document";
-  const noDocumentHint =
-    row.waiverEvidence === "override"
-      ? "Covered — but recorded by hand, so there is no signed document to produce. Use the pen to collect a real signature when convenient."
-      : "Covered — signed, but the document link was never stored. The document backfill can recover it.";
-  return (
-    <span
-      title={
-        noDocument
-          ? noDocumentHint
-          : expires
-            ? `Good through ${expires}`
-            : undefined
-      }
-      className="inline-flex items-center gap-1.5 text-xs text-green-400"
-    >
-      <Check size={12} />
-      {expires ? `to ${expires}` : "On file"}
-      {noDocument && (
-        <span className="text-[10px] text-zinc-500 normal-case">no doc</span>
-      )}
-    </span>
   );
 }
 
@@ -880,7 +566,7 @@ function SignWaiverModal({
   const markSignedOnPaper = async () => {
     if (
       !window.confirm(
-        `Mark ${rosterFullName(row) || "this player"} as covered without a signed document in the system? Only do this if you're holding their real signed paper waiver.`
+        `Mark ${rosterFullName(row) || "this player"} as covered without a signed document in the system? Only do this if you're holding their real signed paper waiver.`,
       )
     ) {
       return;
@@ -917,7 +603,7 @@ function SignWaiverModal({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ waiverType }),
-        }
+        },
       );
       const body = (await res.json()) as {
         signUrl?: string;
@@ -928,7 +614,10 @@ function SignWaiverModal({
         setError(body.error ?? "Could not start the waiver.");
         return;
       }
-      setSession({ signUrl: body.signUrl, embedSrc: body.embedSrc ?? body.signUrl });
+      setSession({
+        signUrl: body.signUrl,
+        embedSrc: body.embedSrc ?? body.signUrl,
+      });
     } catch {
       setError("Could not start the waiver.");
     } finally {
@@ -958,7 +647,7 @@ function SignWaiverModal({
       setError(
         body.reason === "not-finished"
           ? "Not signed yet — finish the form, then check again."
-          : "No waiver has been started for this player yet."
+          : "No waiver has been started for this player yet.",
       );
     } catch {
       setError("Could not check with DocuSeal.");
@@ -1259,7 +948,12 @@ function WalkInForm({
       const res = await fetch(`/api/admin/tournaments/${tournamentId}/roster`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, phone, teamId: teamId || null }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          phone,
+          teamId: teamId || null,
+        }),
       });
       const body = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -1330,8 +1024,16 @@ function WalkInForm({
         )}
       </div>
       <div className="flex items-center gap-3">
-        <button type="submit" disabled={saving} className="btn-primary disabled:opacity-60">
-          {saving ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}
+        <button
+          type="submit"
+          disabled={saving}
+          className="btn-primary disabled:opacity-60"
+        >
+          {saving ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : (
+            <UserPlus size={15} />
+          )}
           {saving ? "Adding…" : "Add to roster"}
         </button>
         <button

@@ -51,7 +51,7 @@ function candidateKey(name: string, contactId: string | null): string {
 function buildCandidates(
   teamId: string,
   rosterRows: RosterRow[],
-  previous: PreviousName[]
+  previous: PreviousName[],
 ): Candidate[] {
   const out: Candidate[] = [];
   const byContact = new Map<string, Candidate>();
@@ -71,7 +71,11 @@ function buildCandidates(
       }
       return;
     }
-    const c: Candidate = { key: candidateKey(name, contactId), name, contactId };
+    const c: Candidate = {
+      key: candidateKey(name, contactId),
+      name,
+      contactId,
+    };
     out.push(c);
     byName.set(lower, c);
     if (contactId) byContact.set(contactId, c);
@@ -90,7 +94,7 @@ function initialSide(
   score: number | null,
   scorers: MatchScorer[],
   rosterRows: RosterRow[],
-  previous: PreviousName[]
+  previous: PreviousName[],
 ): SideState {
   const candidates = buildCandidates(team.id, rosterRows, previous);
   const tallies: Record<string, number> = {};
@@ -191,8 +195,8 @@ export function EnterResultSheet({
       match.home_score,
       match.scorers,
       rosterRows,
-      previousNamesByTeam.get(homeTeam.id) ?? []
-    )
+      previousNamesByTeam.get(homeTeam.id) ?? [],
+    ),
   );
   const [away, setAway] = useState<SideState>(() =>
     initialSide(
@@ -200,8 +204,8 @@ export function EnterResultSheet({
       match.away_score,
       match.scorers,
       rosterRows,
-      previousNamesByTeam.get(awayTeam.id) ?? []
-    )
+      previousNamesByTeam.get(awayTeam.id) ?? [],
+    ),
   );
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -209,7 +213,7 @@ export function EnterResultSheet({
   const totalGoals = home.score + away.score;
   const totalScorers = useMemo(
     () => sideScorerTotal(home) + sideScorerTotal(away),
-    [home, away]
+    [home, away],
   );
   const balanced = totalGoals === totalScorers;
 
@@ -235,7 +239,9 @@ export function EnterResultSheet({
     }
     const saved = res.data.match;
     if (!saved) {
-      toast.error("Saved, but the match could not be read back. Refresh the page.");
+      toast.error(
+        "Saved, but the match could not be read back. Refresh the page.",
+      );
       return;
     }
     toast.success("Saved. Table and scorers updated.", {
@@ -254,7 +260,7 @@ export function EnterResultSheet({
     if (saving || clearing) return;
     if (
       !window.confirm(
-        "Clear this result? The score and every scorer are removed and the match goes back to not played."
+        "Clear this result? The score and every scorer are removed and the match goes back to not played.",
       )
     ) {
       return;
@@ -269,7 +275,9 @@ export function EnterResultSheet({
       return;
     }
     if (!res.data.match) {
-      toast.error("Cleared, but the match could not be read back. Refresh the page.");
+      toast.error(
+        "Cleared, but the match could not be read back. Refresh the page.",
+      );
       return;
     }
     toast.success("Result cleared.");
@@ -284,6 +292,7 @@ export function EnterResultSheet({
       title={played ? "Edit result" : "Enter result"}
       description={`${matchNo}${homeTeam.name} vs ${awayTeam.name}`}
       onClose={onClose}
+      dismissDisabled={saving || clearing}
       widthClass="md:max-w-3xl"
       footer={
         <>
@@ -318,6 +327,10 @@ export function EnterResultSheet({
         </>
       }
     >
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <ScoreControl team={homeTeam} state={home} onChange={setHome} />
+        <ScoreControl team={awayTeam} state={away} onChange={setAway} />
+      </div>
       <p
         className={`text-sm font-medium ${balanced ? "text-green-400" : "text-amber-300"}`}
         aria-live="polite"
@@ -349,8 +362,6 @@ function SideColumn({
   state: SideState;
   onChange: (next: SideState) => void;
 }) {
-  const setScore = (n: number) => onChange({ ...state, score: clampScore(n) });
-
   const bump = (key: string, delta: number) => {
     const current = state.tallies[key] ?? 0;
     const next = Math.max(0, Math.min(MAX_SCORE, current + delta));
@@ -371,17 +382,24 @@ function SideColumn({
     if (!name) return;
     const lower = name.toLowerCase();
     const existing = state.candidates.find(
-      (c) => c.name.toLowerCase() === lower
+      (c) => c.name.toLowerCase() === lower,
     );
     if (existing) {
       const tallies = {
         ...state.tallies,
-        [existing.key]: Math.min(MAX_SCORE, (state.tallies[existing.key] ?? 0) + 1),
+        [existing.key]: Math.min(
+          MAX_SCORE,
+          (state.tallies[existing.key] ?? 0) + 1,
+        ),
       };
       onChange({ ...state, tallies, other: "" });
       return;
     }
-    const c: Candidate = { key: candidateKey(name, null), name, contactId: null };
+    const c: Candidate = {
+      key: candidateKey(name, null),
+      name,
+      contactId: null,
+    };
     onChange({
       ...state,
       candidates: [...state.candidates, c],
@@ -396,40 +414,6 @@ function SideColumn({
       className="rounded-lg border border-border-token bg-surface-2/40 p-3 space-y-3"
     >
       <h4 className="truncate text-sm font-semibold text-white">{team.name}</h4>
-
-      <div className="flex items-center justify-center gap-2">
-        <button
-          type="button"
-          onClick={() => setScore(state.score - 1)}
-          disabled={state.score <= 0}
-          aria-label={`One less goal for ${team.name}`}
-          className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-border-token bg-surface text-white hover:border-brand/50 disabled:opacity-30"
-        >
-          <Minus size={20} />
-        </button>
-        <input
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={String(state.score)}
-          onChange={(e) => {
-            const digits = e.target.value.replace(/\D/g, "");
-            setScore(digits === "" ? 0 : Number(digits));
-          }}
-          onFocus={(e) => e.currentTarget.select()}
-          aria-label={`${team.name} score`}
-          className="h-12 w-20 rounded-lg border border-border-token bg-surface-2 text-center font-mono text-3xl font-bold text-white focus:outline-none focus:ring-2 focus:ring-brand"
-        />
-        <button
-          type="button"
-          onClick={() => setScore(state.score + 1)}
-          disabled={state.score >= MAX_SCORE}
-          aria-label={`One more goal for ${team.name}`}
-          className="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-border-token bg-surface text-white hover:border-brand/50 disabled:opacity-30"
-        >
-          <Plus size={20} />
-        </button>
-      </div>
 
       <ul className="divide-y divide-border-token/60">
         {state.candidates.length === 0 && (
@@ -504,10 +488,14 @@ function TallyRow({
       className={`flex min-h-11 items-center gap-2 py-1 ${active ? "-mx-2 rounded-md bg-brand/10 px-2" : ""}`}
     >
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-sm ${active ? "font-semibold text-white" : "text-zinc-200"}`}>
+        <p
+          className={`truncate text-sm ${active ? "font-semibold text-white" : "text-zinc-200"}`}
+        >
           {label}
         </p>
-        {help && <p className="text-[11px] leading-tight text-zinc-500">{help}</p>}
+        {help && (
+          <p className="text-[11px] leading-tight text-zinc-500">{help}</p>
+        )}
       </div>
       {active && (
         <>
@@ -533,5 +521,55 @@ function TallyRow({
         <Plus size={16} />
       </button>
     </li>
+  );
+}
+
+function ScoreControl({
+  team,
+  state,
+  onChange,
+}: {
+  team: SideTeam;
+  state: SideState;
+  onChange: (next: SideState) => void;
+}) {
+  const setScore = (n: number) => onChange({ ...state, score: clampScore(n) });
+  return (
+    <section className="text-center space-y-2">
+      <h4 className="text-sm font-semibold">{team.name}</h4>{" "}
+      <div className="flex items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => setScore(state.score - 1)}
+          disabled={state.score <= 0}
+          aria-label={`One less goal for ${team.name}`}
+          className="inline-flex h-11 w-9 items-center justify-center rounded-lg border border-border-token bg-surface text-white hover:border-brand/50 disabled:opacity-30"
+        >
+          <Minus size={20} />
+        </button>
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={String(state.score)}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, "");
+            setScore(digits === "" ? 0 : Number(digits));
+          }}
+          onFocus={(e) => e.currentTarget.select()}
+          aria-label={`${team.name} score`}
+          className="h-12 w-14 rounded-lg border border-border-token bg-surface-2 text-center font-mono text-3xl font-bold text-white focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+        <button
+          type="button"
+          onClick={() => setScore(state.score + 1)}
+          disabled={state.score >= MAX_SCORE}
+          aria-label={`One more goal for ${team.name}`}
+          className="inline-flex h-11 w-9 items-center justify-center rounded-lg border border-border-token bg-surface text-white hover:border-brand/50 disabled:opacity-30"
+        >
+          <Plus size={20} />
+        </button>
+      </div>
+    </section>
   );
 }
