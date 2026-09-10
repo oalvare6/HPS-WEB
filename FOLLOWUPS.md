@@ -728,3 +728,27 @@ applied, no ledger row was touched, no row was changed. Nothing deployed or merg
 - **Left alone:** `backup_2026_08_17` (13 hand-made backup tables, no RLS) is data, not
   schema, and is not reproduced; narrowing production's `registration_type` check is a
   production change for a later, deliberate step.
+
+### Stage 1.6.1 — the Preview branch ran the chain (2026-09-10, PR #9)
+
+- **`IF EXISTS` never guards the relation named after `on`, and PostgreSQL 16 hides it.**
+  `20260513121100_drop_legacy_overrides.sql` opened with `drop trigger if exists … on
+  public.league_round_overrides` — a table no migration creates, on purpose. Supabase's
+  PostgreSQL **17.6** answers `42P01` and stops the chain at file 19 of 41; PostgreSQL
+  **16.13**, what `scripts/_pg.ts` boots locally, downgrades it to `NOTICE: relation … does
+  not exist, skipping` and exits 0. The from-empty suite was green 44/44 on the exact commit
+  the platform rejected, because the only thing it asserted was psql's exit code. **Fixed** by
+  deleting the line (dropping a table drops its triggers), and the suite now reads the
+  server's notices, fails on that one shape, and proves its own tripwire is armed before
+  trusting a green run — discovered 2026-09-10
+- **Local PostgreSQL is not Supabase's PostgreSQL, and only one difference is now covered.**
+  The tripwire closes the missing-relation gap on either major. Every other 16↔17 difference
+  is still unproved locally; the Preview branch on the pull request is the last word. If a
+  PostgreSQL 17 becomes available to the harness (`HPS_TEST_DATABASE_URL`, or a `postgres:17`
+  container), run the from-empty suite against it — discovered 2026-09-10
+- **Report §6 is superseded by §12.** Branching was refused on the Free plan when Stage 1.6
+  was written; the organisation was upgraded the same day and PR #9 created preview branch
+  `ddjfsqqaywmmtvaqnfqn`. The June preview branch for PR #2 (`vwgdxrjkhpvuyokydtyf`) is still
+  dead and still worth deleting — discovered 2026-09-10
+- **Not changed:** the production migration ledger is still drifted (report §8), and
+  `supabase db push` against production is still forbidden until it is repaired.

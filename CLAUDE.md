@@ -70,7 +70,24 @@ until it is repaired — it would re-run nineteen files, one of them data-bearin
 from-empty test diffs a fresh build against `docs/production-schema-catalog-2026-09-10.json`:
 when you add a migration, expect it to show new objects as FRESH-ONLY until production has
 the migration and the catalog is re-captured (the query is `scripts/sql/schema-catalog.sql`).
-Supabase branching itself needs the Pro plan; the organisation was on Free on 2026-09-10.
+
+**`IF EXISTS` guards the child object, never the relation named after `on` — and PostgreSQL 16
+hides the difference (2026-09-10, PR #9).** `drop trigger if exists t on public.gone;` is a hard
+`42P01` on **PostgreSQL 17**, which is what Supabase runs (verified 17.6 on the Preview branch
+itself). **PostgreSQL 16**, which is what a developer machine and this harness usually have,
+downgrades the same statement to `NOTICE: relation "public.gone" does not exist, skipping` and
+exits 0. So the from-empty suite went green 44/44 on exactly the commit whose Preview branch
+stopped dead at file 19 of 41. Nothing was omitted and no preamble hid it — the file set, the
+order and the statement were all what Supabase ran; the **servers** disagreed, and the suite was
+only reading the exit code. The same trap applies to `drop policy`/`drop rule ... on <relation>`
+and to `alter table if exists`. `drop table|index|function|type|view|sequence if exists` each
+name their own object and are safe. `scripts/test-migrations-from-empty.ts` now reads the
+server's notices, fails on `relation "…" does not exist, skipping` (and *only* that shape — the
+similar `trigger "t" for relation "r" …` proves the relation was there), and **proves its own
+tripwire is armed** before trusting a green run, by first firing a deliberately broken statement
+at a relation that never existed. Keep that self-check: it is the only thing standing between a
+tolerant local server and another silent pass. The Preview branch on the pull request remains the
+last word on anything else 16 and 17 disagree about.
 
 **Two remediation invariants (2026-09-09, `remediation_stage_1_2_report.md`).** Knowing an
 email address never authorises anything: `POST /api/pay/eligibility` answers every caller

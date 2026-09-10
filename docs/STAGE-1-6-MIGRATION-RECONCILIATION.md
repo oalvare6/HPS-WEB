@@ -482,3 +482,125 @@ deploy.
   `anon`/`authenticated` roles hold no grants on it before then.
 - **`waiver-signatures` bucket holds 2 objects nothing in the code reads.** Kept because it
   exists; not a dependency.
+
+---
+
+## 12. Stage 1.6.1 — what the Preview branch found (2026-09-10)
+
+§6 said branching was refused on the Free plan and that the platform's own image had never run
+these files. That changed the same day: the organisation was upgraded, PR #9 was opened, and the
+GitHub integration created preview branch `ddjfsqqaywmmtvaqnfqn` and ran the chain.
+
+**It failed at file 19 of 41**, and §5.4's first bullet — *"PostgreSQL 16.13 is not 17.6.1"* —
+turned out to name the exact reason.
+
+```
+ERROR: relation "public.league_round_overrides" does not exist (SQLSTATE 42P01)
+At statement: 0
+drop trigger if exists league_round_overrides_set_updated_at on public.league_round_overrides
+```
+
+### 12.1 Root cause
+
+`supabase/migrations/20260513121100_drop_legacy_overrides.sql` opened with
+
+```sql
+drop trigger if exists league_round_overrides_set_updated_at on public.league_round_overrides;
+```
+
+**`IF EXISTS` guards the trigger. It does not guard the relation named after `on`.** The table was
+only ever created by a loose script — `docs/archive/loose-sql/league-round-overrides.sql` — which
+this stage deliberately did *not* turn into a baseline migration, because the table is meant to be
+gone. So on every clean database the relation has never existed, and the statement has nothing to
+hang off.
+
+Production and every other historical database survived it because the table *was* there once.
+
+### 12.2 Why the from-empty test passed anyway
+
+Not an omitted file, and not the preamble. Verified:
+
+- the suite reads `supabase/migrations/` and applies **all 41 files in the same order Supabase
+  does** — the failing file was executed;
+- `scripts/sql/local-supabase-preamble.sql` never mentions `league_round_overrides`, and the
+  suite already asserted the preamble leaves `public` empty, so it cannot have supplied it.
+
+**The two servers disagree.** Measured on both:
+
+| | `drop trigger if exists t on public.<never existed>` |
+|---|---|
+| PostgreSQL **17.6** (Supabase — probed on preview branch `ddjfsqqaywmmtvaqnfqn` itself) | `ERROR: 42P01 relation … does not exist` — chain stops |
+| PostgreSQL **16.13** (Ubuntu 24.04; what `scripts/_pg.ts` boots) | `NOTICE: relation … does not exist, skipping` — statement skipped, **exit 0** |
+
+The suite asserted psql's exit code and nothing else, so a statement the server **skipped** was
+indistinguishable from one it **ran**. 44/44 green on the same commit the platform rejected.
+
+This is not `supautils` or any Supabase hook: the preview branch's `shared_preload_libraries` is
+`pg_stat_statements, pgaudit, plpgsql, plpgsql_check, pg_cron, pg_net, pgsodium, auto_explain,
+pg_tle, plan_filter, supabase_vault` — no DDL interceptor. It is core PostgreSQL 17 strictness.
+
+### 12.3 The fix
+
+The `drop trigger` line is **deleted**, not guarded. Dropping a table drops its triggers with it,
+so the line bought nothing on a database that had the table, and broke every database that did
+not. What remains is self-guarding — each statement names its own object:
+
+```sql
+drop table if exists public.league_round_overrides;
+drop function if exists public.set_updated_at_round_overrides();
+```
+
+No table is created merely to be dropped. The file carries a comment saying why the line is absent
+and must not come back.
+
+### 12.4 Audit of the rest of the chain
+
+Both mechanically and by reading. The chain was applied from empty on PostgreSQL 16 with **every
+NOTICE captured**, because on 16 that notice is the only trace the 42P01 class leaves:
+
+- **`relation "X" does not exist, skipping`** — the parent relation was missing. This is the
+  42P01 class. **One occurrence in 41 files: the one above.** None after the fix.
+- `trigger "T" for relation "R" does not exist, skipping` (10×) and `policy "P" for relation "R"
+  does not exist, skipping` (6×) — the opposite finding: the relation *was* there. Normal for an
+  idempotent migration.
+- `table "…" / index "…" / function "…" / extension "…" does not exist|already exists, skipping`
+  — self-guarded, each names its own object.
+
+Statically: 18 `drop trigger if exists … on`, 8 `drop policy if exists … on`, 12 `drop column if
+exists` and 2 `drop constraint if exists` (both inside an unguarded `alter table`, so they fail
+loudly rather than silently), 8 `drop index if exists`, 8 `drop table if exists`, 6 `drop function
+if exists`. There is no `alter table if exists` anywhere. Every parent relation but
+`league_round_overrides` is created by an earlier-sorting migration.
+
+### 12.5 The test that would have caught it
+
+`scripts/test-migrations-from-empty.ts` no longer trusts the exit code alone.
+
+1. **`scripts/_pg.ts` surrenders the notices.** `applyFile` (and a new `applySql`) return every
+   `NOTICE`/`WARNING` the server raised alongside `ok`.
+2. **The 42P01 class is a failure.** Any `NOTICE: relation "X" does not exist, skipping` during
+   the from-empty pass *or* the second (idempotency) pass fails the run, naming file and relation.
+   The regex is anchored so it cannot match the benign `… for relation …` shapes.
+3. **The tripwire proves itself armed first.** Before the chain runs, the suite fires
+   `drop trigger if exists … on public.hps_tripwire_relation_that_never_existed` and requires this
+   server to *either* refuse it (17) *or* announce the skip in a notice the detector recognises
+   (16). A server that does neither cannot see what a Preview branch sees, and the run says so
+   instead of passing.
+4. **The set and order are asserted to be Supabase's.** Filename order is checked to be the same
+   sequence as version order.
+5. **The header names the server**, and warns when the major is not Supabase's 17.
+
+**Proof, all on the same PostgreSQL 16.13 that was green before:**
+
+| Migration | Suite | Result |
+|---|---|---|
+| original (broken) | original | **44/44 passed** — the blind spot |
+| original (broken) | updated | **46/48, exit 1** — `no migration reaches for a relation that does not exist on a clean database … got ["20260513121100_drop_legacy_overrides.sql: public.league_round_overrides"] expected []` |
+| fixed | updated | **48/48 passed** |
+
+### 12.6 What is still not proved
+
+The tripwire closes *this* 16↔17 difference on either version. It is not a claim that every other
+one is covered. **The Preview branch on the pull request remains the last word**, and nothing
+below §8 changed: the production ledger is still drifted, and `supabase db push` against
+production is still forbidden.

@@ -15,6 +15,7 @@
  * name order, each in its own transaction — the way `supabase db push` and a
  * Preview branch apply them. Then it:
  *
+ *   0. proves its own tripwire is armed on this server (see below);
  *   1. names the first file that fails, if any: the "first broken dependency";
  *   2. asserts every table and function the application reaches through
  *      `supabaseAdmin` exists, plus the invariants the docs promise (the two
@@ -28,6 +29,41 @@
  *      production. Every difference must be on the allow-list below with a
  *      reason, and every allow-list entry must still match something, so a
  *      difference that quietly disappears (or a new one) is reported.
+ *
+ * ## The exit code is not the whole story (2026-09-10, PR #9)
+ *
+ * The first version of this file went green on 44/44 while the Supabase Preview
+ * branch for the same commit stopped dead at file 19 of 41:
+ *
+ *   ERROR: relation "public.league_round_overrides" does not exist (SQLSTATE 42P01)
+ *   at 20260513121100_drop_legacy_overrides.sql:
+ *     drop trigger if exists league_round_overrides_set_updated_at
+ *       on public.league_round_overrides;
+ *
+ * Nothing was omitted here and no preamble hid it: the file set, the order and
+ * the statement were all exactly what Supabase ran. The SERVERS disagreed.
+ * `if exists` guards the trigger, never the relation named after `on`, and
+ * PostgreSQL 17 (Supabase, verified 17.6 on the Preview branch itself) treats
+ * the absent relation as 42P01, where PostgreSQL 16 — the version a developer
+ * machine most often has, and the one this harness boots — downgrades it to
+ * `NOTICE: relation "…" does not exist, skipping` and exits 0. A statement the
+ * server SKIPPED was indistinguishable here from one it RAN, because the only
+ * thing being asserted was psql's exit code.
+ *
+ * So this file now reads the notices as well, and treats that one shape as a
+ * failure. Note which shape: `relation "X" does not exist, skipping` means the
+ * PARENT relation was gone, and is the 42P01 class. The similar-looking
+ * `trigger "T" for relation "R" does not exist, skipping` and `policy "P" for
+ * relation "R" …` mean the opposite — the relation was there, only the child
+ * object was absent — and are what an idempotent migration is supposed to say.
+ *
+ * Reading notices only helps on a server tolerant enough to emit them, so the
+ * suite also proves the tripwire is armed before trusting it: it runs a
+ * deliberately broken `drop trigger if exists … on <a relation that has never
+ * existed>` and requires this server to either refuse it (as PostgreSQL 17
+ * does) or announce the skip in a notice the detector recognises. A server
+ * that does neither cannot see the failure a Preview branch sees, and the run
+ * says so rather than passing.
  *
  * When a migration is added, this test changes in one of two ways: the new
  * objects show up as FRESH-ONLY until production has the migration and the
@@ -52,6 +88,34 @@ const PREAMBLE = join(REPO_ROOT, "scripts", "sql", "local-supabase-preamble.sql"
 const CATALOG_SQL = join(REPO_ROOT, "scripts", "sql", "schema-catalog.sql");
 const PRODUCTION_CATALOG = join(REPO_ROOT, "docs", "production-schema-catalog-2026-09-10.json");
 const DATABASE_NAME = "hps_migrations_test";
+
+/** What Supabase runs. A local server on any other major is more forgiving in places. */
+const SUPABASE_MAJOR = 17;
+
+/* ------------------------------------------------------------------ */
+/* The 42P01 class: a statement whose PARENT RELATION was missing      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `NOTICE: relation "X" does not exist, skipping` — emitted by
+ * `drop trigger|policy|rule … on <missing relation>` and by
+ * `alter table if exists <missing relation>`. Every one of those is 42P01 on
+ * PostgreSQL 17, so on a clean database each is a migration that will stop a
+ * Supabase Preview branch.
+ *
+ * Deliberately anchored so it cannot match the shapes that prove the relation
+ * WAS present — `trigger "T" for relation "R" does not exist, skipping`,
+ * `policy "P" for relation "R" …` — nor the self-guarded ones that name their
+ * own object: `table "T" …`, `index "I" …`, `function f() …`.
+ */
+const MISSING_RELATION = /^NOTICE:\s+relation "([^"]+)" does not exist, skipping/;
+
+function missingRelations(notices: string[]): string[] {
+  return notices.map((n) => MISSING_RELATION.exec(n)?.[1]).filter((r): r is string => r !== undefined);
+}
+
+/** A relation name no schema will ever hold, for arming the tripwire. */
+const NEVER_EXISTED = "hps_tripwire_relation_that_never_existed";
 
 /* ------------------------------------------------------------------ */
 /* What the application needs to exist                                 */
@@ -256,6 +320,20 @@ async function main() {
   const { db, note } = await provisionEmptyDatabase(DATABASE_NAME);
   console.log(`# migrations from empty — ${note}\n# ${files.length} files in supabase/migrations/\n`);
 
+  if (Number(db.serverVersion.split(".")[0]) !== SUPABASE_MAJOR) {
+    console.log(
+      [
+        `# NOTE: this ran on PostgreSQL ${db.serverVersion}; Supabase runs ${SUPABASE_MAJOR}.x.`,
+        `#       The majors differ in how strictly they read a missing relation: 16 skips`,
+        `#       \`drop trigger if exists … on <missing table>\` with a notice, 17 raises 42P01.`,
+        `#       The tripwire below closes that one gap on either version. It is not a promise`,
+        `#       that every other ${SUPABASE_MAJOR}↔${db.serverVersion.split(".")[0]} difference is covered — the Preview branch on the`,
+        `#       pull request is still the last word.`,
+        "",
+      ].join("\n")
+    );
+  }
+
   /* ---------------------------------------------------------------- */
   /* 0. The starting point really is empty                             */
   /* ---------------------------------------------------------------- */
@@ -278,6 +356,26 @@ async function main() {
   }
 
   /* ---------------------------------------------------------------- */
+  /* 0b. The tripwire is armed on THIS server                          */
+  /* ---------------------------------------------------------------- */
+  {
+    // A migration that reaches for a relation which has never existed must not
+    // be able to pass this suite quietly. PostgreSQL 17 refuses it outright;
+    // PostgreSQL 16 skips it with a notice section 2 reads. If a server does
+    // neither, the notice detector is blind and a green run means nothing —
+    // so say that, loudly, instead of proceeding.
+    const probe = await db.applySql(`drop trigger if exists hps_tripwire_trigger on public.${NEVER_EXISTED};`);
+    const refused = !probe.ok;
+    const announced = missingRelations(probe.notices).some((r) => r.includes(NEVER_EXISTED));
+    t.check(
+      "the tripwire is armed: this server either refuses `drop trigger if exists … on <a relation that never existed>` (PostgreSQL 17, what Supabase runs) or announces the skip in a notice this suite recognises (PostgreSQL 16)",
+      refused || announced,
+      `it did NEITHER — exit ok=${probe.ok}, notices=${JSON.stringify(probe.notices)}. ` +
+        "On this server the suite CANNOT see the failure a Supabase Preview branch sees. Do not trust a green run."
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
   /* 1. File names are what the platform expects                       */
   /* ---------------------------------------------------------------- */
   {
@@ -285,14 +383,25 @@ async function main() {
     t.check("every file is named <14-digit version>_<snake_name>.sql", bad.length === 0, bad.map((b) => b.file).join(", "));
     const versions = new Set(files.map((f) => f.version));
     t.eq("no two files share a version", versions.size, files.length);
+
+    // Supabase orders by the 14-digit version; this suite reads the directory
+    // and sorts by filename. They agree only while the version is the prefix —
+    // so check it, rather than assume the two orders are the same list.
+    t.eq(
+      "filename order is the version order Supabase applies, so this suite runs the same set in the same sequence",
+      files.map((f) => f.file),
+      [...files].sort((a, b) => a.version.localeCompare(b.version)).map((f) => f.file)
+    );
   }
 
   /* ---------------------------------------------------------------- */
   /* 2. The chain applies, in order, from nothing                      */
   /* ---------------------------------------------------------------- */
   let firstFailure: { file: string; error: string } | null = null;
+  const reachedForNothing: string[] = [];
   for (const { file, version, name } of files) {
     const res = await db.applyFile(join(MIGRATIONS_DIR, file));
+    for (const relation of missingRelations(res.notices)) reachedForNothing.push(`${file}: ${relation}`);
     if (!res.ok) {
       firstFailure = { file, error: res.error };
       break;
@@ -303,6 +412,15 @@ async function main() {
     `all ${files.length} migrations apply to an empty database in order`,
     firstFailure === null,
     firstFailure ? `FIRST BROKEN DEPENDENCY: ${firstFailure.file}\n        ${firstFailure.error.trim().split("\n").slice(-3).join("\n        ")}` : ""
+  );
+  // Exiting 0 is not the same as having run. On PostgreSQL 16 a statement whose
+  // parent relation is absent is skipped with a notice and the file "succeeds";
+  // on the PostgreSQL 17 Supabase runs the same statement is 42P01 and the
+  // Preview branch stops there. Both servers agree this list must be empty.
+  t.eq(
+    "no migration reaches for a relation that does not exist on a clean database (`if exists` guards the child object, never the relation named after `on` — 42P01 on PostgreSQL 17)",
+    reachedForNothing,
+    []
   );
   if (firstFailure) {
     console.log("\nStopped at the first failure; nothing after it was attempted, exactly as a Preview branch would stop.");
@@ -400,11 +518,20 @@ async function main() {
   {
     const before = await db.rows<Item>(`${readFileSync(CATALOG_SQL, "utf8")}`);
     const failures: string[] = [];
+    const secondPassReachedForNothing: string[] = [];
     for (const { file } of files) {
       const res = await db.applyFile(join(MIGRATIONS_DIR, file));
+      for (const relation of missingRelations(res.notices)) secondPassReachedForNothing.push(`${file}: ${relation}`);
       if (!res.ok) failures.push(`${file}: ${res.error.trim().split("\n").slice(-2).join(" ")}`);
     }
     t.eq("every migration is safe to re-run on a database that already has it", failures, []);
+    // A file that drops a relation an earlier file created leaves the same trap
+    // for the second pass, on the same two servers, for the same reason.
+    t.eq(
+      "and none of them reaches for a missing relation on the way through a second time",
+      secondPassReachedForNothing,
+      []
+    );
     const after = await db.rows<Item>(`${readFileSync(CATALOG_SQL, "utf8")}`);
     t.check(
       "and the schema is identical after the second pass",

@@ -143,8 +143,17 @@ export type PgDb = {
    * Apply a SQL file the way the Supabase CLI applies a migration: the whole
    * file as one transaction, aborting on the first error. Returns the error
    * text instead of throwing so a caller can name the file that failed.
+   *
+   * `notices` carries every NOTICE/WARNING the server raised, because the exit
+   * code alone is not enough to know a migration did what it says. PostgreSQL
+   * 16 downgrades `drop trigger if exists ... on <missing relation>` to
+   * `NOTICE: relation "…" does not exist, skipping` and exits 0, where the
+   * PostgreSQL 17 Supabase runs raises 42P01 and stops the chain. Reading the
+   * notices is what lets a test on 16 see the failure a Preview branch sees.
    */
-  applyFile(path: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  applyFile(path: string): Promise<Applied>;
+  /** `applyFile` for a SQL string rather than a file. */
+  applySql(sql: string): Promise<Applied>;
   /**
    * Run statements as one transaction in a SEPARATE connection, without
    * awaiting — for concurrency tests. `psql -c` wraps its statements in a
@@ -155,12 +164,44 @@ export type PgDb = {
   reset(): Promise<void>;
 };
 
-async function psql(dsn: string, args: string[]): Promise<string> {
-  const { stdout } = await run("psql", ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-d", dsn, ...args], {
+/** The outcome of applying SQL, with everything the server said about it. */
+export type Applied = ({ ok: true } | { ok: false; error: string }) & { notices: string[] };
+
+async function psqlBoth(dsn: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return run("psql", ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-d", dsn, ...args], {
     maxBuffer: 32 * 1024 * 1024,
     env: { ...process.env, PGCONNECT_TIMEOUT: "10" },
   });
-  return stdout;
+}
+
+async function psql(dsn: string, args: string[]): Promise<string> {
+  return (await psqlBoth(dsn, args)).stdout;
+}
+
+/**
+ * The server's own NOTICE/WARNING lines, with psql's `file:line:` prefix
+ * stripped, so callers can match on the message PostgreSQL actually wrote.
+ */
+function serverMessages(stderr: string): string[] {
+  return stderr
+    .split("\n")
+    .map((line) => line.replace(/^psql:.*?:\d+:\s*/, "").trim())
+    .filter((line) => /^(NOTICE|WARNING):/.test(line));
+}
+
+/** Apply SQL through psql, returning the error text and the notices instead of throwing. */
+async function applied(dsn: string, args: string[]): Promise<Applied> {
+  try {
+    const { stderr } = await psqlBoth(dsn, args);
+    return { ok: true as const, notices: serverMessages(stderr) };
+  } catch (err) {
+    const stderr = typeof (err as { stderr?: unknown }).stderr === "string" ? (err as { stderr: string }).stderr : "";
+    return {
+      ok: false as const,
+      error: err instanceof Error ? err.message : String(err),
+      notices: serverMessages(stderr),
+    };
+  }
 }
 
 function makeDb(dsn: string, serverVersion: string, postgrestDsn: string | null): PgDb {
@@ -209,12 +250,11 @@ function makeDb(dsn: string, serverVersion: string, postgrestDsn: string | null)
     },
 
     async applyFile(path: string) {
-      try {
-        await psql(dsn, ["--single-transaction", "-f", path]);
-        return { ok: true as const };
-      } catch (err) {
-        return { ok: false as const, error: err instanceof Error ? err.message : String(err) };
-      }
+      return applied(dsn, ["--single-transaction", "-f", path]);
+    },
+
+    async applySql(sql: string) {
+      return applied(dsn, ["--single-transaction", "-c", sql]);
     },
 
     async concurrent(sql: string) {
