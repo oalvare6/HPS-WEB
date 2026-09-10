@@ -795,3 +795,26 @@ not deployed, not merged. No migration; no production row changed; production re
 - **Deliberately not touched:** Stripe settlement, waiver/auth logic, refunds/disputes,
   migration-ledger drift, the `FeaturedTournamentCarousel` (unused before this stage, still
   unused), the World Cup standings override.
+
+## Stage 2.2 — isolated `hps-dev` (2026-09-10)
+
+- **A team from another event is not refused by the database.** Nothing forbids
+  `registrations.team_id` pointing at a team whose `tournaments.id` differs from the
+  registration's. `PATCH /api/admin/registrations/[id]` does check (it compares the team's
+  `tournament_id`), so nothing is wrong today — but the invariant rests on application code
+  alone, and a second writer or a new route would reintroduce it silently. Proven by direct SQL
+  against `hps-dev`: the assignment was accepted with no constraint raised. Candidate for a
+  database-level guard in Stage 2.3.
+- **Matching a project ref proves nothing about the API keys.** Stage 2.2's launcher verified the
+  Supabase URL and reported the target good while every query answered `Invalid API key`. Keys
+  are now preflighted against the live project (`scripts/stage22-guard.ts`); a `sb_secret_…` key
+  encodes no project, so a wrong-project secret key cannot be caught any other way. Related:
+  an egress proxy answering `403 Host not in allowlist` is not a 401 and must never be scored as
+  authentication — only a recognisable PostgREST response counts.
+- **A verifier that cannot parse a response must say so.** `stage22-verify-local.ts` assumed
+  `/api/admin/tournaments` returned a bare array; it returns `{ tournaments: [...] }`, and the
+  fallback reported four seeded events as missing. Payload reads now raise a contract error
+  naming the keys that arrived. `scripts/test-stage22-verify-contract.ts` holds the line.
+- **Google OAuth is untested** against `hps-dev` — skipped by decision, not by oversight.
+- **The SQL-level Stage 2.2 results are not UI coverage.** `docs/STAGE-2-2-REPORT.md` §5 was
+  proved by executing SQL; the admin's own routes are covered only by the local acceptance run.

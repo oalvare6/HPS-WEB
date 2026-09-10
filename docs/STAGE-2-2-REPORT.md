@@ -1,11 +1,16 @@
 # Stage 2.2 — isolated `hps-dev`, built and validated at the database layer
 
-**Status: the database half is done and verified. The application half is not, and this
-document does not claim it.** Everything below was proved by executing SQL against the real
-development project. None of it proves the Stage 2.1 admin renders correctly, because the
-remote session that did this work could not reach the project over HTTP. The route-level and
-browser-level checks are prepared and scripted; they run on the operator's machine
-(§7), and until they do, **Stage 2.2 is not complete**.
+**Status: the database half is done and verified. The application half is bring-up complete but
+its acceptance run is unconfirmed, and this document does not claim it.** Everything in §2–§5
+was proved by executing SQL against the real development project. None of it proves the Stage
+2.1 admin renders correctly, because the remote session that did this work could not reach the
+project over HTTP.
+
+The operator has since taken the local path (§8). It got as far as a working app — admin
+authentication passes and `/api/admin/tournaments` answers 200 — and surfaced two real defects
+on the way, both fixed and both recorded in §7. **The acceptance run's own result has not been
+reported back at the time of writing, so Stage 2.2 is not signed off.** The remaining work is
+one command and reading its output.
 
 Date: 2026-09-10. Branch: `claude/dazzling-wozniak-es39bo`. Production was never queried,
 migrated, seeded or configured.
@@ -157,22 +162,80 @@ browser keys exactly as intended.
 is the sole enforcement point. Nothing is currently wrong — the route does check — but the
 invariant rests on application code alone, so a second writer or a future route would
 reintroduce it silently. This is a candidate for a Stage 2.3 database-level guard, and it is
-why that row of the acceptance matrix genuinely requires the route test in §7 rather than SQL.
+why that row of the acceptance matrix genuinely requires the route test in §8 rather than SQL.
+It is recorded in [FOLLOWUPS.md](../FOLLOWUPS.md) and proposed as Stage 2.3 item C.
 
 **Security advisors report only pre-existing conditions that production shares:** thirteen
 RLS-enabled tables with no policy (that *is* the design — nothing but the service-role key may
 read them), a mutable `search_path` on the `set_updated_at_*` helpers, and `citext` installed
 in `public`. No backend contract was changed to quiet them.
 
-## 7. What is NOT proved, and how to finish it
+## 7. What the local bring-up found
 
-Nothing here exercises the Stage 2.1 admin. The remote session's egress policy denies
+Both defects were in the Stage 2.2 tooling, not in the application, and both had the same
+shape: something that could only be checked against the real thing was instead assumed, and the
+assumption failed quietly rather than loudly.
+
+**The API keys were never checked, only the URL was.** Every query failed with `Invalid API
+key` while `--check` reported the target verified. Matching project refs prove the URL points at
+the right project; they say nothing about whether the keys open it, and a rejected key is
+invisible until the first query — so the admin came up looking healthy and then answered
+`Invalid API key` to everything.
+
+Two things made it possible. The setup script hardcoded hps-dev's anon key, which goes stale the
+moment it is rotated; and the secret key was accepted on **shape alone** — anything starting
+`sb_secret_` passed. Those keys encode no project, so a secret key belonging to a *different*
+project would have been written to the env file without complaint. Offline validation cannot
+catch that, and no amount of care would have made it catch that.
+
+Worth recording precisely because the first suspect was wrong: the failing paths — `site-settings`
+and `tournaments` — both import `supabaseAdmin`, so all three errors came from the **server**
+key. The hardcoded anon key was a genuine latent defect but was not the cause.
+
+The fix is a live preflight. No key value lives in source; the setup script asks for both and
+verifies them against the project before writing anything, and `stage22-dev.ts --check` repeats
+it. The public key must authenticate and read **no** private rows; the server key must
+authenticate and read them. Row count, not status, separates them — RLS with no policy returns
+`200 []`, not an error.
+
+**And the preflight itself nearly shipped broken.** Tested with two fabricated keys it reported
+"Both keys authenticate": the sandbox's egress proxy answers `403 Host not in allowlist`, which
+is not a 401, so a gateway denial scored as success. That is the exact failure the preflight
+exists to prevent. Only a recognisable PostgREST response now counts as an answer; anything else
+is reported **unverified**, never as passing.
+
+**The verifier reported seeded data as missing.** With the keys fixed,
+`/api/admin/tournaments` returned 200 and the run reported all four events absent. They were
+never absent. The route returns `{ tournaments: [...] }`; the verifier assumed a bare array, and
+`Array.isArray(body) ? body : []` turned the mismatch into an empty list.
+
+The one-line parse bug is not the interesting part. **A verifier that reports its own inability
+to read a response as missing data is worse than no verifier**: it sends someone hunting for a
+problem that does not exist, and it would just as readily disguise a real regression as a shape
+change. Reading a payload now either succeeds or raises a contract error naming the keys that
+actually arrived; it never yields a silent empty array. Every other envelope was then checked
+against its route rather than assumed again — only `tournaments` was wrong.
+
+Re-reading that code turned up a third, quieter problem: the cross-event integrity check was
+patching a *main*-event registration with a *main*-event team, which is not cross-event at all
+and would have passed for the wrong reason. It now pairs an overlap-event registration with a
+main-event team.
+
+Both fixes carry tests, and both tripwires were checked the way this repository checks tripwires
+— by reintroducing the bug and confirming the suite fails. `test-stage22-verify-contract.ts`
+runs the real verifier against a stub speaking the real envelopes; with the original bug back it
+reproduces the reported symptom exactly (`FAIL event present: stage22-main-cup`).
+
+## 8. What is NOT proved, and how to finish it
+
+Nothing in §2–§5 exercises the Stage 2.1 admin. The remote session's egress policy denies
 `*.supabase.co` (the gateway answers 403 to CONNECT), so the app could not reach `hps-dev`;
 only the management connector could. **Every check in §5 could pass while the admin still
 failed** — a PGRST201 ambiguous embed, a broken cookie, or a roster route that miscounts
-`waived` would all survive SQL and die in the browser.
+`waived` would all survive SQL and die in the browser. That is the gap the local run closes,
+and it is why the SQL results must never be presented as UI coverage.
 
-Three commands on a machine with normal network access close that gap:
+On a machine with normal network access:
 
 ```powershell
 npx tsx scripts/stage22-setup-env.ts     # asks for BOTH keys; neither is echoed
@@ -181,33 +244,32 @@ npx tsx scripts/stage22-dev.ts           # isolated app on http://127.0.0.1:3022
 npx tsx scripts/stage22-verify-local.ts  # automated acceptance run, second terminal
 ```
 
-**The keys are verified against the live project, not assumed.** A matching project ref proves
-only that the URL is right; it says nothing about whether the keys open it, and a rejected key
-is invisible until the first query — which is how the admin came up looking healthy and then
-answered `Invalid API key` to everything. The preflight probes both keys: the public one must
-authenticate and read **no** private rows, the server one must authenticate and read them.
-Supabase's `sb_secret_…` keys encode no project, so a secret key from another project cannot be
-caught any other way.
-
-One trap worth recording, because it nearly shipped: an egress proxy answered
-`403 Host not in allowlist`, which is not a 401, and a first version of the preflight scored two
-fabricated keys as "authenticated". Only a recognisable PostgREST response now counts as an
-answer; anything else is reported as **unverified**, never as passing.
-`scripts/test-stage22-guard.ts` holds that line, and its own tripwire was checked by
-reintroducing the bug and confirming the suite fails.
-
 The database is already seeded, so there is nothing to create by hand. The verifier signs in
-through `/api/admin/login` and asserts, against the app's own routes, the same facts §5
-proved in SQL — the 12-player split, waived counting equally, partial and refunded staying
-distinct, all five waiver branches, empty-versus-failed, one person appearing as two
-distinguishable registrations across events, the 2–1 result, and the cross-event team refusal
-that only the API enforces. It exits non-zero on any failure.
+through `/api/admin/login` and asserts, against the app's own routes, the same facts §5 proved
+in SQL — the 12-player split, waived counting equally, partial and refunded staying distinct,
+all five waiver branches, empty-versus-failed, one person appearing as two distinguishable
+registrations across events, the 2–1 result and its stats cross-check, and the cross-event team
+refusal that only the API enforces. It exits non-zero on any failure.
+
+**Confirmed working so far:** the launcher starts, the keys authenticate, admin sign-in
+succeeds, and `/api/admin/tournaments` answers 200 with all four events. **Not yet reported
+back:** the acceptance run's own result. Until that output exists, Stage 2.2 is bring-up
+complete and acceptance-unconfirmed — not done.
+
+One check in it has never run against a real route: the cross-event team refusal. If it reports
+a 2xx, that is a genuine finding about the admin route rather than another tooling bug, and it
+matches the §6 finding that the database does not enforce this at all. The verifier reverts the
+assignment either way.
 
 Still outside Stage 2.2 in every case, and not to be represented otherwise: a real Stripe
 charge, refund or webhook delivery; a DocuSeal callback; Google OAuth, which was skipped by
-decision and is **untested**; and any browser rendering, layout or interaction check.
+decision and is **untested**; and any browser rendering, layout or interaction check — the
+verifier drives HTTP routes, not a browser.
 
-## 8. Stage 2.3 candidates
+## 9. Stage 2.3 candidates
+
+**Now written up in full as [STAGE-2-3-PROPOSAL.md](STAGE-2-3-PROPOSAL.md), with a recommended
+order and the one invariant question that must be answered first.** In summary:
 
 Unchanged from the plan, plus what this pass found: a general Resend delivery backend
 (a transport already exists at `src/lib/email/resend-sender.ts` but implements only the
