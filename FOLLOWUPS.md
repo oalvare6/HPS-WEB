@@ -682,3 +682,49 @@ production row changed, no production Stripe secret used.
   call sites. Deferred; it still creates a new Stripe Price on every fee change.
 - **Still deferred by instruction:** refunds/disputes, migration-ledger drift, event-state
   work, admin UI.
+
+## 2026-09-10 — Stage 1.6: the schema builds from an empty database
+
+Full write-up in `docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`. Production read-only
+throughout: every production query was a `SELECT` or a catalog listing; no migration was
+applied, no ledger row was touched, no row was changed. Nothing deployed or merged.
+
+- **Why every Preview branch failed since 2026-05-13:** `public.tournaments`, `payments`,
+  `site_settings`, `tournament_updates` and the two Storage buckets were only ever defined by
+  loose scripts under `supabase/` and applied by hand. The third migration,
+  `20260513120000_create_tournament_rounds.sql`, references `tournaments`, so an empty
+  database stops there (`SQLSTATE 42P01`, reproduced with the Supabase CLI). Production never
+  noticed because the tables were already there.
+- **Fixed with five idempotent baseline migrations** timestamped before their first dependent
+  (`20260327000000_create_payments`, `20260513000100_create_tournaments`,
+  `…000200_add_tournaments_featured_and_updates`, `…000300_create_site_settings`,
+  `…000400_create_storage_buckets`). No-ops on production. The loose scripts moved to
+  `docs/archive/loose-sql/`. **Never add another `.sql` file directly under `supabase/`.**
+- **Two objects production has that `main` never did** came from unmerged branches whose
+  migration the operator applied by hand: `matches.advanced_team_id` (branch
+  `claude/world-cup-scores-ui-rfgjpj`, 1 row uses it) and `docuseal_webhook_events` +
+  `claim_docuseal_webhook_event()` (branch `claude/houston-premier-stage-1-3-lewiry`, Stage
+  1.3, whose code is **not** on `main`). Both migration files are ported byte-identical so a
+  fresh build matches production and those branches still merge cleanly.
+- **New test `scripts/test-migrations-from-empty.ts` (44 assertions):** empty database +
+  the Supabase preamble → all 41 files in order → app-required objects → the whole chain a
+  second time (idempotent) → diff against `docs/production-schema-catalog-2026-09-10.json`.
+  Seven known differences remain, all allow-listed with reasons: production's wider
+  `registrations_registration_type_check` (0 rows use the legacy values), four hand-created
+  index shapes on `matches`/`match_scorers`, and the orphan `set_updated_at_match_scorers()`.
+- **Supabase Preview branch: blocked by plan.** `create_branch` answered
+  `PaymentRequiredException: Branching is supported only on the Pro plan or above`. The two
+  branch entries that exist (`main`, and the June preview for PR #2) both read
+  `MIGRATIONS_FAILED`. The migration set is proved by the CLI and the local test instead;
+  the report gives the steps for when branching is available again.
+- **The migration ledger is still drifted and was deliberately not repaired** (production
+  read-only). 22 ledger rows vs 41 files: 9 rows carry MCP-assigned versions, 19 files are
+  unlisted. Exact `supabase migration repair` commands are in the report §8. **Do not
+  `db push` production before that repair**: it would re-run 19 files, including the
+  data-bearing `20260815001500_dedupe_registrations_and_guard.sql`.
+- **The GitHub integration's `main` entry has shown `MIGRATIONS_FAILED` since 2026-05-13.**
+  If "Deploy to production" is on, a merge to `main` applies unlisted migrations to
+  production. Check Project Settings → Integrations before merging anything with migrations.
+- **Left alone:** `backup_2026_08_17` (13 hand-made backup tables, no RLS) is data, not
+  schema, and is not reproduced; narrowing production's `registration_type` check is a
+  production change for a later, deliberate step.

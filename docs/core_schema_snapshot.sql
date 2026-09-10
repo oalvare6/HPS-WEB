@@ -17,6 +17,13 @@
 -- policies, triggers and functions that touch them. Match/round tables are
 -- out of scope for this remediation and are omitted.
 --
+-- SUPERSEDED FOR COMPARISONS 2026-09-10 (Stage 1.6): the whole-schema,
+-- machine-readable capture is docs/production-schema-catalog-2026-09-10.json
+-- (produced by scripts/sql/schema-catalog.sql) and is what
+-- scripts/test-migrations-from-empty.ts diffs a fresh build against. This
+-- file stays as the human-readable description of the eight core tables. The
+-- migration ledger listed at the bottom is unchanged as of 2026-09-10.
+--
 -- CORRECTED 2026-09-10 (Stage 1.4): `payments.amount`,
 -- `registrations.payment_amount` and `tournaments.entry_fee` were rendered as
 -- bare `numeric` with the precision only in a trailing comment. Production has

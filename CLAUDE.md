@@ -43,16 +43,34 @@ npx tsx scripts/test-reconcile-payments.ts
 npx tsx scripts/test-resend-sender.ts
 npx tsx scripts/test-stripe-route.ts
 npx tsx scripts/test-checkout-pricing.ts
-npx tsx scripts/test-finalize-sql.ts        # needs a PostgreSQL; see below
-npx tsx scripts/test-stripe-integration.ts  # needs a PostgreSQL; see below
+npx tsx scripts/test-finalize-sql.ts          # needs a PostgreSQL; see below
+npx tsx scripts/test-stripe-integration.ts    # needs a PostgreSQL; see below
+npx tsx scripts/test-migrations-from-empty.ts # needs a PostgreSQL; see below
 npm run build
 ```
 
-The last two **execute the settlement SQL**. They provision a throwaway database: they use
-`HPS_TEST_DATABASE_URL` if it is set, otherwise a server on port 54329, otherwise they start
-their own cluster with `initdb`. If none of that is possible they **fail rather than skip** —
-a silent skip is how a suite stops proving what its name says. `HPS_SKIP_PG_TESTS=1` skips
-them deliberately and prints that the SQL was not executed.
+The last three **execute real SQL against a real PostgreSQL** — the settlement functions,
+and (Stage 1.6) every file in `supabase/migrations/` from an empty database. They provision
+a throwaway database: they use `HPS_TEST_DATABASE_URL` if it is set, otherwise a server on
+port 54329, otherwise they start their own cluster with `initdb`. If none of that is possible
+they **fail rather than skip** — a silent skip is how a suite stops proving what its name
+says. `HPS_SKIP_PG_TESTS=1` skips them deliberately and prints that the SQL was not executed.
+
+**The schema builds from an empty database, and only migrations define it (2026-09-10,
+[`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md)).**
+For four months every Supabase Preview branch failed on the third migration, because
+`tournaments`, `payments`, `site_settings`, `tournament_updates` and the Storage buckets were
+only ever defined by loose scripts under `supabase/` and applied by hand. Five baseline
+migrations now capture them and the loose scripts are archived under
+`docs/archive/loose-sql/`. Three rules follow. **Never put a `.sql` file directly under
+`supabase/` again** — only `supabase/migrations/YYYYMMDDHHMMSS_name.sql`, idempotent, with a
+rollback comment. **Production's migration ledger is still drifted** (22 rows for 41 files;
+repair commands in the report §8), so **do not run `supabase db push` against production**
+until it is repaired — it would re-run nineteen files, one of them data-bearing. And the
+from-empty test diffs a fresh build against `docs/production-schema-catalog-2026-09-10.json`:
+when you add a migration, expect it to show new objects as FRESH-ONLY until production has
+the migration and the catalog is re-captured (the query is `scripts/sql/schema-catalog.sql`).
+Supabase branching itself needs the Pro plan; the organisation was on Free on 2026-09-10.
 
 **Two remediation invariants (2026-09-09, `remediation_stage_1_2_report.md`).** Knowing an
 email address never authorises anything: `POST /api/pay/eligibility` answers every caller
@@ -176,7 +194,8 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md) | **Most recent session.** Supabase made the single source of price, the authorised amount recorded per Checkout Session, and the Stripe sandbox procedure written down. **Closes the pricing trap Stage 1.4 opened.** |
+| [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | **Most recent session.** Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, the ledger repair still owed, and the Pro-plan blocker on branching. |
+| [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md) | Supabase made the single source of price, the authorised amount recorded per Checkout Session, and the Stripe sandbox procedure written down. **Closes the pricing trap Stage 1.4 opened.** |
 | [`docs/STAGE-1-4-STRIPE-VALIDATION.md`](docs/STAGE-1-4-STRIPE-VALIDATION.md) | The settlement SQL executed for the first time (against a real PostgreSQL, and `xmax` checked on production's own 17.6): two defects found and fixed, the $80 repair rehearsed, and `--apply` fenced. **Corrects §13 and §15 of the Stage 1.2 report.** |
 | [`docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`](docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md) | F-01/F-02 deployed and smoke-tested in production: the `formData()` runtime trap, the cookie-clearing reuse bug, and the database evidence. Read with `remediation_stage_1_2_report.md`. |
 | [`docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md`](docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md) | Community Cup schedule, scores and table: the round-centric admin, the phone-first public hub, the one-transaction result save, the own-goal rule, and the spreadsheet import. Read after the plan. |

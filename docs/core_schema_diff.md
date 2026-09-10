@@ -1,5 +1,14 @@
 # Core Schema Reconciliation — production vs. repository
 
+> **Superseded in part on 2026-09-10 by
+> [`STAGE-1-6-MIGRATION-RECONCILIATION.md`](STAGE-1-6-MIGRATION-RECONCILIATION.md).** The
+> "table defined only by a loose file" rows in §2 and the loose-file list in §3 are closed:
+> every table is now created by a migration and the loose scripts are archived under
+> `docs/archive/loose-sql/`. The full-schema comparison (every table, not just the eight
+> here) lives in `docs/production-schema-catalog-2026-09-10.json` and is re-checked by
+> `scripts/test-migrations-from-empty.ts`. §3's ledger table is still accurate — the ledger
+> was **not** repaired — and the Stage 1.6 report §8 gives the exact repair commands.
+
 **Captured:** 2026-09-09, read-only. Production evidence is in `docs/core_schema_snapshot.sql`. Nothing was changed on the remote project; no migration history was repaired.
 
 **Scope:** the tables and functions behind registration, payment, roster and waiver state: `registrations`, `payments`, `tournaments`, `contacts`, `teams`, `drop_ins`, `waiver_signatures`, `site_settings`, plus the RPCs that touch them.
