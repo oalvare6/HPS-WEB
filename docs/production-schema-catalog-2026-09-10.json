@@ -1,0 +1,4151 @@
+{
+  "_captured": "2026-09-10, read-only, Supabase project jqkiswwunrnyqjgroqtn (PostgreSQL 17.6.1), via scripts/sql/schema-catalog.sql",
+  "_note": "Structure only: no rows, no secrets. Compared by scripts/test-migrations-from-empty.ts against a database built from supabase/migrations/ alone.",
+  "tables": [
+    {
+      "rls": true,
+      "table": "contacts",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "docuseal_webhook_events",
+      "comment": "One row per logical DocuSeal webhook event (event_key = \"<event_type>:<submitter id>\"). A delivery may write waiver state only while it holds the claim; processed_at set = done, replays are acknowledged without writing.",
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "drop_ins",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "match_scorers",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "matches",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "payments",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "registration_access_tokens",
+      "comment": "One-time magic-link tokens for resuming a registration. token_hash = sha256(raw). Consumed exactly once via consume_registration_access_token().",
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "registration_sessions",
+      "comment": "Server-side resume sessions. The cookie carries the raw secret; only sha256(raw) is stored. A session is valid while revoked_at is null and expires_at > now().",
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "registrations",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "resume_link_requests",
+      "comment": "Accepted magic-link requests, keyed by sha256(normalised email) and sha256(client ip). Rows older than two days are swept opportunistically by record_resume_link_request().",
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "site_settings",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "stripe_checkout_attempts",
+      "comment": "One row per Checkout Session this server created, recording the amount it authorised. Settlement validates a payment against this row when it exists, so editing an event fee cannot invalidate a session a customer was already quoted. Not a price source: nothing computes an amount from here. Never contains card data.",
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "stripe_webhook_events",
+      "comment": "One row per Stripe event id handled by /api/stripe/webhook. processed_at IS NULL means the handler started but did not commit (retry expected). Never contains card data.",
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "team_members",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "teams",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "tournament_rounds",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "tournament_updates",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "tournaments",
+      "comment": null,
+      "force_rls": false
+    },
+    {
+      "rls": true,
+      "table": "waiver_signatures",
+      "comment": "One row per in-app waiver signature. The producible record behind contacts.waiver_signed_at when waiver_source = 'in_app'. Rendered for humans at /waiver/<id>.",
+      "force_rls": false
+    }
+  ],
+  "buckets": [
+    {
+      "id": "tournament-images",
+      "public": true
+    },
+    {
+      "id": "waiver-signatures",
+      "public": false
+    }
+  ],
+  "columns": [
+    {
+      "type": "timestamp with time zone",
+      "table": "contacts",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "date",
+      "table": "contacts",
+      "column": "dob",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "citext",
+      "table": "contacts",
+      "column": "email",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "emergency_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "emergency_phone",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "first_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "contacts",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "last_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "boolean",
+      "table": "contacts",
+      "column": "marketing_opt_in",
+      "comment": null,
+      "default": "true",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "notes",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "phone",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text[]",
+      "table": "contacts",
+      "column": "tags",
+      "comment": null,
+      "default": "'{}'::text[]",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "contacts",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "waiver_document_url",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "contacts",
+      "column": "waiver_expires_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "contacts",
+      "column": "waiver_signed_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "waiver_source",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "contacts",
+      "column": "waiver_submission_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "contacts",
+      "column": "waiver_type",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "docuseal_webhook_events",
+      "column": "attempts",
+      "comment": null,
+      "default": "1",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "docuseal_webhook_events",
+      "column": "claimed_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "docuseal_webhook_events",
+      "column": "detail",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "docuseal_webhook_events",
+      "column": "event_key",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "docuseal_webhook_events",
+      "column": "event_type",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "docuseal_webhook_events",
+      "column": "first_seen_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "docuseal_webhook_events",
+      "column": "outcome",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "docuseal_webhook_events",
+      "column": "processed_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "docuseal_webhook_events",
+      "column": "registration_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "bigint",
+      "table": "docuseal_webhook_events",
+      "column": "submission_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "bigint",
+      "table": "docuseal_webhook_events",
+      "column": "submitter_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "drop_ins",
+      "column": "amount_cents",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "drop_ins",
+      "column": "contact_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "drop_ins",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "drop_ins",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "drop_ins",
+      "column": "notes",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "drop_ins",
+      "column": "paid_by_contact_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "drop_ins",
+      "column": "payment_status",
+      "comment": null,
+      "default": "'pending'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "drop_ins",
+      "column": "round_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "drop_ins",
+      "column": "tournament_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "drop_ins",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "match_scorers",
+      "column": "contact_id",
+      "comment": "The person who scored, when picked from the roster. Null for free-text names. The top-scorer list dedupes on this when present.",
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "match_scorers",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "integer",
+      "table": "match_scorers",
+      "column": "goals",
+      "comment": null,
+      "default": "1",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "match_scorers",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "match_scorers",
+      "column": "match_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "boolean",
+      "table": "match_scorers",
+      "column": "own_goal",
+      "comment": "True when the goal was scored by the OTHER side into their own net. team_id is the team the goal counted for (the benefiting team), never the team that conceded it. Excluded from the top-scorer list.",
+      "default": "false",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "match_scorers",
+      "column": "scorer_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "integer",
+      "table": "match_scorers",
+      "column": "sort_order",
+      "comment": null,
+      "default": "0",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "match_scorers",
+      "column": "team_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "match_scorers",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "matches",
+      "column": "advanced_team_id",
+      "comment": "Team that advanced from this knockout match when the score alone does not decide it (draw settled by shootout/ruling).",
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "matches",
+      "column": "away_score",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "matches",
+      "column": "away_team_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "matches",
+      "column": "away_team_label",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "matches",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "integer",
+      "table": "matches",
+      "column": "home_score",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "matches",
+      "column": "home_team_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "matches",
+      "column": "home_team_label",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "matches",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "matches",
+      "column": "kickoff_time",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "date",
+      "table": "matches",
+      "column": "match_date",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "matches",
+      "column": "match_number",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "matches",
+      "column": "notes",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "matches",
+      "column": "round_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "matches",
+      "column": "sort_order",
+      "comment": null,
+      "default": "0",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "matches",
+      "column": "status",
+      "comment": null,
+      "default": "'scheduled'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "matches",
+      "column": "tournament_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "matches",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "numeric(10,2)",
+      "table": "payments",
+      "column": "amount",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "payments",
+      "column": "contact_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "payments",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "payments",
+      "column": "currency",
+      "comment": null,
+      "default": "'usd'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "payments",
+      "column": "drop_in_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "payments",
+      "column": "email",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "payments",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "payments",
+      "column": "notes",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "payments",
+      "column": "registration_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "payments",
+      "column": "status",
+      "comment": null,
+      "default": "'pending'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "payments",
+      "column": "stripe_payment_intent_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "payments",
+      "column": "stripe_session_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "payments",
+      "column": "tournament_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "payments",
+      "column": "tournament_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registration_access_tokens",
+      "column": "consumed_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registration_access_tokens",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registration_access_tokens",
+      "column": "expires_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "registration_access_tokens",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registration_access_tokens",
+      "column": "purpose",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "registration_access_tokens",
+      "column": "registration_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registration_access_tokens",
+      "column": "requester_ip_digest",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registration_access_tokens",
+      "column": "revoked_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "registration_access_tokens",
+      "column": "token_hash",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "registration_sessions",
+      "column": "access_token_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registration_sessions",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registration_sessions",
+      "column": "expires_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "registration_sessions",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registration_sessions",
+      "column": "last_used_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "registration_sessions",
+      "column": "registration_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registration_sessions",
+      "column": "revoked_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text[]",
+      "table": "registration_sessions",
+      "column": "scopes",
+      "comment": null,
+      "default": "'{}'::text[]",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registration_sessions",
+      "column": "token_hash",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registrations",
+      "column": "cancelled_at",
+      "comment": "When the player gave up this spot, or NULL while they still hold it. Rows are never deleted on cancel. Do NOT infer withdrawal from payment_status \u2014 'waived' and 'refunded' are statements about money and are read as settled by the roster totals and the signup state machine.",
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "registrations",
+      "column": "contact_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registrations",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "date",
+      "table": "registrations",
+      "column": "dob",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "docuseal_sign_url",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "docuseal_status",
+      "comment": null,
+      "default": "'pending'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "integer",
+      "table": "registrations",
+      "column": "docuseal_submission_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "email",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "emergency_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "emergency_phone",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "first_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "registrations",
+      "column": "free_entry_tournament_id",
+      "comment": "Open play only (D7). Which tournament bought this person free entry to this night, at the moment they confirmed. Set together with payment_status = 'waived'. Recorded rather than recomputed on purpose: the config on the open-play event can change afterwards, and when somebody disputes a comp at the field the answer has to be what was true when they signed up, not what the rule says today. NULL on every tournament registration and on anyone who paid the door price.",
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "registrations",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "last_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "boolean",
+      "table": "registrations",
+      "column": "needs_admin_review",
+      "comment": null,
+      "default": "false",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "notes",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "numeric(10,2)",
+      "table": "registrations",
+      "column": "payment_amount",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "payment_method",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "payment_status",
+      "comment": null,
+      "default": "'pending'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "phone",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "registration_type",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "registrations",
+      "column": "team_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "team_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "registrations",
+      "column": "tournament_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registrations",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "waiver_document_url",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "registrations",
+      "column": "waiver_match_key",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "boolean",
+      "table": "registrations",
+      "column": "waiver_signed",
+      "comment": null,
+      "default": "false",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "registrations",
+      "column": "waiver_signed_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "waiver_submission_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "registrations",
+      "column": "waiver_type",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "resume_link_requests",
+      "column": "email_digest",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "bigint",
+      "table": "resume_link_requests",
+      "column": "id",
+      "comment": null,
+      "default": null,
+      "identity": "a",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "resume_link_requests",
+      "column": "ip_digest",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "resume_link_requests",
+      "column": "requested_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "site_settings",
+      "column": "key",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "site_settings",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "jsonb",
+      "table": "site_settings",
+      "column": "value",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "integer",
+      "table": "stripe_checkout_attempts",
+      "column": "amount_cents",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "stripe_checkout_attempts",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "stripe_checkout_attempts",
+      "column": "currency",
+      "comment": null,
+      "default": "'usd'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "stripe_checkout_attempts",
+      "column": "drop_in_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "stripe_checkout_attempts",
+      "column": "pay_kind",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "stripe_checkout_attempts",
+      "column": "registration_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "stripe_checkout_attempts",
+      "column": "roster_size",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "stripe_checkout_attempts",
+      "column": "stripe_session_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "stripe_checkout_attempts",
+      "column": "tournament_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "stripe_webhook_events",
+      "column": "detail",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "stripe_webhook_events",
+      "column": "id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "stripe_webhook_events",
+      "column": "object_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "stripe_webhook_events",
+      "column": "outcome",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "stripe_webhook_events",
+      "column": "processed_at",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "stripe_webhook_events",
+      "column": "received_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "stripe_webhook_events",
+      "column": "type",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "team_members",
+      "column": "contact_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "team_members",
+      "column": "joined_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "team_members",
+      "column": "notes",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "team_members",
+      "column": "role",
+      "comment": null,
+      "default": "'player'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "team_members",
+      "column": "team_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "teams",
+      "column": "captain_contact_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "teams",
+      "column": "color",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "teams",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "teams",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "teams",
+      "column": "name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "teams",
+      "column": "notes",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "teams",
+      "column": "tournament_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "teams",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "boolean",
+      "table": "tournament_rounds",
+      "column": "counts_toward_table",
+      "comment": "False for knockout and friendly rounds (semi-finals, final, exhibition). computeStandings skips matches in rounds where this is false. Matches with no round always count.",
+      "default": "true",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "tournament_rounds",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "tournament_rounds",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournament_rounds",
+      "column": "label",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournament_rounds",
+      "column": "note",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "date",
+      "table": "tournament_rounds",
+      "column": "rescheduled_to",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "date",
+      "table": "tournament_rounds",
+      "column": "round_date",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "tournament_rounds",
+      "column": "sort_order",
+      "comment": null,
+      "default": "0",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournament_rounds",
+      "column": "status",
+      "comment": null,
+      "default": "'scheduled'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournament_rounds",
+      "column": "time_end",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournament_rounds",
+      "column": "time_start",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "tournament_rounds",
+      "column": "tournament_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "tournament_rounds",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournament_updates",
+      "column": "body",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "tournament_updates",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "tournament_updates",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "boolean",
+      "table": "tournament_updates",
+      "column": "pinned",
+      "comment": null,
+      "default": "false",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "tournament_updates",
+      "column": "tournament_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "tournament_updates",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "tournaments",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "description",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "tournaments",
+      "column": "display_order",
+      "comment": null,
+      "default": "0",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "integer",
+      "table": "tournaments",
+      "column": "drop_in_fee_cents",
+      "comment": null,
+      "default": "2000",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "tournaments",
+      "column": "end_date",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "numeric(10,2)",
+      "table": "tournaments",
+      "column": "entry_fee",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "tournaments",
+      "column": "entry_fee_cents",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "format",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid[]",
+      "table": "tournaments",
+      "column": "free_entry_tournament_ids",
+      "comment": "Open play only (D7). Tournament ids whose active, team-assigned players get in free to THIS night. Chosen by the organiser per event \u2014 never inherited, never automatic. Empty (the default) means everybody pays the door price. Deliberately a uuid[] with no FK: a stale id matches no registration, so the failure mode is \"nobody is comped\", not \"somebody is comped by accident\". Evaluate it only through resolveOpenPlayEntitlement() in src/lib/open-play-free-entry.ts \u2014 a client-supplied \"I am free\" flag is a free-entry vulnerability.",
+      "default": "'{}'::uuid[]",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "tournaments",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "image_preset",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "image_url",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "boolean",
+      "table": "tournaments",
+      "column": "is_draft",
+      "comment": "True while the owner is still setting the event up: hidden from every public listing and page, and cannot take sign-ups or payments. Existing events default to false so nothing disappears when this ships.",
+      "default": "false",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "boolean",
+      "table": "tournaments",
+      "column": "is_featured",
+      "comment": null,
+      "default": "false",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "kind",
+      "comment": "What sort of event this is. 'tournament' = a season with teams, a schedule and standings. 'open_play' = a single pop-up night: one date, one door price, no teams and no table. Defaults to 'tournament' so every existing row keeps behaving exactly as it did.",
+      "default": "'tournament'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "location",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "integer",
+      "table": "tournaments",
+      "column": "max_teams",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "pay_url",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "boolean",
+      "table": "tournaments",
+      "column": "payments_open",
+      "comment": null,
+      "default": "false",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "recurrence",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "register_url",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "boolean",
+      "table": "tournaments",
+      "column": "registration_open",
+      "comment": null,
+      "default": "false",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "slug",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "tournaments",
+      "column": "start_date",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "status",
+      "comment": null,
+      "default": "'upcoming'::text",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "stripe_price_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "stripe_product_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "time_end",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "time_start",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "tournaments",
+      "column": "title",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "tournaments",
+      "column": "updated_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "waiver_signatures",
+      "column": "contact_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "waiver_signatures",
+      "column": "created_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "uuid",
+      "table": "waiver_signatures",
+      "column": "id",
+      "comment": null,
+      "default": "gen_random_uuid()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "inet",
+      "table": "waiver_signatures",
+      "column": "ip",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "uuid",
+      "table": "waiver_signatures",
+      "column": "registration_id",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "waiver_signatures",
+      "column": "signed_at",
+      "comment": null,
+      "default": "now()",
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "waiver_signatures",
+      "column": "signed_name",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "waiver_signatures",
+      "column": "signer_relationship",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "waiver_signatures",
+      "column": "user_agent",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": false
+    },
+    {
+      "type": "text",
+      "table": "waiver_signatures",
+      "column": "waiver_type",
+      "comment": null,
+      "default": null,
+      "identity": "",
+      "not_null": true
+    },
+    {
+      "type": "text",
+      "table": "waiver_signatures",
+      "column": "waiver_version",
+      "comment": "Value of WAIVER_TEXT_VERSION (src/lib/waiver-text.ts) at sign time. Never backfill this \u2014 it would rewrite what the signer agreed to.",
+      "default": null,
+      "identity": "",
+      "not_null": true
+    }
+  ],
+  "indexes": [
+    {
+      "name": "contacts_email_unique_idx",
+      "table": "contacts",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX contacts_email_unique_idx ON public.contacts USING btree (email)"
+    },
+    {
+      "name": "contacts_last_first_idx",
+      "table": "contacts",
+      "comment": null,
+      "definition": "CREATE INDEX contacts_last_first_idx ON public.contacts USING btree (last_name, first_name)"
+    },
+    {
+      "name": "contacts_phone_idx",
+      "table": "contacts",
+      "comment": null,
+      "definition": "CREATE INDEX contacts_phone_idx ON public.contacts USING btree (phone) WHERE (phone IS NOT NULL)"
+    },
+    {
+      "name": "contacts_pkey",
+      "table": "contacts",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX contacts_pkey ON public.contacts USING btree (id)"
+    },
+    {
+      "name": "contacts_tags_gin_idx",
+      "table": "contacts",
+      "comment": null,
+      "definition": "CREATE INDEX contacts_tags_gin_idx ON public.contacts USING gin (tags)"
+    },
+    {
+      "name": "contacts_waiver_expires_idx",
+      "table": "contacts",
+      "comment": null,
+      "definition": "CREATE INDEX contacts_waiver_expires_idx ON public.contacts USING btree (waiver_expires_at DESC) WHERE (waiver_expires_at IS NOT NULL)"
+    },
+    {
+      "name": "docuseal_webhook_events_pkey",
+      "table": "docuseal_webhook_events",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX docuseal_webhook_events_pkey ON public.docuseal_webhook_events USING btree (event_key)"
+    },
+    {
+      "name": "docuseal_webhook_events_registration_idx",
+      "table": "docuseal_webhook_events",
+      "comment": null,
+      "definition": "CREATE INDEX docuseal_webhook_events_registration_idx ON public.docuseal_webhook_events USING btree (registration_id) WHERE (registration_id IS NOT NULL)"
+    },
+    {
+      "name": "docuseal_webhook_events_submission_idx",
+      "table": "docuseal_webhook_events",
+      "comment": null,
+      "definition": "CREATE INDEX docuseal_webhook_events_submission_idx ON public.docuseal_webhook_events USING btree (submission_id)"
+    },
+    {
+      "name": "drop_ins_contact_idx",
+      "table": "drop_ins",
+      "comment": null,
+      "definition": "CREATE INDEX drop_ins_contact_idx ON public.drop_ins USING btree (contact_id)"
+    },
+    {
+      "name": "drop_ins_paid_by_idx",
+      "table": "drop_ins",
+      "comment": null,
+      "definition": "CREATE INDEX drop_ins_paid_by_idx ON public.drop_ins USING btree (paid_by_contact_id) WHERE (paid_by_contact_id IS NOT NULL)"
+    },
+    {
+      "name": "drop_ins_payment_status_idx",
+      "table": "drop_ins",
+      "comment": null,
+      "definition": "CREATE INDEX drop_ins_payment_status_idx ON public.drop_ins USING btree (payment_status)"
+    },
+    {
+      "name": "drop_ins_pkey",
+      "table": "drop_ins",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX drop_ins_pkey ON public.drop_ins USING btree (id)"
+    },
+    {
+      "name": "drop_ins_round_idx",
+      "table": "drop_ins",
+      "comment": null,
+      "definition": "CREATE INDEX drop_ins_round_idx ON public.drop_ins USING btree (round_id) WHERE (round_id IS NOT NULL)"
+    },
+    {
+      "name": "drop_ins_tournament_idx",
+      "table": "drop_ins",
+      "comment": null,
+      "definition": "CREATE INDEX drop_ins_tournament_idx ON public.drop_ins USING btree (tournament_id, created_at DESC)"
+    },
+    {
+      "name": "match_scorers_contact_idx",
+      "table": "match_scorers",
+      "comment": null,
+      "definition": "CREATE INDEX match_scorers_contact_idx ON public.match_scorers USING btree (contact_id) WHERE (contact_id IS NOT NULL)"
+    },
+    {
+      "name": "match_scorers_match_idx",
+      "table": "match_scorers",
+      "comment": null,
+      "definition": "CREATE INDEX match_scorers_match_idx ON public.match_scorers USING btree (match_id)"
+    },
+    {
+      "name": "match_scorers_pkey",
+      "table": "match_scorers",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX match_scorers_pkey ON public.match_scorers USING btree (id)"
+    },
+    {
+      "name": "match_scorers_team_idx",
+      "table": "match_scorers",
+      "comment": null,
+      "definition": "CREATE INDEX match_scorers_team_idx ON public.match_scorers USING btree (team_id) WHERE (team_id IS NOT NULL)"
+    },
+    {
+      "name": "matches_away_team_idx",
+      "table": "matches",
+      "comment": null,
+      "definition": "CREATE INDEX matches_away_team_idx ON public.matches USING btree (away_team_id) WHERE (away_team_id IS NOT NULL)"
+    },
+    {
+      "name": "matches_home_team_idx",
+      "table": "matches",
+      "comment": null,
+      "definition": "CREATE INDEX matches_home_team_idx ON public.matches USING btree (home_team_id) WHERE (home_team_id IS NOT NULL)"
+    },
+    {
+      "name": "matches_pkey",
+      "table": "matches",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX matches_pkey ON public.matches USING btree (id)"
+    },
+    {
+      "name": "matches_round_idx",
+      "table": "matches",
+      "comment": null,
+      "definition": "CREATE INDEX matches_round_idx ON public.matches USING btree (round_id) WHERE (round_id IS NOT NULL)"
+    },
+    {
+      "name": "matches_tournament_idx",
+      "table": "matches",
+      "comment": null,
+      "definition": "CREATE INDEX matches_tournament_idx ON public.matches USING btree (tournament_id, sort_order, match_date)"
+    },
+    {
+      "name": "matches_tournament_match_number_idx",
+      "table": "matches",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX matches_tournament_match_number_idx ON public.matches USING btree (tournament_id, match_number) WHERE (match_number IS NOT NULL)"
+    },
+    {
+      "name": "payments_contact_idx",
+      "table": "payments",
+      "comment": null,
+      "definition": "CREATE INDEX payments_contact_idx ON public.payments USING btree (contact_id) WHERE (contact_id IS NOT NULL)"
+    },
+    {
+      "name": "payments_drop_in_idx",
+      "table": "payments",
+      "comment": null,
+      "definition": "CREATE INDEX payments_drop_in_idx ON public.payments USING btree (drop_in_id) WHERE (drop_in_id IS NOT NULL)"
+    },
+    {
+      "name": "payments_email_idx",
+      "table": "payments",
+      "comment": null,
+      "definition": "CREATE INDEX payments_email_idx ON public.payments USING btree (email)"
+    },
+    {
+      "name": "payments_pkey",
+      "table": "payments",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX payments_pkey ON public.payments USING btree (id)"
+    },
+    {
+      "name": "payments_registration_id_idx",
+      "table": "payments",
+      "comment": null,
+      "definition": "CREATE INDEX payments_registration_id_idx ON public.payments USING btree (registration_id)"
+    },
+    {
+      "name": "payments_stripe_payment_intent_unique_idx",
+      "table": "payments",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX payments_stripe_payment_intent_unique_idx ON public.payments USING btree (stripe_payment_intent_id) WHERE (stripe_payment_intent_id IS NOT NULL)"
+    },
+    {
+      "name": "payments_stripe_session_id_key",
+      "table": "payments",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX payments_stripe_session_id_key ON public.payments USING btree (stripe_session_id)"
+    },
+    {
+      "name": "payments_tournament_idx",
+      "table": "payments",
+      "comment": null,
+      "definition": "CREATE INDEX payments_tournament_idx ON public.payments USING btree (tournament_id) WHERE (tournament_id IS NOT NULL)"
+    },
+    {
+      "name": "registration_access_tokens_pkey",
+      "table": "registration_access_tokens",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX registration_access_tokens_pkey ON public.registration_access_tokens USING btree (id)"
+    },
+    {
+      "name": "registration_access_tokens_registration_idx",
+      "table": "registration_access_tokens",
+      "comment": null,
+      "definition": "CREATE INDEX registration_access_tokens_registration_idx ON public.registration_access_tokens USING btree (registration_id, created_at DESC)"
+    },
+    {
+      "name": "registration_access_tokens_token_hash_key",
+      "table": "registration_access_tokens",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX registration_access_tokens_token_hash_key ON public.registration_access_tokens USING btree (token_hash)"
+    },
+    {
+      "name": "registration_sessions_pkey",
+      "table": "registration_sessions",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX registration_sessions_pkey ON public.registration_sessions USING btree (id)"
+    },
+    {
+      "name": "registration_sessions_registration_idx",
+      "table": "registration_sessions",
+      "comment": null,
+      "definition": "CREATE INDEX registration_sessions_registration_idx ON public.registration_sessions USING btree (registration_id, created_at DESC)"
+    },
+    {
+      "name": "registration_sessions_token_hash_key",
+      "table": "registration_sessions",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX registration_sessions_token_hash_key ON public.registration_sessions USING btree (token_hash)"
+    },
+    {
+      "name": "registrations_active_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_active_idx ON public.registrations USING btree (tournament_id, contact_id) WHERE (cancelled_at IS NULL)"
+    },
+    {
+      "name": "registrations_contact_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_contact_idx ON public.registrations USING btree (contact_id) WHERE (contact_id IS NOT NULL)"
+    },
+    {
+      "name": "registrations_docuseal_submission_id_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_docuseal_submission_id_idx ON public.registrations USING btree (docuseal_submission_id)"
+    },
+    {
+      "name": "registrations_email_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_email_idx ON public.registrations USING btree (email)"
+    },
+    {
+      "name": "registrations_email_tournament_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_email_tournament_idx ON public.registrations USING btree (email, tournament_id) WHERE (email IS NOT NULL)"
+    },
+    {
+      "name": "registrations_needs_admin_review_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_needs_admin_review_idx ON public.registrations USING btree (needs_admin_review) WHERE (needs_admin_review = true)"
+    },
+    {
+      "name": "registrations_one_live_spot_idx",
+      "table": "registrations",
+      "comment": "One live registration per person per event. Violations surface as Postgres 23505 and are translated to \"you are already signed up\" by enrollContactInTournament \u2014 do not let a caller report 23505 as a generic failure, it tells the player to retry something that can never succeed.",
+      "definition": "CREATE UNIQUE INDEX registrations_one_live_spot_idx ON public.registrations USING btree (tournament_id, contact_id) WHERE ((cancelled_at IS NULL) AND (contact_id IS NOT NULL))"
+    },
+    {
+      "name": "registrations_payment_status_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_payment_status_idx ON public.registrations USING btree (payment_status)"
+    },
+    {
+      "name": "registrations_pkey",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX registrations_pkey ON public.registrations USING btree (id)"
+    },
+    {
+      "name": "registrations_team_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_team_idx ON public.registrations USING btree (team_id) WHERE (team_id IS NOT NULL)"
+    },
+    {
+      "name": "registrations_tournament_contact_status_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_tournament_contact_status_idx ON public.registrations USING btree (tournament_id, contact_id, payment_status)"
+    },
+    {
+      "name": "registrations_tournament_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE INDEX registrations_tournament_idx ON public.registrations USING btree (tournament_id) WHERE (tournament_id IS NOT NULL)"
+    },
+    {
+      "name": "registrations_waiver_match_key_idx",
+      "table": "registrations",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX registrations_waiver_match_key_idx ON public.registrations USING btree (waiver_match_key)"
+    },
+    {
+      "name": "resume_link_requests_email_idx",
+      "table": "resume_link_requests",
+      "comment": null,
+      "definition": "CREATE INDEX resume_link_requests_email_idx ON public.resume_link_requests USING btree (email_digest, requested_at DESC)"
+    },
+    {
+      "name": "resume_link_requests_ip_idx",
+      "table": "resume_link_requests",
+      "comment": null,
+      "definition": "CREATE INDEX resume_link_requests_ip_idx ON public.resume_link_requests USING btree (ip_digest, requested_at DESC) WHERE (ip_digest IS NOT NULL)"
+    },
+    {
+      "name": "resume_link_requests_pkey",
+      "table": "resume_link_requests",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX resume_link_requests_pkey ON public.resume_link_requests USING btree (id)"
+    },
+    {
+      "name": "site_settings_pkey",
+      "table": "site_settings",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX site_settings_pkey ON public.site_settings USING btree (key)"
+    },
+    {
+      "name": "stripe_checkout_attempts_created_idx",
+      "table": "stripe_checkout_attempts",
+      "comment": null,
+      "definition": "CREATE INDEX stripe_checkout_attempts_created_idx ON public.stripe_checkout_attempts USING btree (created_at DESC)"
+    },
+    {
+      "name": "stripe_checkout_attempts_pkey",
+      "table": "stripe_checkout_attempts",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX stripe_checkout_attempts_pkey ON public.stripe_checkout_attempts USING btree (stripe_session_id)"
+    },
+    {
+      "name": "stripe_checkout_attempts_registration_idx",
+      "table": "stripe_checkout_attempts",
+      "comment": null,
+      "definition": "CREATE INDEX stripe_checkout_attempts_registration_idx ON public.stripe_checkout_attempts USING btree (registration_id) WHERE (registration_id IS NOT NULL)"
+    },
+    {
+      "name": "stripe_webhook_events_object_idx",
+      "table": "stripe_webhook_events",
+      "comment": null,
+      "definition": "CREATE INDEX stripe_webhook_events_object_idx ON public.stripe_webhook_events USING btree (object_id) WHERE (object_id IS NOT NULL)"
+    },
+    {
+      "name": "stripe_webhook_events_pkey",
+      "table": "stripe_webhook_events",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX stripe_webhook_events_pkey ON public.stripe_webhook_events USING btree (id)"
+    },
+    {
+      "name": "team_members_contact_idx",
+      "table": "team_members",
+      "comment": null,
+      "definition": "CREATE INDEX team_members_contact_idx ON public.team_members USING btree (contact_id)"
+    },
+    {
+      "name": "team_members_pkey",
+      "table": "team_members",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX team_members_pkey ON public.team_members USING btree (team_id, contact_id)"
+    },
+    {
+      "name": "teams_captain_idx",
+      "table": "teams",
+      "comment": null,
+      "definition": "CREATE INDEX teams_captain_idx ON public.teams USING btree (captain_contact_id) WHERE (captain_contact_id IS NOT NULL)"
+    },
+    {
+      "name": "teams_pkey",
+      "table": "teams",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX teams_pkey ON public.teams USING btree (id)"
+    },
+    {
+      "name": "teams_tournament_idx",
+      "table": "teams",
+      "comment": null,
+      "definition": "CREATE INDEX teams_tournament_idx ON public.teams USING btree (tournament_id)"
+    },
+    {
+      "name": "teams_tournament_name_unique_idx",
+      "table": "teams",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX teams_tournament_name_unique_idx ON public.teams USING btree (tournament_id, lower(name))"
+    },
+    {
+      "name": "tournament_rounds_pkey",
+      "table": "tournament_rounds",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX tournament_rounds_pkey ON public.tournament_rounds USING btree (id)"
+    },
+    {
+      "name": "tournament_rounds_tournament_idx",
+      "table": "tournament_rounds",
+      "comment": null,
+      "definition": "CREATE INDEX tournament_rounds_tournament_idx ON public.tournament_rounds USING btree (tournament_id, sort_order, round_date)"
+    },
+    {
+      "name": "tournament_updates_pkey",
+      "table": "tournament_updates",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX tournament_updates_pkey ON public.tournament_updates USING btree (id)"
+    },
+    {
+      "name": "tournament_updates_tournament_idx",
+      "table": "tournament_updates",
+      "comment": null,
+      "definition": "CREATE INDEX tournament_updates_tournament_idx ON public.tournament_updates USING btree (tournament_id, pinned DESC, created_at DESC)"
+    },
+    {
+      "name": "tournaments_display_order_start_date_idx",
+      "table": "tournaments",
+      "comment": null,
+      "definition": "CREATE INDEX tournaments_display_order_start_date_idx ON public.tournaments USING btree (display_order, start_date)"
+    },
+    {
+      "name": "tournaments_is_featured_idx",
+      "table": "tournaments",
+      "comment": null,
+      "definition": "CREATE INDEX tournaments_is_featured_idx ON public.tournaments USING btree (display_order, start_date) WHERE (is_featured = true)"
+    },
+    {
+      "name": "tournaments_pkey",
+      "table": "tournaments",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX tournaments_pkey ON public.tournaments USING btree (id)"
+    },
+    {
+      "name": "tournaments_slug_key",
+      "table": "tournaments",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX tournaments_slug_key ON public.tournaments USING btree (slug)"
+    },
+    {
+      "name": "tournaments_status_idx",
+      "table": "tournaments",
+      "comment": null,
+      "definition": "CREATE INDEX tournaments_status_idx ON public.tournaments USING btree (status)"
+    },
+    {
+      "name": "waiver_signatures_contact_id_idx",
+      "table": "waiver_signatures",
+      "comment": null,
+      "definition": "CREATE INDEX waiver_signatures_contact_id_idx ON public.waiver_signatures USING btree (contact_id)"
+    },
+    {
+      "name": "waiver_signatures_pkey",
+      "table": "waiver_signatures",
+      "comment": null,
+      "definition": "CREATE UNIQUE INDEX waiver_signatures_pkey ON public.waiver_signatures USING btree (id)"
+    },
+    {
+      "name": "waiver_signatures_registration_id_idx",
+      "table": "waiver_signatures",
+      "comment": null,
+      "definition": "CREATE INDEX waiver_signatures_registration_id_idx ON public.waiver_signatures USING btree (registration_id)"
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "SELECT",
+      "name": "Public read match_scorers",
+      "qual": "true",
+      "roles": [
+        "public"
+      ],
+      "table": "match_scorers",
+      "schema": "public",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "name": "Public read matches",
+      "qual": "true",
+      "roles": [
+        "public"
+      ],
+      "table": "matches",
+      "schema": "public",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "name": "Public read site_settings",
+      "qual": "true",
+      "roles": [
+        "public"
+      ],
+      "table": "site_settings",
+      "schema": "public",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "name": "Public read tournament_rounds",
+      "qual": "true",
+      "roles": [
+        "public"
+      ],
+      "table": "tournament_rounds",
+      "schema": "public",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "name": "Public read tournament_updates",
+      "qual": "true",
+      "roles": [
+        "public"
+      ],
+      "table": "tournament_updates",
+      "schema": "public",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "name": "Public read tournaments",
+      "qual": "(is_draft = false)",
+      "roles": [
+        "public"
+      ],
+      "table": "tournaments",
+      "schema": "public",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "name": "Public read tournament images",
+      "qual": "(bucket_id = 'tournament-images'::text)",
+      "roles": [
+        "public"
+      ],
+      "table": "objects",
+      "schema": "storage",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    }
+  ],
+  "triggers": [
+    {
+      "name": "contacts_set_updated_at",
+      "table": "contacts",
+      "definition": "CREATE TRIGGER contacts_set_updated_at BEFORE UPDATE ON public.contacts FOR EACH ROW EXECUTE FUNCTION set_updated_at_contacts()"
+    },
+    {
+      "name": "drop_ins_set_updated_at",
+      "table": "drop_ins",
+      "definition": "CREATE TRIGGER drop_ins_set_updated_at BEFORE UPDATE ON public.drop_ins FOR EACH ROW EXECUTE FUNCTION set_updated_at_drop_ins()"
+    },
+    {
+      "name": "match_scorers_set_updated_at",
+      "table": "match_scorers",
+      "definition": "CREATE TRIGGER match_scorers_set_updated_at BEFORE UPDATE ON public.match_scorers FOR EACH ROW EXECUTE FUNCTION set_updated_at_matches()"
+    },
+    {
+      "name": "matches_set_updated_at",
+      "table": "matches",
+      "definition": "CREATE TRIGGER matches_set_updated_at BEFORE UPDATE ON public.matches FOR EACH ROW EXECUTE FUNCTION set_updated_at_matches()"
+    },
+    {
+      "name": "registrations_set_updated_at",
+      "table": "registrations",
+      "definition": "CREATE TRIGGER registrations_set_updated_at BEFORE UPDATE ON public.registrations FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    },
+    {
+      "name": "site_settings_set_updated_at",
+      "table": "site_settings",
+      "definition": "CREATE TRIGGER site_settings_set_updated_at BEFORE UPDATE ON public.site_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at_site_settings()"
+    },
+    {
+      "name": "teams_set_updated_at",
+      "table": "teams",
+      "definition": "CREATE TRIGGER teams_set_updated_at BEFORE UPDATE ON public.teams FOR EACH ROW EXECUTE FUNCTION set_updated_at_teams()"
+    },
+    {
+      "name": "tournament_rounds_set_updated_at",
+      "table": "tournament_rounds",
+      "definition": "CREATE TRIGGER tournament_rounds_set_updated_at BEFORE UPDATE ON public.tournament_rounds FOR EACH ROW EXECUTE FUNCTION set_updated_at_tournament_rounds()"
+    },
+    {
+      "name": "tournament_updates_set_updated_at",
+      "table": "tournament_updates",
+      "definition": "CREATE TRIGGER tournament_updates_set_updated_at BEFORE UPDATE ON public.tournament_updates FOR EACH ROW EXECUTE FUNCTION set_updated_at_tournament_updates()"
+    },
+    {
+      "name": "tournaments_set_updated_at",
+      "table": "tournaments",
+      "definition": "CREATE TRIGGER tournaments_set_updated_at BEFORE UPDATE ON public.tournaments FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+    }
+  ],
+  "functions": [
+    {
+      "args": "p_existing text, p_line text",
+      "name": "append_note_line",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "text",
+      "language": "sql",
+      "volatility": "i",
+      "body_digest": "84cfba302bb1a22cbec15ed89967df7b",
+      "security_definer": false
+    },
+    {
+      "args": "p_event_key text, p_event_type text, p_submitter_id bigint, p_submission_id bigint, p_registration_id uuid, p_stale_after_seconds integer",
+      "name": "claim_docuseal_webhook_event",
+      "config": [
+        "search_path=public"
+      ],
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "5268145e4a9a80a58b86b214e9cf88e1",
+      "security_definer": false
+    },
+    {
+      "args": "p_tournament_id uuid, p_match_id uuid",
+      "name": "clear_match_result",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "void",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "fa57f51559b42fdf12a56ee5a0ab407a",
+      "security_definer": false
+    },
+    {
+      "args": "p_token_hash text, p_purpose text, p_session_token_hash text, p_scopes text[], p_session_ttl_seconds integer",
+      "name": "consume_registration_access_token",
+      "config": [
+        "search_path=public"
+      ],
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "dfe60ec212384012e3c155299d49a55d",
+      "security_definer": false
+    },
+    {
+      "args": "p jsonb",
+      "name": "finalize_checkout_payment",
+      "config": [
+        "search_path=public"
+      ],
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "ec3ed676e4ddcfa834b40d04574499a5",
+      "security_definer": false
+    },
+    {
+      "args": "p_event_id uuid",
+      "name": "open_play_attendees",
+      "config": [
+        "search_path=public"
+      ],
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": "Public \"who is coming\" list for one open-play night: first name + last initial only, surname truncated in SQL so a full surname never reaches a response body. Hard-scoped to kind = 'open_play' so a tournament roster can never be published through it. Cancelled signups are excluded so the list stays honest.",
+      "returns": "TABLE(first_name text, last_initial text, joined_at timestamp with time zone)",
+      "language": "sql",
+      "volatility": "s",
+      "body_digest": "2dbbc78484f8e802b036ba8e4eaf0e34",
+      "security_definer": false
+    },
+    {
+      "args": "p_email_digest text, p_ip_digest text, p_email_cooldown_seconds integer, p_email_hourly_max integer, p_ip_hourly_max integer",
+      "name": "record_resume_link_request",
+      "config": [
+        "search_path=public"
+      ],
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "45317cccd9dcbb069916d9973c42221e",
+      "security_definer": false
+    },
+    {
+      "args": "p_event_id text, p_type text, p_object_id text, p_outcome text, p_detail text",
+      "name": "record_stripe_webhook_event",
+      "config": [
+        "search_path=public"
+      ],
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "jsonb",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "d986c134c6b1c3e59cb6fbdf3bebe6a8",
+      "security_definer": false
+    },
+    {
+      "args": "p_tournament_id uuid, p_match_id uuid, p_home integer, p_away integer, p_scorers jsonb",
+      "name": "save_match_result",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "void",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "45175f883fbfb1f47cdcad886b648019",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at_contacts",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at_drop_ins",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at_match_scorers",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at_matches",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at_site_settings",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at_teams",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at_tournament_rounds",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at_tournament_updates",
+      "config": null,
+      "grants": [
+        {
+          "grantee": "PUBLIC",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "anon",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "authenticated",
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "privilege": "EXECUTE"
+        }
+      ],
+      "comment": null,
+      "returns": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "body_digest": "077bb7aa35a4fed76f447b242607c205",
+      "security_definer": false
+    }
+  ],
+  "extensions": [
+    {
+      "name": "citext",
+      "schema": "public"
+    },
+    {
+      "name": "pgcrypto",
+      "schema": "extensions"
+    }
+  ],
+  "constraints": [
+    {
+      "name": "contacts_pkey",
+      "type": "p",
+      "table": "contacts",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "contacts_waiver_source_check",
+      "type": "c",
+      "table": "contacts",
+      "definition": "CHECK (((waiver_source IS NULL) OR (waiver_source = ANY (ARRAY['docuseal'::text, 'admin_override'::text, 'import'::text, 'in_app'::text]))))"
+    },
+    {
+      "name": "contacts_waiver_type_check",
+      "type": "c",
+      "table": "contacts",
+      "definition": "CHECK (((waiver_type IS NULL) OR (waiver_type = ANY (ARRAY['adult'::text, 'youth'::text]))))"
+    },
+    {
+      "name": "docuseal_webhook_events_attempts_check",
+      "type": "c",
+      "table": "docuseal_webhook_events",
+      "definition": "CHECK ((attempts >= 1))"
+    },
+    {
+      "name": "docuseal_webhook_events_pkey",
+      "type": "p",
+      "table": "docuseal_webhook_events",
+      "definition": "PRIMARY KEY (event_key)"
+    },
+    {
+      "name": "docuseal_webhook_events_registration_id_fkey",
+      "type": "f",
+      "table": "docuseal_webhook_events",
+      "definition": "FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "drop_ins_amount_cents_check",
+      "type": "c",
+      "table": "drop_ins",
+      "definition": "CHECK ((amount_cents >= 0))"
+    },
+    {
+      "name": "drop_ins_contact_id_fkey",
+      "type": "f",
+      "table": "drop_ins",
+      "definition": "FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE RESTRICT"
+    },
+    {
+      "name": "drop_ins_paid_by_contact_id_fkey",
+      "type": "f",
+      "table": "drop_ins",
+      "definition": "FOREIGN KEY (paid_by_contact_id) REFERENCES contacts(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "drop_ins_payment_status_check",
+      "type": "c",
+      "table": "drop_ins",
+      "definition": "CHECK ((payment_status = ANY (ARRAY['pending'::text, 'paid'::text, 'waived'::text, 'refunded'::text])))"
+    },
+    {
+      "name": "drop_ins_pkey",
+      "type": "p",
+      "table": "drop_ins",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "drop_ins_round_id_fkey",
+      "type": "f",
+      "table": "drop_ins",
+      "definition": "FOREIGN KEY (round_id) REFERENCES tournament_rounds(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "drop_ins_tournament_id_fkey",
+      "type": "f",
+      "table": "drop_ins",
+      "definition": "FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "match_scorers_contact_id_fkey",
+      "type": "f",
+      "table": "match_scorers",
+      "definition": "FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "match_scorers_goals_check",
+      "type": "c",
+      "table": "match_scorers",
+      "definition": "CHECK ((goals > 0))"
+    },
+    {
+      "name": "match_scorers_match_id_fkey",
+      "type": "f",
+      "table": "match_scorers",
+      "definition": "FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "match_scorers_pkey",
+      "type": "p",
+      "table": "match_scorers",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "match_scorers_team_id_fkey",
+      "type": "f",
+      "table": "match_scorers",
+      "definition": "FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "matches_advanced_team_id_fkey",
+      "type": "f",
+      "table": "matches",
+      "definition": "FOREIGN KEY (advanced_team_id) REFERENCES teams(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "matches_away_score_check",
+      "type": "c",
+      "table": "matches",
+      "definition": "CHECK (((away_score IS NULL) OR (away_score >= 0)))"
+    },
+    {
+      "name": "matches_away_team_id_fkey",
+      "type": "f",
+      "table": "matches",
+      "definition": "FOREIGN KEY (away_team_id) REFERENCES teams(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "matches_completed_has_scores",
+      "type": "c",
+      "table": "matches",
+      "definition": "CHECK (((status <> 'completed'::text) OR ((home_score IS NOT NULL) AND (away_score IS NOT NULL))))"
+    },
+    {
+      "name": "matches_home_score_check",
+      "type": "c",
+      "table": "matches",
+      "definition": "CHECK (((home_score IS NULL) OR (home_score >= 0)))"
+    },
+    {
+      "name": "matches_home_team_id_fkey",
+      "type": "f",
+      "table": "matches",
+      "definition": "FOREIGN KEY (home_team_id) REFERENCES teams(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "matches_pkey",
+      "type": "p",
+      "table": "matches",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "matches_round_id_fkey",
+      "type": "f",
+      "table": "matches",
+      "definition": "FOREIGN KEY (round_id) REFERENCES tournament_rounds(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "matches_status_check",
+      "type": "c",
+      "table": "matches",
+      "definition": "CHECK ((status = ANY (ARRAY['scheduled'::text, 'completed'::text, 'postponed'::text, 'cancelled'::text])))"
+    },
+    {
+      "name": "matches_tournament_id_fkey",
+      "type": "f",
+      "table": "matches",
+      "definition": "FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "payments_contact_id_fkey",
+      "type": "f",
+      "table": "payments",
+      "definition": "FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "payments_drop_in_id_fkey",
+      "type": "f",
+      "table": "payments",
+      "definition": "FOREIGN KEY (drop_in_id) REFERENCES drop_ins(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "payments_pkey",
+      "type": "p",
+      "table": "payments",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "payments_registration_id_fkey",
+      "type": "f",
+      "table": "payments",
+      "definition": "FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "payments_status_check",
+      "type": "c",
+      "table": "payments",
+      "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'succeeded'::text, 'failed'::text, 'refunded'::text])))"
+    },
+    {
+      "name": "payments_stripe_session_id_key",
+      "type": "u",
+      "table": "payments",
+      "definition": "UNIQUE (stripe_session_id)"
+    },
+    {
+      "name": "payments_tournament_id_fkey",
+      "type": "f",
+      "table": "payments",
+      "definition": "FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "registration_access_tokens_expiry_check",
+      "type": "c",
+      "table": "registration_access_tokens",
+      "definition": "CHECK ((expires_at > created_at))"
+    },
+    {
+      "name": "registration_access_tokens_pkey",
+      "type": "p",
+      "table": "registration_access_tokens",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "registration_access_tokens_purpose_check",
+      "type": "c",
+      "table": "registration_access_tokens",
+      "definition": "CHECK ((purpose = 'resume'::text))"
+    },
+    {
+      "name": "registration_access_tokens_registration_id_fkey",
+      "type": "f",
+      "table": "registration_access_tokens",
+      "definition": "FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "registration_access_tokens_token_hash_key",
+      "type": "u",
+      "table": "registration_access_tokens",
+      "definition": "UNIQUE (token_hash)"
+    },
+    {
+      "name": "registration_sessions_access_token_id_fkey",
+      "type": "f",
+      "table": "registration_sessions",
+      "definition": "FOREIGN KEY (access_token_id) REFERENCES registration_access_tokens(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "registration_sessions_expiry_check",
+      "type": "c",
+      "table": "registration_sessions",
+      "definition": "CHECK ((expires_at > created_at))"
+    },
+    {
+      "name": "registration_sessions_pkey",
+      "type": "p",
+      "table": "registration_sessions",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "registration_sessions_registration_id_fkey",
+      "type": "f",
+      "table": "registration_sessions",
+      "definition": "FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "registration_sessions_token_hash_key",
+      "type": "u",
+      "table": "registration_sessions",
+      "definition": "UNIQUE (token_hash)"
+    },
+    {
+      "name": "registrations_contact_id_fkey",
+      "type": "f",
+      "table": "registrations",
+      "definition": "FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "registrations_docuseal_status_check",
+      "type": "c",
+      "table": "registrations",
+      "definition": "CHECK ((docuseal_status = ANY (ARRAY['pending'::text, 'sent'::text, 'signed'::text])))"
+    },
+    {
+      "name": "registrations_free_entry_tournament_id_fkey",
+      "type": "f",
+      "table": "registrations",
+      "definition": "FOREIGN KEY (free_entry_tournament_id) REFERENCES tournaments(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "registrations_payment_status_check",
+      "type": "c",
+      "table": "registrations",
+      "definition": "CHECK ((payment_status = ANY (ARRAY['pending'::text, 'paid'::text, 'partial'::text, 'waived'::text, 'refunded'::text])))"
+    },
+    {
+      "name": "registrations_pkey",
+      "type": "p",
+      "table": "registrations",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "registrations_registration_type_check",
+      "type": "c",
+      "table": "registrations",
+      "definition": "CHECK ((registration_type = ANY (ARRAY['team'::text, 'adult'::text, 'youth'::text, 'freeagent'::text])))"
+    },
+    {
+      "name": "registrations_team_id_fkey",
+      "type": "f",
+      "table": "registrations",
+      "definition": "FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "registrations_tournament_id_fkey",
+      "type": "f",
+      "table": "registrations",
+      "definition": "FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "registrations_waiver_type_check",
+      "type": "c",
+      "table": "registrations",
+      "definition": "CHECK ((waiver_type = ANY (ARRAY['adult'::text, 'youth'::text])))"
+    },
+    {
+      "name": "resume_link_requests_pkey",
+      "type": "p",
+      "table": "resume_link_requests",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "site_settings_pkey",
+      "type": "p",
+      "table": "site_settings",
+      "definition": "PRIMARY KEY (key)"
+    },
+    {
+      "name": "stripe_checkout_attempts_amount_check",
+      "type": "c",
+      "table": "stripe_checkout_attempts",
+      "definition": "CHECK ((amount_cents >= 0))"
+    },
+    {
+      "name": "stripe_checkout_attempts_drop_in_id_fkey",
+      "type": "f",
+      "table": "stripe_checkout_attempts",
+      "definition": "FOREIGN KEY (drop_in_id) REFERENCES drop_ins(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "stripe_checkout_attempts_pkey",
+      "type": "p",
+      "table": "stripe_checkout_attempts",
+      "definition": "PRIMARY KEY (stripe_session_id)"
+    },
+    {
+      "name": "stripe_checkout_attempts_registration_id_fkey",
+      "type": "f",
+      "table": "stripe_checkout_attempts",
+      "definition": "FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "stripe_checkout_attempts_tournament_id_fkey",
+      "type": "f",
+      "table": "stripe_checkout_attempts",
+      "definition": "FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "stripe_webhook_events_pkey",
+      "type": "p",
+      "table": "stripe_webhook_events",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "team_members_contact_id_fkey",
+      "type": "f",
+      "table": "team_members",
+      "definition": "FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "team_members_pkey",
+      "type": "p",
+      "table": "team_members",
+      "definition": "PRIMARY KEY (team_id, contact_id)"
+    },
+    {
+      "name": "team_members_role_check",
+      "type": "c",
+      "table": "team_members",
+      "definition": "CHECK ((role = ANY (ARRAY['player'::text, 'captain'::text, 'sub'::text])))"
+    },
+    {
+      "name": "team_members_team_id_fkey",
+      "type": "f",
+      "table": "team_members",
+      "definition": "FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "teams_captain_contact_id_fkey",
+      "type": "f",
+      "table": "teams",
+      "definition": "FOREIGN KEY (captain_contact_id) REFERENCES contacts(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "teams_pkey",
+      "type": "p",
+      "table": "teams",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "teams_tournament_id_fkey",
+      "type": "f",
+      "table": "teams",
+      "definition": "FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "tournament_rounds_pkey",
+      "type": "p",
+      "table": "tournament_rounds",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "tournament_rounds_status_check",
+      "type": "c",
+      "table": "tournament_rounds",
+      "definition": "CHECK ((status = ANY (ARRAY['scheduled'::text, 'cancelled'::text, 'rescheduled'::text, 'note'::text])))"
+    },
+    {
+      "name": "tournament_rounds_tournament_id_fkey",
+      "type": "f",
+      "table": "tournament_rounds",
+      "definition": "FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "tournament_updates_pkey",
+      "type": "p",
+      "table": "tournament_updates",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "tournament_updates_tournament_id_fkey",
+      "type": "f",
+      "table": "tournament_updates",
+      "definition": "FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "tournaments_drop_in_fee_cents_check",
+      "type": "c",
+      "table": "tournaments",
+      "definition": "CHECK ((drop_in_fee_cents >= 0))"
+    },
+    {
+      "name": "tournaments_entry_fee_cents_check",
+      "type": "c",
+      "table": "tournaments",
+      "definition": "CHECK (((entry_fee_cents IS NULL) OR (entry_fee_cents >= 0)))"
+    },
+    {
+      "name": "tournaments_kind_check",
+      "type": "c",
+      "table": "tournaments",
+      "definition": "CHECK ((kind = ANY (ARRAY['tournament'::text, 'open_play'::text])))"
+    },
+    {
+      "name": "tournaments_pkey",
+      "type": "p",
+      "table": "tournaments",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "tournaments_slug_key",
+      "type": "u",
+      "table": "tournaments",
+      "definition": "UNIQUE (slug)"
+    },
+    {
+      "name": "tournaments_status_check",
+      "type": "c",
+      "table": "tournaments",
+      "definition": "CHECK ((status = ANY (ARRAY['upcoming'::text, 'ongoing'::text, 'completed'::text, 'cancelled'::text])))"
+    },
+    {
+      "name": "waiver_signatures_contact_id_fkey",
+      "type": "f",
+      "table": "waiver_signatures",
+      "definition": "FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL"
+    },
+    {
+      "name": "waiver_signatures_pkey",
+      "type": "p",
+      "table": "waiver_signatures",
+      "definition": "PRIMARY KEY (id)"
+    },
+    {
+      "name": "waiver_signatures_registration_id_fkey",
+      "type": "f",
+      "table": "waiver_signatures",
+      "definition": "FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE"
+    },
+    {
+      "name": "waiver_signatures_waiver_type_check",
+      "type": "c",
+      "table": "waiver_signatures",
+      "definition": "CHECK ((waiver_type = ANY (ARRAY['adult'::text, 'youth'::text])))"
+    }
+  ],
+  "table_grants": [
+    {
+      "table": "contacts",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "contacts",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "contacts",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "docuseal_webhook_events",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "drop_ins",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "drop_ins",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "drop_ins",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "matches",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "matches",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "matches",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "payments",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "payments",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "payments",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "registration_access_tokens",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "registration_sessions",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "registrations",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "registrations",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "registrations",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "resume_link_requests",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "site_settings",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "site_settings",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "site_settings",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "stripe_checkout_attempts",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "stripe_webhook_events",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "team_members",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "team_members",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "team_members",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "teams",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "teams",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "teams",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournament_rounds",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournament_rounds",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournament_rounds",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournament_updates",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournament_updates",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournament_updates",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournaments",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournaments",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "tournaments",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "waiver_signatures",
+      "grantee": "anon",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "waiver_signatures",
+      "grantee": "authenticated",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    },
+    {
+      "table": "waiver_signatures",
+      "grantee": "service_role",
+      "privileges": "DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE"
+    }
+  ],
+  "column_grants": [
+    {
+      "table": "match_scorers",
+      "column": "contact_id",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "contact_id",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "contact_id",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "created_at",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "created_at",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "created_at",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "goals",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "goals",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "goals",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "id",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "id",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "id",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "match_id",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "match_id",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "match_id",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "own_goal",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "own_goal",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "own_goal",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "scorer_name",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "scorer_name",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "scorer_name",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "sort_order",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "sort_order",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "sort_order",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "team_id",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "team_id",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "team_id",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "updated_at",
+      "grantee": "anon",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "updated_at",
+      "grantee": "authenticated",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    },
+    {
+      "table": "match_scorers",
+      "column": "updated_at",
+      "grantee": "service_role",
+      "privileges": "INSERT,REFERENCES,SELECT,UPDATE"
+    }
+  ]
+}

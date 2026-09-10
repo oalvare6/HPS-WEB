@@ -70,7 +70,7 @@ function findRepoRoot(): string {
   }
 }
 
-const REPO_ROOT = findRepoRoot();
+export const REPO_ROOT = findRepoRoot();
 const FIXTURE = join(REPO_ROOT, "scripts", "sql", "local-core-schema.sql");
 /**
  * Applied in order, exactly as production would. Add new settlement migrations
@@ -140,6 +140,21 @@ export type PgDb = {
   /** Statements with no result. */
   exec(sql: string): Promise<void>;
   /**
+   * Apply a SQL file the way the Supabase CLI applies a migration: the whole
+   * file as one transaction, aborting on the first error. Returns the error
+   * text instead of throwing so a caller can name the file that failed.
+   *
+   * `notices` carries every NOTICE/WARNING the server raised, because the exit
+   * code alone is not enough to know a migration did what it says. PostgreSQL
+   * 16 downgrades `drop trigger if exists ... on <missing relation>` to
+   * `NOTICE: relation "…" does not exist, skipping` and exits 0, where the
+   * PostgreSQL 17 Supabase runs raises 42P01 and stops the chain. Reading the
+   * notices is what lets a test on 16 see the failure a Preview branch sees.
+   */
+  applyFile(path: string): Promise<Applied>;
+  /** `applyFile` for a SQL string rather than a file. */
+  applySql(sql: string): Promise<Applied>;
+  /**
    * Run statements as one transaction in a SEPARATE connection, without
    * awaiting — for concurrency tests. `psql -c` wraps its statements in a
    * single transaction, so the whole string commits or rolls back together.
@@ -149,12 +164,44 @@ export type PgDb = {
   reset(): Promise<void>;
 };
 
-async function psql(dsn: string, args: string[]): Promise<string> {
-  const { stdout } = await run("psql", ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-d", dsn, ...args], {
+/** The outcome of applying SQL, with everything the server said about it. */
+export type Applied = ({ ok: true } | { ok: false; error: string }) & { notices: string[] };
+
+async function psqlBoth(dsn: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return run("psql", ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-d", dsn, ...args], {
     maxBuffer: 32 * 1024 * 1024,
     env: { ...process.env, PGCONNECT_TIMEOUT: "10" },
   });
-  return stdout;
+}
+
+async function psql(dsn: string, args: string[]): Promise<string> {
+  return (await psqlBoth(dsn, args)).stdout;
+}
+
+/**
+ * The server's own NOTICE/WARNING lines, with psql's `file:line:` prefix
+ * stripped, so callers can match on the message PostgreSQL actually wrote.
+ */
+function serverMessages(stderr: string): string[] {
+  return stderr
+    .split("\n")
+    .map((line) => line.replace(/^psql:.*?:\d+:\s*/, "").trim())
+    .filter((line) => /^(NOTICE|WARNING):/.test(line));
+}
+
+/** Apply SQL through psql, returning the error text and the notices instead of throwing. */
+async function applied(dsn: string, args: string[]): Promise<Applied> {
+  try {
+    const { stderr } = await psqlBoth(dsn, args);
+    return { ok: true as const, notices: serverMessages(stderr) };
+  } catch (err) {
+    const stderr = typeof (err as { stderr?: unknown }).stderr === "string" ? (err as { stderr: string }).stderr : "";
+    return {
+      ok: false as const,
+      error: err instanceof Error ? err.message : String(err),
+      notices: serverMessages(stderr),
+    };
+  }
 }
 
 function makeDb(dsn: string, serverVersion: string, postgrestDsn: string | null): PgDb {
@@ -200,6 +247,14 @@ function makeDb(dsn: string, serverVersion: string, postgrestDsn: string | null)
 
     async exec(sql: string): Promise<void> {
       await psql(dsn, ["-c", sql]);
+    },
+
+    async applyFile(path: string) {
+      return applied(dsn, ["--single-transaction", "-f", path]);
+    },
+
+    async applySql(sql: string) {
+      return applied(dsn, ["--single-transaction", "-c", sql]);
     },
 
     async concurrent(sql: string) {
@@ -306,10 +361,20 @@ async function bootCluster(port: number): Promise<string | null> {
 export type Provisioned = { db: PgDb; note: string };
 
 /**
- * Get a rebuilt test database, or throw with instructions. Never returns a
- * half-built one.
+ * Get an EMPTY throwaway database — nothing applied, not even the fixture —
+ * or throw with instructions. Stage 1.6's scripts/test-migrations-from-empty.ts
+ * starts here, because its whole point is to prove that supabase/migrations/
+ * alone can build the schema; a fixture would beg the question.
+ *
+ * `databaseName` keeps the two suites apart on a shared server: the settlement
+ * tests own `hps_settlement_test`, the migration test owns
+ * `hps_migrations_test`, and neither drops the other's database mid-run.
+ *
+ * With HPS_TEST_DATABASE_URL set, that database is used as-is and the caller
+ * is responsible for it being disposable; `databaseName` is ignored and the
+ * public schema is wiped by the caller's own reset, not here.
  */
-export async function provisionTestDatabase(): Promise<Provisioned> {
+export async function provisionEmptyDatabase(databaseName: string = DEFAULT_DB): Promise<Provisioned> {
   const explicit = process.env.HPS_TEST_DATABASE_URL;
   if (explicit) {
     if (!(await reachable(explicit))) {
@@ -320,7 +385,6 @@ export async function provisionTestDatabase(): Promise<Provisioned> {
     // login exists there, so the PostgREST path is offered only if it works.
     const asAuthenticator = explicit.replace(/\/\/[^@/]*@/, "//authenticator@");
     const db = makeDb(explicit, version, (await reachable(asAuthenticator)) ? asAuthenticator : null);
-    await db.reset();
     return { db, note: `HPS_TEST_DATABASE_URL (PostgreSQL ${version})` };
   }
 
@@ -350,17 +414,26 @@ export async function provisionTestDatabase(): Promise<Provisioned> {
   }
 
   const version = (await psql(adminDsn(port), ["-c", "show server_version"])).trim();
-  await psql(adminDsn(port), ["-c", `drop database if exists ${DEFAULT_DB} with (force)`]);
-  await psql(adminDsn(port), ["-c", `create database ${DEFAULT_DB}`]);
+  await psql(adminDsn(port), ["-c", `drop database if exists ${databaseName} with (force)`]);
+  await psql(adminDsn(port), ["-c", `create database ${databaseName}`]);
 
   const host = process.env.HPS_TEST_PG_HOST ?? "127.0.0.1";
   const db = makeDb(
-    testDsn(port, DEFAULT_DB),
+    testDsn(port, databaseName),
     version,
-    `postgresql://authenticator@${host}:${port}/${DEFAULT_DB}`
+    `postgresql://authenticator@${host}:${port}/${databaseName}`
   );
-  await db.reset();
   return { db, note: `${note} (PostgreSQL ${version})` };
+}
+
+/**
+ * Get a rebuilt test database (fixture + the settlement migrations), or throw
+ * with instructions. Never returns a half-built one.
+ */
+export async function provisionTestDatabase(): Promise<Provisioned> {
+  const provisioned = await provisionEmptyDatabase(DEFAULT_DB);
+  await provisioned.db.reset();
+  return provisioned;
 }
 
 function redact(dsn: string): string {

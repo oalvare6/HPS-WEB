@@ -682,3 +682,73 @@ production row changed, no production Stripe secret used.
   call sites. Deferred; it still creates a new Stripe Price on every fee change.
 - **Still deferred by instruction:** refunds/disputes, migration-ledger drift, event-state
   work, admin UI.
+
+## 2026-09-10 — Stage 1.6: the schema builds from an empty database
+
+Full write-up in `docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`. Production read-only
+throughout: every production query was a `SELECT` or a catalog listing; no migration was
+applied, no ledger row was touched, no row was changed. Nothing deployed or merged.
+
+- **Why every Preview branch failed since 2026-05-13:** `public.tournaments`, `payments`,
+  `site_settings`, `tournament_updates` and the two Storage buckets were only ever defined by
+  loose scripts under `supabase/` and applied by hand. The third migration,
+  `20260513120000_create_tournament_rounds.sql`, references `tournaments`, so an empty
+  database stops there (`SQLSTATE 42P01`, reproduced with the Supabase CLI). Production never
+  noticed because the tables were already there.
+- **Fixed with five idempotent baseline migrations** timestamped before their first dependent
+  (`20260327000000_create_payments`, `20260513000100_create_tournaments`,
+  `…000200_add_tournaments_featured_and_updates`, `…000300_create_site_settings`,
+  `…000400_create_storage_buckets`). No-ops on production. The loose scripts moved to
+  `docs/archive/loose-sql/`. **Never add another `.sql` file directly under `supabase/`.**
+- **Two objects production has that `main` never did** came from unmerged branches whose
+  migration the operator applied by hand: `matches.advanced_team_id` (branch
+  `claude/world-cup-scores-ui-rfgjpj`, 1 row uses it) and `docuseal_webhook_events` +
+  `claim_docuseal_webhook_event()` (branch `claude/houston-premier-stage-1-3-lewiry`, Stage
+  1.3, whose code is **not** on `main`). Both migration files are ported byte-identical so a
+  fresh build matches production and those branches still merge cleanly.
+- **New test `scripts/test-migrations-from-empty.ts` (44 assertions):** empty database +
+  the Supabase preamble → all 41 files in order → app-required objects → the whole chain a
+  second time (idempotent) → diff against `docs/production-schema-catalog-2026-09-10.json`.
+  Seven known differences remain, all allow-listed with reasons: production's wider
+  `registrations_registration_type_check` (0 rows use the legacy values), four hand-created
+  index shapes on `matches`/`match_scorers`, and the orphan `set_updated_at_match_scorers()`.
+- **Supabase Preview branch: blocked by plan.** `create_branch` answered
+  `PaymentRequiredException: Branching is supported only on the Pro plan or above`. The two
+  branch entries that exist (`main`, and the June preview for PR #2) both read
+  `MIGRATIONS_FAILED`. The migration set is proved by the CLI and the local test instead;
+  the report gives the steps for when branching is available again.
+- **The migration ledger is still drifted and was deliberately not repaired** (production
+  read-only). 22 ledger rows vs 41 files: 9 rows carry MCP-assigned versions, 19 files are
+  unlisted. Exact `supabase migration repair` commands are in the report §8. **Do not
+  `db push` production before that repair**: it would re-run 19 files, including the
+  data-bearing `20260815001500_dedupe_registrations_and_guard.sql`.
+- **The GitHub integration's `main` entry has shown `MIGRATIONS_FAILED` since 2026-05-13.**
+  If "Deploy to production" is on, a merge to `main` applies unlisted migrations to
+  production. Check Project Settings → Integrations before merging anything with migrations.
+- **Left alone:** `backup_2026_08_17` (13 hand-made backup tables, no RLS) is data, not
+  schema, and is not reproduced; narrowing production's `registration_type` check is a
+  production change for a later, deliberate step.
+
+### Stage 1.6.1 — the Preview branch ran the chain (2026-09-10, PR #9)
+
+- **`IF EXISTS` never guards the relation named after `on`, and PostgreSQL 16 hides it.**
+  `20260513121100_drop_legacy_overrides.sql` opened with `drop trigger if exists … on
+  public.league_round_overrides` — a table no migration creates, on purpose. Supabase's
+  PostgreSQL **17.6** answers `42P01` and stops the chain at file 19 of 41; PostgreSQL
+  **16.13**, what `scripts/_pg.ts` boots locally, downgrades it to `NOTICE: relation … does
+  not exist, skipping` and exits 0. The from-empty suite was green 44/44 on the exact commit
+  the platform rejected, because the only thing it asserted was psql's exit code. **Fixed** by
+  deleting the line (dropping a table drops its triggers), and the suite now reads the
+  server's notices, fails on that one shape, and proves its own tripwire is armed before
+  trusting a green run — discovered 2026-09-10
+- **Local PostgreSQL is not Supabase's PostgreSQL, and only one difference is now covered.**
+  The tripwire closes the missing-relation gap on either major. Every other 16↔17 difference
+  is still unproved locally; the Preview branch on the pull request is the last word. If a
+  PostgreSQL 17 becomes available to the harness (`HPS_TEST_DATABASE_URL`, or a `postgres:17`
+  container), run the from-empty suite against it — discovered 2026-09-10
+- **Report §6 is superseded by §12.** Branching was refused on the Free plan when Stage 1.6
+  was written; the organisation was upgraded the same day and PR #9 created preview branch
+  `ddjfsqqaywmmtvaqnfqn`. The June preview branch for PR #2 (`vwgdxrjkhpvuyokydtyf`) is still
+  dead and still worth deleting — discovered 2026-09-10
+- **Not changed:** the production migration ledger is still drifted (report §8), and
+  `supabase db push` against production is still forbidden until it is repaired.

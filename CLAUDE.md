@@ -43,16 +43,51 @@ npx tsx scripts/test-reconcile-payments.ts
 npx tsx scripts/test-resend-sender.ts
 npx tsx scripts/test-stripe-route.ts
 npx tsx scripts/test-checkout-pricing.ts
-npx tsx scripts/test-finalize-sql.ts        # needs a PostgreSQL; see below
-npx tsx scripts/test-stripe-integration.ts  # needs a PostgreSQL; see below
+npx tsx scripts/test-finalize-sql.ts          # needs a PostgreSQL; see below
+npx tsx scripts/test-stripe-integration.ts    # needs a PostgreSQL; see below
+npx tsx scripts/test-migrations-from-empty.ts # needs a PostgreSQL; see below
 npm run build
 ```
 
-The last two **execute the settlement SQL**. They provision a throwaway database: they use
-`HPS_TEST_DATABASE_URL` if it is set, otherwise a server on port 54329, otherwise they start
-their own cluster with `initdb`. If none of that is possible they **fail rather than skip** —
-a silent skip is how a suite stops proving what its name says. `HPS_SKIP_PG_TESTS=1` skips
-them deliberately and prints that the SQL was not executed.
+The last three **execute real SQL against a real PostgreSQL** — the settlement functions,
+and (Stage 1.6) every file in `supabase/migrations/` from an empty database. They provision
+a throwaway database: they use `HPS_TEST_DATABASE_URL` if it is set, otherwise a server on
+port 54329, otherwise they start their own cluster with `initdb`. If none of that is possible
+they **fail rather than skip** — a silent skip is how a suite stops proving what its name
+says. `HPS_SKIP_PG_TESTS=1` skips them deliberately and prints that the SQL was not executed.
+
+**The schema builds from an empty database, and only migrations define it (2026-09-10,
+[`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md)).**
+For four months every Supabase Preview branch failed on the third migration, because
+`tournaments`, `payments`, `site_settings`, `tournament_updates` and the Storage buckets were
+only ever defined by loose scripts under `supabase/` and applied by hand. Five baseline
+migrations now capture them and the loose scripts are archived under
+`docs/archive/loose-sql/`. Three rules follow. **Never put a `.sql` file directly under
+`supabase/` again** — only `supabase/migrations/YYYYMMDDHHMMSS_name.sql`, idempotent, with a
+rollback comment. **Production's migration ledger is still drifted** (22 rows for 41 files;
+repair commands in the report §8), so **do not run `supabase db push` against production**
+until it is repaired — it would re-run nineteen files, one of them data-bearing. And the
+from-empty test diffs a fresh build against `docs/production-schema-catalog-2026-09-10.json`:
+when you add a migration, expect it to show new objects as FRESH-ONLY until production has
+the migration and the catalog is re-captured (the query is `scripts/sql/schema-catalog.sql`).
+
+**`IF EXISTS` guards the child object, never the relation named after `on` — and PostgreSQL 16
+hides the difference (2026-09-10, PR #9).** `drop trigger if exists t on public.gone;` is a hard
+`42P01` on **PostgreSQL 17**, which is what Supabase runs (verified 17.6 on the Preview branch
+itself). **PostgreSQL 16**, which is what a developer machine and this harness usually have,
+downgrades the same statement to `NOTICE: relation "public.gone" does not exist, skipping` and
+exits 0. So the from-empty suite went green 44/44 on exactly the commit whose Preview branch
+stopped dead at file 19 of 41. Nothing was omitted and no preamble hid it — the file set, the
+order and the statement were all what Supabase ran; the **servers** disagreed, and the suite was
+only reading the exit code. The same trap applies to `drop policy`/`drop rule ... on <relation>`
+and to `alter table if exists`. `drop table|index|function|type|view|sequence if exists` each
+name their own object and are safe. `scripts/test-migrations-from-empty.ts` now reads the
+server's notices, fails on `relation "…" does not exist, skipping` (and *only* that shape — the
+similar `trigger "t" for relation "r" …` proves the relation was there), and **proves its own
+tripwire is armed** before trusting a green run, by first firing a deliberately broken statement
+at a relation that never existed. Keep that self-check: it is the only thing standing between a
+tolerant local server and another silent pass. The Preview branch on the pull request remains the
+last word on anything else 16 and 17 disagree about.
 
 **Two remediation invariants (2026-09-09, `remediation_stage_1_2_report.md`).** Knowing an
 email address never authorises anything: `POST /api/pay/eligibility` answers every caller
@@ -176,7 +211,8 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md) | **Most recent session.** Supabase made the single source of price, the authorised amount recorded per Checkout Session, and the Stripe sandbox procedure written down. **Closes the pricing trap Stage 1.4 opened.** |
+| [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | **Most recent session.** Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, the ledger repair still owed, and the Pro-plan blocker on branching. |
+| [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md) | Supabase made the single source of price, the authorised amount recorded per Checkout Session, and the Stripe sandbox procedure written down. **Closes the pricing trap Stage 1.4 opened.** |
 | [`docs/STAGE-1-4-STRIPE-VALIDATION.md`](docs/STAGE-1-4-STRIPE-VALIDATION.md) | The settlement SQL executed for the first time (against a real PostgreSQL, and `xmax` checked on production's own 17.6): two defects found and fixed, the $80 repair rehearsed, and `--apply` fenced. **Corrects §13 and §15 of the Stage 1.2 report.** |
 | [`docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`](docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md) | F-01/F-02 deployed and smoke-tested in production: the `formData()` runtime trap, the cookie-clearing reuse bug, and the database evidence. Read with `remediation_stage_1_2_report.md`. |
 | [`docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md`](docs/SESSION-LOG-2026-09-08-COMMUNITY-CUP.md) | Community Cup schedule, scores and table: the round-centric admin, the phone-first public hub, the one-transaction result save, the own-goal rule, and the spreadsheet import. Read after the plan. |
