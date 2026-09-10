@@ -12,22 +12,27 @@ import {
 import type { Tournament, TournamentStatus } from "@/lib/types";
 import { isOpenPlay } from "@/lib/event-kind";
 import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
+import { resolveEventView, type EventView } from "@/lib/tournament-state";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 
-const STATUS_PILL: Record<TournamentStatus, { text: string; dot: string; cls: string }> = {
-  upcoming: { text: "Upcoming", dot: "bg-brand", cls: "text-brand bg-brand/10 border-brand/20" },
-  ongoing: { text: "Ongoing", dot: "bg-green-400", cls: "text-green-400 bg-green-500/10 border-green-500/20" },
-  completed: { text: "Completed", dot: "bg-zinc-500", cls: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
-  cancelled: { text: "Cancelled", dot: "bg-red-400", cls: "text-red-400 bg-red-500/10 border-red-500/20" },
+/** Styles only. The words come from the resolver, so no card can say its own thing. */
+const STATUS_PILL: Record<TournamentStatus, { dot: string; cls: string }> = {
+  upcoming: { dot: "bg-brand", cls: "text-brand bg-brand/10 border-brand/20" },
+  ongoing: { dot: "bg-green-400", cls: "text-green-400 bg-green-500/10 border-green-500/20" },
+  completed: { dot: "bg-zinc-500", cls: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
+  cancelled: { dot: "bg-red-400", cls: "text-red-400 bg-red-500/10 border-red-500/20" },
 };
 
-function statusLabel(t: Tournament): string {
-  const base = STATUS_PILL[t.status].text;
-  if (t.registration_open && t.payments_open) return `${base} — Registration & Payments Open`;
-  if (t.registration_open) return `${base} — Registration Open`;
-  if (t.payments_open) return `${base} — Payments Open`;
-  return base;
+/**
+ * "Ongoing — Registration Open". The suffix follows `view.availability`, which
+ * is the same answer the sign-up gate gives — this strip used to read the raw
+ * flags and advertised open registration on a finished event for four weeks.
+ */
+function statusLabel(view: EventView): string {
+  if (view.availability === "open") return `${view.label} — Registration Open`;
+  if (view.availability === "pay_only") return `${view.label} — Payments Open`;
+  return view.label;
 }
 
 function formatDateRow(t: Tournament): string {
@@ -43,7 +48,8 @@ function formatDateRow(t: Tournament): string {
 }
 
 export function TournamentCard({ tournament }: { tournament: Tournament }) {
-  const pill = STATUS_PILL[tournament.status];
+  const view = resolveEventView(tournament);
+  const pill = STATUS_PILL[view.status];
   const bannerUrl = getTournamentBannerUrl(tournament);
   const openPlay = isOpenPlay(tournament);
   const cta = tournamentPrimaryCta(tournament);
@@ -57,13 +63,13 @@ export function TournamentCard({ tournament }: { tournament: Tournament }) {
       <div className={`border-b px-6 py-3 flex items-center gap-2 ${pill.cls}`}>
         <div
           className={`w-2 h-2 ${pill.dot} rounded-full ${
-            tournament.status === "upcoming" || tournament.status === "ongoing"
+            view.status === "upcoming" || view.status === "ongoing"
               ? "animate-pulse"
               : ""
           }`}
         />
         <span className="text-xs font-mono uppercase tracking-wider font-semibold">
-          {statusLabel(tournament)}
+          {statusLabel(view)}
         </span>
       </div>
 

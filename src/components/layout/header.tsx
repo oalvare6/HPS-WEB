@@ -14,6 +14,15 @@ import type { Contact } from "@/lib/types";
  * Failures here must never break the header for anonymous visitors.
  */
 export async function Header() {
+  /*
+    The operator's pills only (facility status). The live "Registration open"
+    dot is derived from the events on the homepage hero (lib/status-pills.ts)
+    and deliberately NOT here: this header is baked into the static pages
+    (/about, the legal pages) at build time, so a registration claim in it
+    would be frozen at the last deploy — the stale-flag failure Stage 2.0
+    exists to remove. The setting's default no longer says "Registration Open"
+    for the same reason.
+  */
   const statusItems = await getSiteSetting("home.status_pills");
 
   let isAuthed = false;

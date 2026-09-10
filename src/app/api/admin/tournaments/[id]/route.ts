@@ -6,13 +6,13 @@ import { slugify } from "@/lib/slug";
 import { sanitizeOptionalInternalPath } from "@/lib/safe-internal-link";
 import { syncTournamentStripePricing } from "@/lib/stripe";
 import {
-  assertTournamentStatus,
   ensureFeaturedCapNotExceeded,
   parseOptionalMoney,
   parseOptionalNonNegInt,
   resolveFreeEntryTournamentIds,
 } from "@/lib/tournament-api-validation";
 import { parseEventKind } from "@/lib/event-kind";
+import { parseStoredEventState, storedColumnsFor } from "@/lib/tournament-state";
 import type { TournamentInput } from "@/lib/types";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -40,11 +40,22 @@ export async function PATCH(request: Request, ctx: Ctx) {
   if (unauthorized) return unauthorized;
 
   const { id } = await ctx.params;
-  const body = (await request.json()) as Partial<TournamentInput>;
+  const body = (await request.json()) as Partial<TournamentInput> & {
+    state?: unknown;
+  };
 
   const update: Record<string, unknown> = {};
+  /*
+    `status`, `is_draft`, `registration_open` and `payments_open` are
+    deliberately absent. Event status arrives as the one dropdown value
+    (`state`, D1) and is expanded below through `storedColumnsFor`, the same
+    function the form previews with. Accepting the columns one at a time made
+    this route a second writer that could store a contradiction the dropdown
+    cannot express ("completed but payments open"); a body that names one of
+    them without `state` now simply has that key ignored.
+  */
   const fields: (keyof TournamentInput)[] = [
-    "title", "slug", "status", "is_draft", "registration_open", "payments_open",
+    "title", "slug",
     "description", "start_date", "end_date", "time_start", "time_end",
     "recurrence", "location", "format", "kind", "entry_fee", "max_teams",
     "image_url", "image_preset", "register_url", "pay_url", "display_order",
@@ -60,12 +71,20 @@ export async function PATCH(request: Request, ctx: Ctx) {
     update.slug = slugify(update.title as string);
   }
 
-  if ("status" in update) {
-    const s = assertTournamentStatus(update.status);
-    if (s === "invalid") {
-      return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+  if ("state" in body) {
+    const state = parseStoredEventState(body.state);
+    if (!state) {
+      return NextResponse.json({ error: "Invalid event status." }, { status: 400 });
     }
-    update.status = s;
+    // The stored `status` depends on the dates. Use the ones in this request
+    // when it carries them, otherwise the row's own, so a status-only PATCH
+    // cannot re-derive against nothing and write "upcoming" onto a season in
+    // progress.
+    const dates = await datesForStateUpdate(id, update);
+    Object.assign(update, storedColumnsFor(state, dates));
+    // A draft is not public, so it cannot headline the homepage — enforced
+    // whether or not the body mentions the star.
+    if (state === "draft") update.is_featured = false;
   }
   if ("entry_fee" in update) {
     const v = parseOptionalMoney(update.entry_fee);
@@ -230,6 +249,31 @@ export async function PATCH(request: Request, ctx: Ctx) {
     revalidatePath(`/events/${tournament.slug}`);
   }
   return NextResponse.json({ tournament });
+}
+
+/**
+ * The dates `storedColumnsFor` should derive the stored status from: the
+ * request's when it sets them, the row's otherwise.
+ */
+async function datesForStateUpdate(
+  id: string,
+  update: Record<string, unknown>
+): Promise<{ start_date: string | null; end_date: string | null }> {
+  const asDate = (v: unknown): string | null =>
+    typeof v === "string" && v ? v : null;
+  if ("start_date" in update && "end_date" in update) {
+    return { start_date: asDate(update.start_date), end_date: asDate(update.end_date) };
+  }
+  const { data } = await supabaseAdmin
+    .from("tournaments")
+    .select("start_date, end_date")
+    .eq("id", id)
+    .maybeSingle();
+  return {
+    start_date:
+      "start_date" in update ? asDate(update.start_date) : (data?.start_date ?? null),
+    end_date: "end_date" in update ? asDate(update.end_date) : (data?.end_date ?? null),
+  };
 }
 
 export async function DELETE(_request: Request, ctx: Ctx) {

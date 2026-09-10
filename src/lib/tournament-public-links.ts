@@ -1,6 +1,7 @@
 import { safeInternalLink } from "@/lib/safe-internal-link";
 import { eventKindCopy, isOpenPlay } from "@/lib/event-kind";
 import type { SignupState } from "@/lib/signup-state";
+import { resolveEventView, type StatefulTournament } from "@/lib/tournament-state";
 import type { Tournament } from "@/lib/types";
 
 type TournamentLinkFields = {
@@ -9,12 +10,20 @@ type TournamentLinkFields = {
   pay_url: string | null;
 };
 
-type TournamentCtaFields = TournamentLinkFields & {
-  registration_open: boolean;
-  payments_open: boolean;
-  /** Optional so hand-built fixtures stay valid; missing resolves to 'tournament'. */
-  kind?: Tournament["kind"];
-};
+/**
+ * What a CTA needs: the links, and enough of the row for `resolveEventView`.
+ *
+ * This used to be the two raw flags. A card then said "Sign up to play" on any
+ * event whose `registration_open` was still true — including one that had
+ * finished four weeks earlier — and the button led to a "closed" card. The CTA
+ * now asks the same resolver every money path gates on, so it cannot advertise
+ * a door the checkout will refuse.
+ */
+export type TournamentCtaFields = TournamentLinkFields &
+  StatefulTournament & {
+    /** Optional so hand-built fixtures stay valid; missing resolves to 'tournament'. */
+    kind?: Tournament["kind"];
+  };
 
 /** Default `/register` and `/pay` paths include the tournament slug for gate + preselect. */
 export function tournamentRegisterHref(tournament: TournamentLinkFields): string {
@@ -51,9 +60,16 @@ export type TournamentPrimaryCta =
  *
  * `/register` now handles every case, including the already-registered player
  * it sends straight to payment, so there is one door and this returns it.
+ *
+ * "Open" here is `resolveEventView`'s answer, not the flag's: a finished,
+ * cancelled or draft event returns `none` however its flags were left.
  */
-export function tournamentPrimaryCta(tournament: TournamentCtaFields): TournamentPrimaryCta {
-  if (tournament.registration_open) {
+export function tournamentPrimaryCta(
+  tournament: TournamentCtaFields,
+  now: Date = new Date()
+): TournamentPrimaryCta {
+  const view = resolveEventView(tournament, now);
+  if (view.canRegister) {
     return {
       kind: "register",
       href: tournamentRegisterHref(tournament),
@@ -62,7 +78,7 @@ export function tournamentPrimaryCta(tournament: TournamentCtaFields): Tournamen
   }
   // Sign-ups closed but money still open: the only people this can serve are
   // those already on the roster, and paying is genuinely all that is left.
-  if (tournament.payments_open) {
+  if (view.canPay) {
     return {
       kind: "pay",
       href: tournamentPayHref(tournament),
@@ -78,16 +94,19 @@ export function tournamentPrimaryCta(tournament: TournamentCtaFields): Tournamen
  * The same CTA, but answered for **this visitor** rather than for the event.
  *
  * `tournamentPrimaryCta` above cannot tell a stranger from somebody who signed
- * up three weeks ago, picked a team and signed a waiver — it reads two boolean
- * flags on the event and nothing else. So the button said "Sign up to play" to
- * a player who was already on the roster, and the only way to discover what was
- * actually left was to click it and read the resulting screen.
+ * up three weeks ago, picked a team and signed a waiver — it reads the event
+ * and nothing else. So the button said "Sign up to play" to a player who was
+ * already on the roster, and the only way to discover what was actually left
+ * was to click it and read the resulting screen.
  *
  * This is a pure projection of `SignupState` (from `lib/signup-state.ts`) onto
- * a button. It adds **no branch logic of its own** — every decision was already
- * made and tested upstream; all that happens here is choosing words. The
- * signed-out case delegates straight back to `tournamentPrimaryCta`, so a
- * visitor we don't know sees exactly what they saw before.
+ * a button. It adds **no branch logic of its own** about the person — every
+ * decision was already made and tested upstream; all that happens here is
+ * choosing words. The signed-out case delegates straight back to
+ * `tournamentPrimaryCta`, so a visitor we don't know sees exactly what they
+ * saw before. The event's own state comes from `resolveEventView`, the same
+ * answer every other surface reads, and it outranks the person: a finished or
+ * cancelled event sells nothing, whoever is looking.
  */
 export type ViewerEventCta = {
   /**
@@ -110,18 +129,20 @@ export function viewerEventCta({
   state,
   teamName,
   entryFeeLabel,
-  isFinished = false,
+  now = new Date(),
 }: {
   tournament: TournamentCtaFields;
   /** Null when signed out, or when we have never met this person. */
   state: SignupState | null;
   teamName: string | null;
   entryFeeLabel: string | null;
-  /** The event's last day has passed. Outranks everything below. */
-  isFinished?: boolean;
+  /** Injectable for tests; every surface passes nothing. */
+  now?: Date;
 }): ViewerEventCta {
+  const view = resolveEventView(tournament, now);
+
   const anonymous = (): ViewerEventCta => {
-    const cta = tournamentPrimaryCta(tournament);
+    const cta = tournamentPrimaryCta(tournament, now);
     if (cta.kind === "none") {
       return {
         kind: "none",
@@ -142,7 +163,10 @@ export function viewerEventCta({
     };
   };
 
-  if (isFinished) {
+  // The event's state outranks everything below. A player on the roster of a
+  // finished event is not "all set" for anything, and one on a cancelled event
+  // must not be offered payment.
+  if (view.isFinished) {
     return {
       kind: "none",
       href: null,
@@ -152,6 +176,28 @@ export function viewerEventCta({
       personalised: false,
     };
   }
+
+  if (view.isCancelled) {
+    return {
+      kind: "none",
+      href: null,
+      label: null,
+      heading: "Cancelled",
+      note: "This event has been called off.",
+      personalised: false,
+    };
+  }
+
+  /*
+    Neither door open (the owner chose Closed, or the event is a draft): the
+    event-only answer, whatever we were told about the person. `/register`
+    reaches the same conclusion through `resolveSignupState`, which collapses
+    every personal state to `closed` when both gates are shut — so a "Pay $80
+    now" button here would lead to a screen saying sign-ups are closed. The
+    live callers already pass the collapsed state; this makes the function
+    safe for one that does not.
+  */
+  if (!view.canRegister && !view.canPay) return anonymous();
 
   if (!state) return anonymous();
 

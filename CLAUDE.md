@@ -43,10 +43,14 @@ npx tsx scripts/test-reconcile-payments.ts
 npx tsx scripts/test-resend-sender.ts
 npx tsx scripts/test-stripe-route.ts
 npx tsx scripts/test-checkout-pricing.ts
+npx tsx scripts/test-event-state.ts
+npx tsx scripts/test-event-cta.ts
+npx tsx scripts/test-me-next-steps.ts
 npx tsx scripts/test-finalize-sql.ts          # needs a PostgreSQL; see below
 npx tsx scripts/test-stripe-integration.ts    # needs a PostgreSQL; see below
 npx tsx scripts/test-migrations-from-empty.ts # needs a PostgreSQL; see below
 npm run build
+node scripts/verify-event-state-pages.mjs --build   # renders /, /events, /register, /events/[slug] in headless Chromium against a fixture stub (~1 min)
 ```
 
 The last three **execute real SQL against a real PostgreSQL** — the settlement functions,
@@ -127,6 +131,20 @@ local failure so Stripe retries. Do not add a second writer of `payments` or of
   and settlement prefers it over today's fee — so editing an event's price cannot invalidate a
   session a customer was already quoted. A session with no attempt row (everything created
   before that migration) falls back to re-deriving, exactly as before.
+
+**Event state has exactly one resolver (2026-09-10, Stage 2.0,
+[`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md)).** `resolveEventView` in
+`src/lib/tournament-state.ts` is what every card, badge, CTA, list order and archive reads; its
+`canRegister` / `canPay` *are* `acceptsRegistrations` / `acceptsPayments`, the functions every
+money and sign-up route gates on. Never read `status`, `is_draft`, `registration_open` or
+`payments_open` in a UI again — `status` is not rewritten when an event ends (D1: finished is
+derived), so the Aug-14 open play advertised "Ongoing — Registration Open" with a live sign-up
+button for four weeks while `/register` said closed. The admin API takes the one dropdown value
+(`state`) and expands it through `storedColumnsFor`; the four columns are no longer accepted
+individually. The headline dates decide "finished"; a schedule that runs past `end_date` does not
+extend the event, it shows the owner a note on the Schedule tab. `scripts/test-event-state.ts`
+proves the frontend can never advertise more than the gates allow, over every combination of
+stored columns and calendar.
 
 **Repairing production payments is scoped, not blanket.** `scripts/reconcile-payments.ts
 --apply` refuses to start unless the run names what it may write (`--session=`,
@@ -211,7 +229,8 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | Doc | What |
 |---|---|
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | **Most recent session.** Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, the ledger repair still owed, and the Pro-plan blocker on branching. |
+| [`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md) | **Most recent session.** One event-state resolver for every surface: why five pages disagreed about the same event, the `EventView` model, the invariant matrix, the headless-Chromium agreement check, and the business questions left open. |
+| [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, and the ledger repair still owed. |
 | [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md) | Supabase made the single source of price, the authorised amount recorded per Checkout Session, and the Stripe sandbox procedure written down. **Closes the pricing trap Stage 1.4 opened.** |
 | [`docs/STAGE-1-4-STRIPE-VALIDATION.md`](docs/STAGE-1-4-STRIPE-VALIDATION.md) | The settlement SQL executed for the first time (against a real PostgreSQL, and `xmax` checked on production's own 17.6): two defects found and fixed, the $80 repair rehearsed, and `--apply` fenced. **Corrects §13 and §15 of the Stage 1.2 report.** |
 | [`docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`](docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md) | F-01/F-02 deployed and smoke-tested in production: the `formData()` runtime trap, the cookie-clearing reuse bug, and the database evidence. Read with `remediation_stage_1_2_report.md`. |

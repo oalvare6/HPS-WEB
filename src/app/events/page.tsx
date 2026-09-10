@@ -3,25 +3,7 @@ import { TournamentCard } from "@/components/shared/TournamentCard";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { getFeaturedTournaments, getPublicTournaments } from "@/lib/tournaments";
 import { isOpenPlay } from "@/lib/event-kind";
-import type { Tournament, TournamentStatus } from "@/lib/types";
-
-const STATUS_SORT: Record<TournamentStatus, number> = {
-  upcoming: 0,
-  ongoing: 1,
-  completed: 2,
-  cancelled: 3,
-};
-
-function sortEventsForList(tournaments: Tournament[]): Tournament[] {
-  return [...tournaments].sort((a, b) => {
-    const statusDiff = STATUS_SORT[a.status] - STATUS_SORT[b.status];
-    if (statusDiff !== 0) return statusDiff;
-    const aTime = a.start_date ? new Date(a.start_date).getTime() : 0;
-    const bTime = b.start_date ? new Date(b.start_date).getTime() : 0;
-    if (a.status === "completed") return bTime - aTime;
-    return aTime - bTime;
-  });
-}
+import { sortEventsForListing } from "@/lib/tournament-state";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +13,10 @@ const DEFAULT_HERO_SUBTITLE =
 export default async function EventsPage() {
   const { tournaments: rawTournaments, loadError: listLoadError } =
     await getPublicTournaments();
-  const tournaments = sortEventsForList(rawTournaments);
+  // Ordered by the resolver, not the stored status: the old sort ranked a
+  // finished open play (stored "ongoing") above a season actually in progress
+  // (stored "upcoming"), because nothing rewrites that column between saves.
+  const tournaments = sortEventsForListing(rawTournaments);
   const tournamentEvents = tournaments.filter((t) => !isOpenPlay(t));
   const openPlayEvents = tournaments.filter((t) => isOpenPlay(t));
   const { loadError: featuredLoadError } = await getFeaturedTournaments();

@@ -52,7 +52,18 @@ function normalizeString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-type ResolvedTournament = { id: string; title: string; slug: string } | null;
+type ResolvedTournament =
+  | { id: string; title: string; slug: string }
+  /**
+   * The client named an event and it is not taking sign-ups. Distinct from
+   * `null` ("nothing to attach to") on purpose: this used to fall through to
+   * the single-open-event fallback, or to a registration with no event at all
+   * — one of the ways production accumulated 37 orphan rows (REBUILD-PLAN §2).
+   * A sign-up for a closed event is refused, the same answer `/register`
+   * shows and `/api/register/join` gives.
+   */
+  | { closed: true }
+  | null;
 
 /**
  * Resolve the tournament to attach to this registration. We trust an explicit
@@ -74,6 +85,9 @@ async function resolveTournament(
       .maybeSingle();
     if (data?.id && data.slug && acceptsRegistrations(data)) {
       return { id: data.id, title: data.title, slug: data.slug };
+    }
+    if (data?.id) {
+      return { closed: true };
     }
   }
 
@@ -150,6 +164,15 @@ export async function POST(request: Request) {
     }
 
     const resolvedTournament = await resolveTournament(payload.tournamentId);
+    if (resolvedTournament && "closed" in resolvedTournament) {
+      return NextResponse.json(
+        {
+          error: "This event is not taking sign-ups right now.",
+          reason: "closed",
+        },
+        { status: 400 }
+      );
+    }
     const tournamentId = resolvedTournament?.id ?? null;
     const tournamentTitle = resolvedTournament?.title ?? null;
     const tournamentSlug = resolvedTournament?.slug ?? null;

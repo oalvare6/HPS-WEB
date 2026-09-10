@@ -14,6 +14,10 @@
  *     `tournamentPrimaryCta` directly rather than against hard-coded strings,
  *     so the two can never drift.
  *
+ * Since Stage 2.0 both functions resolve the event through `resolveEventView`
+ * rather than the raw flags, so the fixtures carry dates and the clock is
+ * pinned: the event below is a season in progress on the pinned day.
+ *
  * Run: npx tsx scripts/test-event-cta.ts
  */
 import {
@@ -22,12 +26,19 @@ import {
 } from "../src/lib/tournament-public-links";
 import type { SignupState } from "../src/lib/signup-state";
 
+/** 10:00 in Houston on 2026-09-10; the season below runs 08-21 to 10-23. */
+const NOW = new Date("2026-09-10T15:00:00Z");
+
 const event = {
   slug: "community-cup-fall-2026",
   register_url: null,
   pay_url: null,
+  status: "upcoming" as const,
+  is_draft: false,
   registration_open: true,
   payments_open: true,
+  start_date: "2026-08-21 12:00:00+00",
+  end_date: "2026-10-23 12:00:00+00",
 };
 
 const SIGNUP_HREF = "/register?tournament=community-cup-fall-2026";
@@ -52,12 +63,13 @@ const EVENT_SHAPES = [
 
 for (const shape of EVENT_SHAPES) {
   const t = { ...event, ...shape };
-  const before = tournamentPrimaryCta(t);
+  const before = tournamentPrimaryCta(t, NOW);
   const after = viewerEventCta({
     tournament: t,
     state: null,
     teamName: null,
     entryFeeLabel: "$80.00",
+    now: NOW,
   });
 
   const expectedKind = before.kind === "none" ? "none" : before.kind;
@@ -159,6 +171,7 @@ for (const c of CASES) {
     state: c.state,
     teamName: c.teamName ?? null,
     entryFeeLabel: "$80.00",
+    now: NOW,
   });
 
   const labelOk =
@@ -193,6 +206,7 @@ for (const state of PERSONALISED) {
     state,
     teamName: null,
     entryFeeLabel: "$80.00",
+    now: NOW,
   });
 
   // Every personalised branch must route through /register, the one front door
@@ -214,23 +228,58 @@ for (const state of PERSONALISED) {
 }
 
 /* ------------------------------------------------------------------ *
- * 4. A finished event sells nothing, whoever is looking.
+ * 4. A finished or cancelled event sells nothing, whoever is looking.
  * ------------------------------------------------------------------ */
 
-for (const state of [
-  null,
-  { kind: "owes_payment", registrationId: "r", teamId: null, payingCash: false } as SignupState,
-]) {
+/*
+  Both fixtures keep every flag ON. That is the production shape the Aug-14
+  open play sat in for four weeks: `registration_open` and `payments_open`
+  still true on an event that had happened. The old CTA read those flags and
+  offered "Sign up to play"; the resolver reads the calendar and the stored
+  cancellation and offers nothing.
+*/
+const finishedEvent = {
+  ...event,
+  status: "ongoing" as const,
+  start_date: "2026-08-14 12:00:00+00",
+  end_date: "2026-08-14 12:00:00+00",
+};
+const cancelledEvent = { ...event, status: "cancelled" as const };
+
+const VIEWERS: { name: string; state: SignupState | null }[] = [
+  { name: "signed out", state: null },
+  {
+    name: "signed in, unpaid",
+    state: { kind: "owes_payment", registrationId: "r", teamId: null, payingCash: false },
+  },
+];
+
+for (const v of VIEWERS) {
   const cta = viewerEventCta({
-    tournament: event,
-    state,
+    tournament: finishedEvent,
+    state: v.state,
     teamName: null,
     entryFeeLabel: "$80.00",
-    isFinished: true,
+    now: NOW,
   });
   check(
-    `finished event offers nothing (${state ? "signed in, unpaid" : "signed out"})`,
+    `finished event (flags still on) offers nothing (${v.name})`,
     cta.kind === "none" && cta.href === null && cta.heading === "Past event",
+    `kind=${cta.kind} heading=${cta.heading}`
+  );
+}
+
+for (const v of VIEWERS) {
+  const cta = viewerEventCta({
+    tournament: cancelledEvent,
+    state: v.state,
+    teamName: null,
+    entryFeeLabel: "$80.00",
+    now: NOW,
+  });
+  check(
+    `cancelled event (flags still on) offers nothing (${v.name})`,
+    cta.kind === "none" && cta.href === null && cta.heading === "Cancelled",
     `kind=${cta.kind} heading=${cta.heading}`
   );
 }
@@ -264,6 +313,7 @@ for (const c of AFTER_CANCEL) {
     state: c.state,
     teamName: null,
     entryFeeLabel: "$80.00",
+    now: NOW,
   });
   check(
     `after cancelling (${c.name}) → can sign up again, not "on the roster"`,
@@ -276,7 +326,7 @@ const total =
   EVENT_SHAPES.length +
   CASES.length +
   PERSONALISED.length * 2 +
-  2 +
+  VIEWERS.length * 2 +
   AFTER_CANCEL.length;
 console.log(`\n${total - failed}/${total} passed`);
 process.exit(failed === 0 ? 0 : 1);

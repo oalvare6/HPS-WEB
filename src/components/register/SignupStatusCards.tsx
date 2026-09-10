@@ -5,6 +5,7 @@ import { SavedTeamPicker } from "@/components/register/TeamPicker";
 import { PaymentChoice } from "@/components/register/PaymentChoice";
 import { CancelSpotButton } from "@/components/register/CancelSpotButton";
 import { copyForKind } from "@/lib/event-kind";
+import type { EventState } from "@/lib/tournament-state";
 import type { EventKind } from "@/lib/types";
 import type { TeamOption } from "@/lib/tournaments";
 
@@ -309,16 +310,33 @@ export function NeedsWaiverCard({
   );
 }
 
-export function ClosedCard({ tournamentTitle }: { tournamentTitle: string | null }) {
+export function ClosedCard({
+  tournamentTitle,
+  eventState,
+}: {
+  tournamentTitle: string | null;
+  /**
+   * Why it is closed, from the resolver. A finished event and one that was
+   * called off both read as "closed" to the sign-up screen, but telling a
+   * player that an event which ended last month "isn't taking sign-ups at the
+   * moment" invites them to check back.
+   */
+  eventState?: EventState;
+}) {
+  const reason = !tournamentTitle
+    ? "Nothing is open for sign-ups at the moment."
+    : eventState === "finished"
+      ? `${tournamentTitle} has already happened.`
+      : eventState === "cancelled"
+        ? `${tournamentTitle} has been called off.`
+        : `${tournamentTitle} isn't taking sign-ups at the moment.`;
   return (
     <div className={cardClass}>
       <h2 className="text-lg font-semibold text-white">
         Sign-ups aren&apos;t open right now
       </h2>
       <p className="text-sm text-zinc-400">
-        {tournamentTitle
-          ? `${tournamentTitle} isn't taking sign-ups at the moment.`
-          : "Nothing is open for sign-ups at the moment."}{" "}
+        {reason}{" "}
         New events go up regularly — check the events page or join WhatsApp and
         we&apos;ll tell you when the next one opens.
       </p>

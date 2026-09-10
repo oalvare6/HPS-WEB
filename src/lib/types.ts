@@ -1,11 +1,11 @@
+/**
+ * The stored `tournaments.status` column. Read it only through
+ * `lib/tournament-state.ts`: `upcoming` / `ongoing` are rewritten from the
+ * dates on save and go stale between saves, `completed` is never written by
+ * the app (D1: finished is derived), and only `cancelled` is a decision. The
+ * public words for each value live in `EVENT_STATUS_LABELS` there.
+ */
 export type TournamentStatus = "upcoming" | "ongoing" | "completed" | "cancelled";
-
-export const TOURNAMENT_STATUSES: { value: TournamentStatus; label: string }[] = [
-  { value: "upcoming", label: "Upcoming" },
-  { value: "ongoing", label: "Ongoing" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
-];
 
 export type TournamentFormat =
   | "Adult 7v7"

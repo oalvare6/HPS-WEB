@@ -181,6 +181,50 @@ export function openRoundKeys(
   return open;
 }
 
+/**
+ * The last calendar day (YYYY-MM-DD) anything is scheduled for: the latest
+ * round date (a rescheduled round counts on its new date, a cancelled round
+ * not at all) or match date, whichever is later. Null when nothing is dated.
+ */
+export function scheduleLastDay(
+  rounds: readonly Pick<TournamentRound, "round_date" | "rescheduled_to" | "status">[],
+  matches: readonly Pick<TournamentMatch, "match_date" | "status">[]
+): string | null {
+  const days: string[] = [];
+  for (const r of rounds) {
+    if (r.status === "cancelled") continue;
+    const day = r.rescheduled_to ?? r.round_date;
+    if (day) days.push(day);
+  }
+  for (const m of matches) {
+    if (m.status === "cancelled") continue;
+    if (m.match_date) days.push(m.match_date);
+  }
+  if (days.length === 0) return null;
+  return days.reduce((last, day) => (day > last ? day : last));
+}
+
+/**
+ * The day the schedule runs to when that is AFTER the event's headline last
+ * day, or null when the two agree.
+ *
+ * The headline dates decide when the site treats an event as finished
+ * (`tournament-state.ts`), and the schedule does not extend them: the World Cup
+ * ended 2026-07-17 by its own row while its semi-finals and final were dated
+ * 07-24 and 07-31, so for two weeks the site called it finished with fixtures
+ * still to play. This is how the admin is told, so the end date gets corrected
+ * rather than the money gate quietly loosened by a second data source.
+ */
+export function scheduleOverrunDay(
+  eventLastDay: string | null,
+  rounds: readonly Pick<TournamentRound, "round_date" | "rescheduled_to" | "status">[],
+  matches: readonly Pick<TournamentMatch, "match_date" | "status">[]
+): string | null {
+  const last = scheduleLastDay(rounds, matches);
+  if (!last || !eventLastDay) return null;
+  return last > eventLastDay ? last : null;
+}
+
 /** "Fri Sep 11" from YYYY-MM-DD, built as a local date so the day never shifts. */
 export function formatShortDate(iso: string | null | undefined): string | null {
   if (!iso) return null;

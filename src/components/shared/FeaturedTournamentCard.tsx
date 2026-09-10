@@ -3,6 +3,7 @@ import { ArrowRight, Calendar, Clock, CreditCard, MapPin, Trophy, Users, Zap } f
 import type { Tournament, TournamentStatus } from "@/lib/types";
 import { isOpenPlay } from "@/lib/event-kind";
 import { tournamentPrimaryCta } from "@/lib/tournament-public-links";
+import { resolveEventView } from "@/lib/tournament-state";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { getTournamentBannerUrl } from "@/lib/tournament-image";
 
@@ -16,30 +17,27 @@ function formatDateRow(t: Tournament): string {
   });
 }
 
+/** Styles only. The words come from the resolver, so no card can say its own thing. */
 const STATUS_PILL: Record<
   TournamentStatus,
-  { text: string; cls: string; dot: string; pulse: boolean }
+  { cls: string; dot: string; pulse: boolean }
 > = {
   upcoming: {
-    text: "Upcoming",
     cls: "text-brand",
     dot: "bg-brand",
     pulse: true,
   },
   ongoing: {
-    text: "Ongoing",
     cls: "text-green-400",
     dot: "bg-green-400",
     pulse: true,
   },
   completed: {
-    text: "Completed",
     cls: "text-zinc-400",
     dot: "bg-zinc-500",
     pulse: false,
   },
   cancelled: {
-    text: "Cancelled",
     cls: "text-red-400",
     dot: "bg-red-400",
     pulse: false,
@@ -61,8 +59,9 @@ export function FeaturedTournamentCard({
     tournament.time_start && tournament.time_end
       ? `${tournament.time_start} – ${tournament.time_end}`
       : tournament.time_start || tournament.time_end;
+  const view = resolveEventView(tournament);
   const cta = tournamentPrimaryCta(tournament);
-  const pill = STATUS_PILL[tournament.status];
+  const pill = STATUS_PILL[view.status];
   const openPlay = isOpenPlay(tournament);
 
   return (
@@ -97,14 +96,14 @@ export function FeaturedTournamentCard({
                 <span
                   className={`w-2 h-2 ${pill.dot} rounded-full ${pill.pulse ? "animate-pulse" : ""}`}
                 />
-                {pill.text}
+                {view.label}
               </span>
-              {tournament.registration_open && (
+              {view.availability === "open" && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-semibold bg-brand/15 text-brand">
                   Registration Open
                 </span>
               )}
-              {tournament.payments_open && !tournament.registration_open && (
+              {view.availability === "pay_only" && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider font-semibold bg-brand/10 text-brand">
                   Payments Open
                 </span>

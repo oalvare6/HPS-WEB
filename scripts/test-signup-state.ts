@@ -77,7 +77,10 @@ const CASES: Case[] = [
     expect: "quick_join",
   },
   {
-    name: "Valid waiver but sign-ups closed → do not offer a roster spot",
+    // Was `full_signup` until Stage 2.0: a form that `/api/register` refuses
+    // to accept is a sign-up screen advertising a closed door. The event card
+    // sends this person to `/pay`, and this screen now agrees with it.
+    name: "Valid waiver but sign-ups closed → do not offer a roster spot, or a form",
     input: {
       contact: waiverValid,
       registration: null,
@@ -85,7 +88,34 @@ const CASES: Case[] = [
       canRegister: false,
       canPay: true,
     },
-    expect: "full_signup",
+    expect: "closed",
+  },
+  {
+    name: "Stranger, sign-ups closed but payments open → closed (the pay door serves the roster only)",
+    input: {
+      contact: null,
+      registration: null,
+      waiverType: "adult",
+      canRegister: false,
+      canPay: true,
+    },
+    expect: "closed",
+  },
+  {
+    name: "On the roster, sign-ups closed but payments open → still owes payment, not closed",
+    input: {
+      contact: waiverValid,
+      registration: {
+        id: "reg-pay-only",
+        payment_status: "pending",
+        waiver_signed: true,
+        team_id: "team-1",
+      },
+      waiverType: "adult",
+      canRegister: false,
+      canPay: true,
+    },
+    expect: "owes_payment",
   },
   {
     name: "On the roster, unpaid → go to payment, never a form",
