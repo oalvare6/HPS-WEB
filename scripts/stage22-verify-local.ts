@@ -61,6 +61,38 @@ interface RosterPayload {
 let passed = 0;
 const failures: string[] = [];
 
+/**
+ * Read an array out of a JSON envelope, or say plainly that the contract moved.
+ *
+ * This exists because of a real failure. The verifier assumed
+ * `/api/admin/tournaments` returned a bare array; it actually returns
+ * `{ tournaments: [...] }`. The optional-chaining fallback quietly produced an
+ * empty list, and the run reported "event present: stage22-main-cup — FAIL"
+ * four times over. Every row was in the database the whole time.
+ *
+ * A verifier that reports its own parse bug as missing data is worse than no
+ * verifier: it sends you to look for a problem that does not exist, and it
+ * would just as happily report a real regression as a shape change. So an
+ * unexpected payload is now a loud, specific error naming the keys that did
+ * arrive — never a silent empty array.
+ */
+function readArray<T>(body: unknown, key: string, label: string): T[] {
+  if (Array.isArray(body)) return body as T[];
+  if (body && typeof body === "object") {
+    const value = (body as Record<string, unknown>)[key];
+    if (Array.isArray(value)) return value as T[];
+    const keys = Object.keys(body as Record<string, unknown>);
+    throw new Stage22GuardError(
+      `${label}: expected an array at "${key}", but the response had ` +
+        `${keys.length ? `keys [${keys.join(", ")}]` : "no keys"}. ` +
+        `The route contract changed — fix this verifier rather than the data.`
+    );
+  }
+  throw new Stage22GuardError(
+    `${label}: expected a JSON object containing "${key}", got ${typeof body}.`
+  );
+}
+
 function check(name: string, ok: boolean, detail = ""): void {
   if (ok) {
     passed += 1;
@@ -146,11 +178,21 @@ async function main(): Promise<void> {
 
   // --- Events ------------------------------------------------------------
   section("Events (the resolver every surface reads)");
-  const events = await get<Array<{ id: string; slug: string; title: string }>>(
+  const events = await get<unknown>("/api/admin/tournaments");
+  check("the admin event list loads", events.status === 200, `HTTP ${events.status}`);
+  if (events.status !== 200) {
+    throw new Stage22GuardError(
+      `/api/admin/tournaments answered HTTP ${events.status}. Cannot continue.`
+    );
+  }
+  // The route returns { tournaments: [...] } — verified against
+  // src/app/api/admin/tournaments/route.ts, not assumed.
+  const list = readArray<{ id: string; slug: string; title: string }>(
+    events.body,
+    "tournaments",
     "/api/admin/tournaments"
   );
-  check("the admin event list loads", events.status === 200, `HTTP ${events.status}`);
-  const list = Array.isArray(events.body) ? events.body : [];
+  check("the event list is a populated array", list.length > 0, `${list.length} event(s)`);
   const bySlug = new Map(list.map((e) => [e.slug, e]));
   for (const slug of [MAIN_SLUG, EMPTY_SLUG, OVERLAP_SLUG, "stage22-open-play"]) {
     check(`event present: ${slug}`, bySlug.has(slug));
@@ -246,53 +288,93 @@ async function main(): Promise<void> {
 
   // --- Schedule, standings, scorers -------------------------------------
   section("Schedule and score math");
-  const stats = await get<Record<string, unknown>>(`/api/admin/tournaments/${main.id}/stats`);
+  const stats = await get<{
+    registrantCount?: number;
+    paidRegistrantCount?: number;
+    paymentCount?: number;
+    paymentTotalCents?: number;
+    currency?: string;
+  }>(`/api/admin/tournaments/${main.id}/stats`);
   check("the stats route answers", stats.status === 200, `HTTP ${stats.status}`);
+  const s = stats.body ?? {};
+  check("stats: 12 people are coming", s.registrantCount === 12, `got ${s.registrantCount}`);
+  // Deliberately different from the roster's 7. This endpoint counts
+  // payment_status = 'paid' only; the roster counts paid + waived. Asserting
+  // both is what would catch the two being conflated.
+  check(
+    "stats: 5 have paid (this count excludes waived, unlike the roster's 7)",
+    s.paidRegistrantCount === 5,
+    `got ${s.paidRegistrantCount}`
+  );
+  check("stats: 5 succeeded payment rows", s.paymentCount === 5, `got ${s.paymentCount}`);
+  check(
+    "stats: $250.00 recorded",
+    s.paymentTotalCents === 25000,
+    `got ${s.paymentTotalCents} cents`
+  );
 
-  const matches = await get<{ matches?: unknown[] }>(`/api/admin/tournaments/${main.id}/matches`);
+  const matches = await get<unknown>(`/api/admin/tournaments/${main.id}/matches`);
   check("the schedule loads", matches.status === 200, `HTTP ${matches.status}`);
-  const mList = (matches.body?.matches ?? matches.body ?? []) as Array<{
+  // Returns { matches: [...] } — verified against the route.
+  const mList = readArray<{
     status: string;
     home_score: number | null;
     away_score: number | null;
     match_number: number | null;
-  }>;
-  if (Array.isArray(mList) && mList.length) {
-    check("six fixtures are present", mList.length === 6, `got ${mList.length}`);
-    check(
-      "the 2-1 result is what the app reports",
-      mList.some((m) => m.match_number === 1 && m.status === "completed" && m.home_score === 2 && m.away_score === 1)
-    );
-    check("a postponed fixture survives as postponed", mList.some((m) => m.status === "postponed"));
-    check("a cancelled fixture survives as cancelled", mList.some((m) => m.status === "cancelled"));
-    check("an undated fixture is allowed", mList.some((m) => m.match_number === 5));
-  }
+  }>(matches.body, "matches", "/api/admin/tournaments/[id]/matches");
+  check("six fixtures are present", mList.length === 6, `got ${mList.length}`);
+  check(
+    "the 2-1 result is what the app reports",
+    mList.some(
+      (m) =>
+        m.match_number === 1 && m.status === "completed" && m.home_score === 2 && m.away_score === 1
+    )
+  );
+  check("a postponed fixture survives as postponed", mList.some((m) => m.status === "postponed"));
+  check("a cancelled fixture survives as cancelled", mList.some((m) => m.status === "cancelled"));
+  check("an undated fixture is allowed", mList.some((m) => m.match_number === 5));
 
   // --- Cross-event integrity through the ROUTE ---------------------------
   // The database has no constraint forbidding a team from another event; the
   // admin API is the only enforcement point, which is exactly why this must be
   // tested here rather than in SQL.
   section("Cross-event integrity (enforced by the API, not the database)");
-  const target = rows.find((r) => r.role === "player");
   const overlapEvent = bySlug.get(OVERLAP_SLUG);
-  if (target && overlapEvent) {
-    const foreignTeams = await get<{ teams?: Array<{ id: string }> }>(
+  if (overlapEvent) {
+    const overlapRoster = await get<RosterPayload>(
       `/api/admin/tournaments/${overlapEvent.id}/roster`
     );
-    const foreign = (foreignTeams.body as unknown as RosterPayload)?.teams?.[0];
-    if (foreign) {
-      const res = await fetch(`${base}/api/admin/registrations/${target.id}`, {
+    // The pairing is the whole point: a registration in the OVERLAP event, and a
+    // team belonging to the MAIN event. Patching a main-event registration with
+    // a main-event team is not cross-event at all, and would pass for the wrong
+    // reason — which is what an earlier version of this check did.
+    const mainTeam = (roster.body.teams ?? [])[0];
+    const overlapPlayer = (overlapRoster.body?.rows ?? []).find((r) => r.role === "player");
+
+    if (mainTeam && overlapPlayer) {
+      const res = await fetch(`${base}/api/admin/registrations/${overlapPlayer.id}`, {
         method: "PATCH",
         headers: { cookie, "Content-Type": "application/json" },
-        body: JSON.stringify({ team_id: foreign.id }),
+        body: JSON.stringify({ team_id: mainTeam.id }),
       });
+      const refused = res.status >= 400;
       check(
         "a team from another event is refused",
-        res.status >= 400,
-        `HTTP ${res.status} (expected 4xx)`
+        refused,
+        `${overlapEvent.slug} registration + ${MAIN_SLUG} team → HTTP ${res.status} (expected 4xx)`
       );
+      if (!refused) {
+        // It should never get here, but if the guard is gone the seed must not
+        // be left corrupted by this test.
+        await fetch(`${base}/api/admin/registrations/${overlapPlayer.id}`, {
+          method: "PATCH",
+          headers: { cookie, "Content-Type": "application/json" },
+          body: JSON.stringify({ team_id: null }),
+        });
+        console.log("  NOTE  the assignment was accepted and has been reverted.");
+      }
     } else {
-      console.log("  SKIP  no team exists on the overlap event to test with");
+      console.log("  SKIP  need a main-event team and an overlap-event player to test with");
     }
   }
 
