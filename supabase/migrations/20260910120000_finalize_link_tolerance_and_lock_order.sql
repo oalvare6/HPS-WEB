@@ -207,28 +207,35 @@ begin
     end if;
   end if;
 
-  -- contacts and tournaments are never UPDATEd here, so they need no lock —
-  -- only the existence check that keeps their foreign keys from rejecting the
-  -- payment.
-  if v_contact_id is not null
-     and not exists (select 1 from public.contacts where id = v_contact_id) then
-    -- A merged-away contact says nothing about whether the player paid, so this
-    -- one does NOT withdraw confirmation.
-    v_review_note := public.append_note_line(
-      v_review_note,
-      'Stripe session named contact ' || v_contact_id || ', which no longer exists (merged or deleted) — payment recorded without it.'
-    );
-    v_contact_id := null;
+  -- contacts and tournaments are never UPDATEd here, so they need no FOR UPDATE
+  -- — but a bare existence check would still be racy: a delete committing
+  -- between the check and the insert puts us back in the 23503 case the check
+  -- exists to avoid. FOR KEY SHARE is exactly the lock the foreign key takes at
+  -- insert time anyway, so taking it now makes check-then-insert atomic without
+  -- blocking anything the FK would not have blocked.
+  if v_contact_id is not null then
+    perform 1 from public.contacts where id = v_contact_id for key share;
+    if not found then
+      -- A merged-away contact says nothing about whether the player paid, so
+      -- this one does NOT withdraw confirmation.
+      v_review_note := public.append_note_line(
+        v_review_note,
+        'Stripe session named contact ' || v_contact_id || ', which no longer exists (merged or deleted) — payment recorded without it.'
+      );
+      v_contact_id := null;
+    end if;
   end if;
 
-  if v_tournament_id is not null
-     and not exists (select 1 from public.tournaments where id = v_tournament_id) then
-    v_review_note := public.append_note_line(
-      v_review_note,
-      'Stripe session named event ' || v_tournament_id || ', which no longer exists — payment recorded without it.'
-    );
-    v_tournament_id := null;
-    v_confirm := false;
+  if v_tournament_id is not null then
+    perform 1 from public.tournaments where id = v_tournament_id for key share;
+    if not found then
+      v_review_note := public.append_note_line(
+        v_review_note,
+        'Stripe session named event ' || v_tournament_id || ', which no longer exists — payment recorded without it.'
+      );
+      v_tournament_id := null;
+      v_confirm := false;
+    end if;
   end if;
 
   -- 4b. Business uniqueness: one payments row per Checkout Session. An
