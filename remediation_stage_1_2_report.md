@@ -7,6 +7,11 @@
 
 **Later the same day** the operator applied both migrations and asked for the deploy; the smoke-test record and the two follow-up fixes are in `docs/SESSION-LOG-2026-09-09-RESUME-SMOKE-TEST.md`.
 
+**Superseded in part on 2026-09-10** by `docs/STAGE-1-4-STRIPE-VALIDATION.md`, which executed
+the two SQL functions for the first time. It settles §17.1 and §17.2, records two defects
+found by running them, and **corrects §13 step 5, §13 step 6 and §15** — read it before
+following any procedure in §12–§15 of this report.
+
 ---
 
 ## 1. Executive result

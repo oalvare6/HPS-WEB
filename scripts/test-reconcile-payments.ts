@@ -6,7 +6,7 @@
  * Run: npx tsx scripts/test-reconcile-payments.ts
  */
 import { finalizeCheckoutSession, type CheckoutSessionFacts } from "../src/lib/payment-finalize";
-import { analyzePayments, applyRepairs, type ReconcileSource } from "../src/lib/payment-reconcile";
+import { analyzePayments, applyPlan, applyRepairs, planRepairs, type ReconcileSource } from "../src/lib/payment-reconcile";
 import { Harness, InMemoryFinalizeStore } from "./_test-fakes";
 
 const t = new Harness();
@@ -99,6 +99,68 @@ async function main() {
   const dupSession: CheckoutSessionFacts = { ...SESSION_OK, sessionId: "cs_live_dup", paymentIntentId: "pi_dup" };
   const dupReport = await analyzePayments(sourceFor(s, [SESSION_OK, dupSession]));
   t.eq("two succeeded payments for one registration → duplicate flagged for admin, never auto-repaired", dupReport.discrepancies.map((d) => [d.kind, d.proposal]), [["duplicate_local_payment", "flag_for_admin"]]);
+
+  /* ------------------------------------------------------------------ */
+  /* Guards (Stage 1.4): a repair run must say what it expects to touch  */
+  /* ------------------------------------------------------------------ */
+  {
+    const fresh = fixture();
+    const wide = await analyzePayments(sourceFor(fresh, sessions));
+    t.eq("unscoped, this window proposes two repairs", planRepairs(wide).writes.length, 2);
+
+    const scoped = planRepairs(wide, { scope: { registrationIds: [REG_ID] } });
+    t.eq("scoping to the known registration narrows the plan to one", scoped.writes.length, 1);
+    t.eq("...and it is the record we came for", [scoped.writes[0].sessionId, scoped.writes[0].kind], [
+      "cs_live_orphan",
+      "registration_pending_with_payment",
+    ]);
+    t.eq("the other repairable record is reported as out of scope, not silently dropped", scoped.outOfScope.length, 1);
+    t.eq("a scoped plan carries no refusal", scoped.refusals, []);
+
+    const bySession = planRepairs(wide, { scope: { sessionIds: ["cs_live_orphan"] } });
+    t.eq("scoping by session id reaches the same one record", bySession.writes.map((w) => w.sessionId), ["cs_live_orphan"]);
+
+    const capped = planRepairs(wide, { maxWrites: 1 });
+    t.eq("a plan bigger than --max-writes is refused", capped.refusals.length, 1);
+    t.check("the refusal says how to narrow it", capped.refusals[0].includes("--session/--registration"));
+
+    const wrongCount = planRepairs(wide, { scope: { registrationIds: [REG_ID] }, expectWrites: 2 });
+    t.eq("--expect-writes disagreeing with reality is refused", wrongCount.refusals.length, 1);
+
+    const wrongKind = planRepairs(wide, {
+      scope: { registrationIds: [REG_ID] },
+      expectKinds: ["payment_missing_locally"],
+    });
+    t.eq("--expect-kind disagreeing with reality is refused", wrongKind.refusals.length, 1);
+
+    const exact = planRepairs(wide, {
+      scope: { registrationIds: [REG_ID] },
+      maxWrites: 1,
+      expectWrites: 1,
+      expectKinds: ["registration_pending_with_payment"],
+    });
+    t.eq("the full runbook invocation for the known record passes every guard", exact.refusals, []);
+
+    // The guards are not advisory: applying a refused plan is impossible.
+    const beforeGuarded = fresh.snapshot();
+    let threw = false;
+    try {
+      await applyPlan(capped, finalize);
+    } catch {
+      threw = true;
+    }
+    t.check("applyPlan refuses a plan that carries a refusal", threw);
+    t.check("and wrote nothing while refusing", fresh.snapshot() === beforeGuarded);
+
+    // The scoped repair writes the one record and leaves the other alone.
+    const scopedFinalize = (sessionId: string) => {
+      const facts = sessions.find((x) => x.sessionId === sessionId)!;
+      return finalizeCheckoutSession(facts, fresh, { eventId: null, eventType: "reconcile" });
+    };
+    await applyPlan(exact, scopedFinalize);
+    t.eq("the known registration converged", fresh.registrations.get(REG_ID)!.payment_status, "paid");
+    t.check("the out-of-scope session was not written", !fresh.payments.has("cs_live_missing"));
+  }
 
   t.done();
 }

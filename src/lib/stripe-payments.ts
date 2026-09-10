@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import { checkoutSessionFacts, finalizeCheckoutSession } from "@/lib/payment-finalize";
+import { checkoutSessionFacts, finalizeCheckoutSession, type FinalizeStore } from "@/lib/payment-finalize";
 import { getFinalizeStore } from "@/lib/payment-finalize-store-supabase";
 
 export type RecordPaymentOutcome =
@@ -23,11 +23,18 @@ export type RecordPaymentOutcome =
  *
  * No Stripe event id is available on these paths, so delivery idempotency is
  * skipped and only the business-level convergence runs.
+ *
+ * `store` defaults to the production Supabase store and is only ever passed by
+ * tests, so that this path — the one the success page and the owner's "sync
+ * payments" button take — can be driven against a real database
+ * (scripts/test-stripe-integration.ts) instead of being assumed to behave like
+ * the webhook.
  */
 export async function recordCheckoutSessionPayment(
-  session: Stripe.Checkout.Session
+  session: Stripe.Checkout.Session,
+  store: FinalizeStore = getFinalizeStore()
 ): Promise<RecordPaymentOutcome> {
-  const outcome = await finalizeCheckoutSession(checkoutSessionFacts(session), getFinalizeStore(), {
+  const outcome = await finalizeCheckoutSession(checkoutSessionFacts(session), store, {
     eventId: null,
     eventType: "app",
   });
