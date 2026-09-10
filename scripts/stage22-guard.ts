@@ -310,6 +310,320 @@ export function parseEnvFile(contents: string): Record<string, string> {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// API keys
+//
+// Supabase now issues `sb_publishable_…` / `sb_secret_…` keys alongside the
+// legacy anon / service_role JWTs. Both forms work, and hps-dev has both
+// enabled — but they are not interchangeable between slots, and only one of the
+// four shapes can be checked offline for which project it belongs to.
+//
+// That asymmetry is the whole problem. A legacy JWT carries `ref` in its
+// claims, so a wrong-project JWT can be caught before it is ever used. An
+// `sb_secret_…` key carries nothing: it is an opaque string, so a secret key
+// belonging to a DIFFERENT project is indistinguishable from the right one
+// until something actually calls the API with it. Shape checking alone would
+// therefore pass a key that cannot work — which is exactly the failure this
+// section exists to make impossible.
+// ---------------------------------------------------------------------------
+
+export type SupabaseKeyKind =
+  | "publishable"
+  | "secret"
+  | "legacy-anon"
+  | "legacy-service-role"
+  | "unknown";
+
+export interface SupabaseKeyInfo {
+  kind: SupabaseKeyKind;
+  /** Project ref, when the key form carries one (legacy JWTs only). */
+  ref: string | null;
+  /** True for keys safe to ship to a browser. */
+  isPublic: boolean;
+  /** True for keys that bypass RLS and must stay server-side. */
+  isElevated: boolean;
+}
+
+export function classifySupabaseKey(key: string | null | undefined): SupabaseKeyInfo {
+  const unknown: SupabaseKeyInfo = { kind: "unknown", ref: null, isPublic: false, isElevated: false };
+  if (typeof key !== "string" || !key.trim()) return unknown;
+  const k = key.trim();
+
+  if (k.startsWith("sb_publishable_")) {
+    return { kind: "publishable", ref: null, isPublic: true, isElevated: false };
+  }
+  if (k.startsWith("sb_secret_")) {
+    return { kind: "secret", ref: null, isPublic: false, isElevated: true };
+  }
+
+  const parts = k.split(".");
+  if (parts.length !== 3) return unknown;
+  try {
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as {
+      role?: string;
+      ref?: string;
+    };
+    const ref = typeof claims.ref === "string" ? claims.ref : null;
+    if (claims.role === "anon") {
+      return { kind: "legacy-anon", ref, isPublic: true, isElevated: false };
+    }
+    if (claims.role === "service_role") {
+      return { kind: "legacy-service-role", ref, isPublic: false, isElevated: true };
+    }
+    return unknown;
+  } catch {
+    return unknown;
+  }
+}
+
+/**
+ * Check a key is the right *sort* of key for the slot it is in, and — where the
+ * form allows it — that it names the expected project.
+ *
+ * This catches a swapped pair and a wrong-project legacy JWT offline. It cannot
+ * catch a wrong-project `sb_secret_…` key; only `probeSupabaseKey` can.
+ */
+export function assertKeyFitsSlot(
+  key: string | null | undefined,
+  slot: "public" | "elevated",
+  label: string,
+  expectedRef: string
+): SupabaseKeyInfo {
+  assertNotProduction(key, label);
+  const info = classifySupabaseKey(key);
+
+  if (info.kind === "unknown") {
+    throw new Stage22GuardError(
+      `${label} is not a recognisable Supabase API key. Expected either a ` +
+        `${slot === "public" ? "sb_publishable_… or legacy anon" : "sb_secret_… or legacy service_role"} key.`
+    );
+  }
+  if (info.ref && info.ref !== expectedRef) {
+    throw new Stage22GuardError(
+      `${label} belongs to project ${info.ref}, but the approved target is ${expectedRef}.`
+    );
+  }
+  if (slot === "public" && info.isElevated) {
+    throw new Stage22GuardError(
+      `${label} is an ELEVATED key (${info.kind}). It bypasses row-level security and must ` +
+        `never be given to a browser. The keys are probably swapped.`
+    );
+  }
+  if (slot === "elevated" && info.isPublic) {
+    throw new Stage22GuardError(
+      `${label} is a PUBLIC key (${info.kind}), which cannot act as the service role. ` +
+        `Every server query would fail. The keys are probably swapped.`
+    );
+  }
+  return info;
+}
+
+export interface KeyProbeResult {
+  /** False when the API could not be reached at all (proxy, DNS, offline). */
+  reachable: boolean;
+  /**
+   * False when the answer did not come from PostgREST — a proxy denial, a
+   * captive portal, a 5xx from something in between.
+   *
+   * This field exists because of a real miss: an egress proxy answered
+   * `403 Host not in allowlist`, which is not a 401, so a first version of this
+   * code scored two entirely fake keys as "authenticated". Anything that is not
+   * recognisably PostgREST proves nothing, and must never be read as success.
+   */
+  conclusive: boolean;
+  /** True only when PostgREST itself accepted the key. */
+  authenticated: boolean;
+  status: number;
+  /** Rows the key could actually read from the probed table. */
+  rows: number;
+  message: string;
+}
+
+/**
+ * Ask the real project whether a key works.
+ *
+ * `Invalid API key` is a 401 from PostgREST and is the *only* way to learn that
+ * an opaque `sb_secret_…` key belongs to another project. Note that a key which
+ * authenticates but is blocked by RLS gets 200 and an empty array, not an
+ * error — so row count, not status, is what distinguishes an elevated key from
+ * a public one.
+ */
+export async function probeSupabaseKey(
+  supabaseUrl: string,
+  key: string,
+  table: string,
+  timeoutMs = 15000
+): Promise<KeyProbeResult> {
+  const url = `${supabaseUrl.replace(/\/$/, "")}/rest/v1/${table}?select=*&limit=5`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: controller.signal,
+    });
+    let rows = 0;
+    const text = await res.text();
+    let message = `HTTP ${res.status}`;
+
+    if (res.ok) {
+      try {
+        const parsed: unknown = JSON.parse(text);
+        rows = Array.isArray(parsed) ? parsed.length : 0;
+      } catch {
+        /* not an array body */
+      }
+      return { reachable: true, conclusive: true, authenticated: true, status: res.status, rows, message };
+    }
+
+    message = `HTTP ${res.status}: ${text.slice(0, 200)}`;
+
+    // A PostgREST error body is JSON carrying `message` and/or `code`. A proxy
+    // denial or an HTML error page is not, and tells us nothing about the key.
+    let looksLikePostgrest = false;
+    try {
+      const parsed = JSON.parse(text) as { message?: unknown; code?: unknown };
+      looksLikePostgrest =
+        typeof parsed?.message === "string" || typeof parsed?.code === "string";
+    } catch {
+      looksLikePostgrest = false;
+    }
+
+    if (!looksLikePostgrest) {
+      return {
+        reachable: true,
+        conclusive: false,
+        authenticated: false,
+        status: res.status,
+        rows: 0,
+        message: `${message}  (not a PostgREST response — something between here and the project answered)`,
+      };
+    }
+
+    // From here the answer is PostgREST's. "Invalid API key" is a rejected key;
+    // any other 4xx means the key was accepted and the request then refused.
+    const invalidKey = /invalid api key/i.test(text) || /jwt/i.test(text) && res.status === 401;
+    return {
+      reachable: true,
+      conclusive: true,
+      authenticated: !invalidKey,
+      status: res.status,
+      rows: 0,
+      message,
+    };
+  } catch (error) {
+    return {
+      reachable: false,
+      conclusive: false,
+      authenticated: false,
+      status: 0,
+      rows: 0,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface KeyPreflightReport {
+  ok: boolean;
+  /** True when the network prevented any conclusion being drawn. */
+  unreachable: boolean;
+  lines: string[];
+  problems: string[];
+}
+
+/**
+ * Prove both keys actually authenticate to the approved project, and that the
+ * public one is genuinely not elevated.
+ *
+ * `PUBLIC_TABLE` is readable by everyone through an RLS policy; `PRIVATE_TABLE`
+ * has RLS on and no policy at all, so only a key that bypasses RLS sees rows in
+ * it. That difference is the test.
+ */
+export async function preflightSupabaseKeys(options: {
+  supabaseUrl: string;
+  publicKey: string;
+  elevatedKey: string;
+  expectedRef: string;
+}): Promise<KeyPreflightReport> {
+  const { supabaseUrl, publicKey, elevatedKey, expectedRef } = options;
+  const lines: string[] = [];
+  const problems: string[] = [];
+
+  const pubInfo = assertKeyFitsSlot(publicKey, "public", "NEXT_PUBLIC_SUPABASE_ANON_KEY", expectedRef);
+  const elevInfo = assertKeyFitsSlot(elevatedKey, "elevated", "SUPABASE_SERVICE_ROLE_KEY", expectedRef);
+
+  if (publicKey.trim() === elevatedKey.trim()) {
+    problems.push("the public and server keys are the same value; one of them is wrong.");
+  }
+
+  const PUBLIC_TABLE = "tournaments";
+  const PRIVATE_TABLE = "contacts";
+
+  const pub = await probeSupabaseKey(supabaseUrl, publicKey, PUBLIC_TABLE);
+  if (!pub.reachable || !pub.conclusive) {
+    return {
+      ok: false,
+      unreachable: true,
+      lines: [`could not get a PostgREST answer from ${supabaseUrl}`, `  ${pub.message}`],
+      problems: [
+        "the project could not be reached, or something in between answered instead, " +
+          "so the keys were NOT verified. Nothing here says whether they work.",
+      ],
+    };
+  }
+
+  lines.push(`public key   ${pubInfo.kind.padEnd(20)} ${pub.authenticated ? "accepted" : "REJECTED"} (${pub.message})`);
+  if (!pub.authenticated) {
+    problems.push(
+      `the public key was rejected by ${expectedRef}. Copy the current publishable ` +
+        `(or legacy anon) key from the hps-dev dashboard.`
+    );
+  }
+
+  const elev = await probeSupabaseKey(supabaseUrl, elevatedKey, PRIVATE_TABLE);
+  if (!elev.reachable || !elev.conclusive) {
+    return {
+      ok: false,
+      unreachable: true,
+      lines: [...lines, `no PostgREST answer for the server key — ${elev.message}`],
+      problems: ["the server key could NOT be verified."],
+    };
+  }
+  lines.push(`server key   ${elevInfo.kind.padEnd(20)} ${elev.authenticated ? "accepted" : "REJECTED"} (${elev.message})`);
+  if (!elev.authenticated) {
+    problems.push(
+      `the server key was rejected by ${expectedRef}. This is the key every admin ` +
+        `query uses, so the whole admin fails without it. Copy the current secret ` +
+        `(or legacy service_role) key from the hps-dev dashboard — and make sure it ` +
+        `is hps-dev's, not another project's: an sb_secret_… key does not say which ` +
+        `project it belongs to, so only this check can tell.`
+    );
+  } else if (elev.rows === 0) {
+    lines.push(
+      `             note: the server key read 0 rows from ${PRIVATE_TABLE}; it authenticates, ` +
+        `but RLS bypass could not be confirmed on an empty table.`
+    );
+  } else {
+    lines.push(`             server key reads ${PRIVATE_TABLE} (${elev.rows} row(s)) — RLS bypass confirmed.`);
+  }
+
+  // The public key must NOT be able to read a private table. If it can, it is
+  // not a public key, whatever it is called.
+  const pubPrivate = await probeSupabaseKey(supabaseUrl, publicKey, PRIVATE_TABLE);
+  if (pubPrivate.conclusive && pubPrivate.rows > 0) {
+    problems.push(
+      `the public key can read ${pubPrivate.rows} row(s) from ${PRIVATE_TABLE}. A browser key ` +
+        `must never see private data — this key is elevated and must not be used as the public key.`
+    );
+  } else if (pubPrivate.conclusive) {
+    lines.push(`             public key reads 0 rows from ${PRIVATE_TABLE} — correctly not elevated.`);
+  }
+
+  return { ok: problems.length === 0, unreachable: false, lines, problems };
+}
+
 /** Read and parse `.env.stage22.local` (or another explicit path). */
 export function loadEnvFile(filePath: string): Record<string, string> {
   let contents: string;

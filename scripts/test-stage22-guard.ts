@@ -17,20 +17,25 @@
 
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   PRODUCTION_SUPABASE_REF,
   Stage22GuardError,
   assertDevRef,
+  assertKeyFitsSlot,
   assertNotProduction,
   assertStage22Target,
   buildStage22Env,
+  classifySupabaseKey,
   extractSupabaseRef,
   isForbiddenEnvKey,
   isSupabaseRef,
   loadEnvFile,
   parseEnvFile,
+  preflightSupabaseKeys,
+  probeSupabaseKey,
 } from "./stage22-guard";
 
 const DEV_REF = "abcdefghijklmnopqrst";
@@ -311,7 +316,180 @@ checks += 1;
   assert.equal(loadEnvFile(file).HPS_DEV_PROJECT_REF, DEV_REF);
 }
 
-console.log(`stage22 guard: ${checks} checks passed`);
-console.log(
-  `  Production (${PRODUCTION_SUPABASE_REF}) refused in ${PRODUCTION_FORMS.length} distinct forms.`
+// --- API key classification and slot fit ----------------------------------
+// The bug this covers: matching project refs proved only that the URL was
+// right. Both keys could be wrong, or swapped, and nothing noticed until every
+// query answered "Invalid API key".
+
+function jwtKey(role: string, ref: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ iss: "supabase", ref, role })).toString("base64url");
+  return `${header}.${payload}.signature-not-checked-offline`;
+}
+
+const PUBLISHABLE = "sb_publishable_AbCdEf0123456789";
+const SECRET = "sb_secret_AbCdEf0123456789";
+
+checks += 1;
+assert.equal(classifySupabaseKey(PUBLISHABLE).kind, "publishable");
+checks += 1;
+assert.equal(classifySupabaseKey(PUBLISHABLE).isPublic, true);
+checks += 1;
+assert.equal(classifySupabaseKey(SECRET).kind, "secret");
+checks += 1;
+assert.equal(classifySupabaseKey(SECRET).isElevated, true);
+checks += 1;
+assert.equal(classifySupabaseKey(jwtKey("anon", DEV_REF)).kind, "legacy-anon");
+checks += 1;
+assert.equal(classifySupabaseKey(jwtKey("service_role", DEV_REF)).kind, "legacy-service-role");
+checks += 1;
+assert.equal(classifySupabaseKey(jwtKey("anon", DEV_REF)).ref, DEV_REF);
+checks += 1;
+assert.equal(classifySupabaseKey("nonsense").kind, "unknown");
+checks += 1;
+assert.equal(classifySupabaseKey(undefined).kind, "unknown");
+
+// An opaque secret key carries no project, which is exactly why a live probe
+// is required — this asserts the limitation rather than papering over it.
+checks += 1;
+assert.equal(classifySupabaseKey(SECRET).ref, null, "sb_secret_ keys name no project offline");
+
+allows("a correct pair fits its slots", () => {
+  assertKeyFitsSlot(PUBLISHABLE, "public", "public key", DEV_REF);
+  assertKeyFitsSlot(SECRET, "elevated", "server key", DEV_REF);
+});
+allows("legacy keys for the right project also fit", () => {
+  assertKeyFitsSlot(jwtKey("anon", DEV_REF), "public", "public key", DEV_REF);
+  assertKeyFitsSlot(jwtKey("service_role", DEV_REF), "elevated", "server key", DEV_REF);
+});
+
+refuses("an elevated key in the PUBLIC slot is refused", () =>
+  assertKeyFitsSlot(SECRET, "public", "public key", DEV_REF)
 );
+refuses("a public key in the ELEVATED slot is refused", () =>
+  assertKeyFitsSlot(PUBLISHABLE, "elevated", "server key", DEV_REF)
+);
+refuses("a legacy service_role key in the public slot is refused", () =>
+  assertKeyFitsSlot(jwtKey("service_role", DEV_REF), "public", "public key", DEV_REF)
+);
+refuses("a legacy JWT from ANOTHER project is refused", () =>
+  assertKeyFitsSlot(jwtKey("anon", OTHER_REF), "public", "public key", DEV_REF)
+);
+refuses("a Production service_role key is refused outright", () =>
+  assertKeyFitsSlot(
+    jwtKey("service_role", PRODUCTION_SUPABASE_REF),
+    "elevated",
+    "server key",
+    DEV_REF
+  )
+);
+refuses("an unrecognisable key is refused", () =>
+  assertKeyFitsSlot("not-a-key", "public", "public key", DEV_REF)
+);
+refuses("an empty key is refused", () =>
+  assertKeyFitsSlot("", "elevated", "server key", DEV_REF)
+);
+
+/**
+ * The live probe must never turn "I could not ask" into "the key is fine".
+ * Port 9 is the discard port: nothing answers, so this exercises the
+ * unreachable path without touching any real project.
+ */
+async function unreachableChecks(): Promise<void> {
+  checks += 1;
+  const result = await probeSupabaseKey("https://127.0.0.1:9", PUBLISHABLE, "tournaments", 1500);
+  assert.equal(result.reachable, false, "an unreachable host must not read as authenticated");
+  assert.equal(result.authenticated, false);
+
+  checks += 1;
+  const report = await preflightSupabaseKeys({
+    supabaseUrl: "https://127.0.0.1:9",
+    publicKey: PUBLISHABLE,
+    elevatedKey: SECRET,
+    expectedRef: DEV_REF,
+  });
+  assert.equal(report.unreachable, true, "an unreachable API must be reported as unverified");
+  assert.equal(report.ok, false, "unverified must never be reported as ok");
+
+  // REGRESSION. An egress proxy answered `403 Host not in allowlist` and a first
+  // version of this code, looking only for a 401, scored two fabricated keys as
+  // "authenticated" and let --check report success. Anything that is not
+  // PostgREST proves nothing. This is the test that keeps that true.
+  await withServer(
+    (_req, res) => {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end("Host not in allowlist: example.supabase.co. Add this host to your egress settings.");
+    },
+    async (origin) => {
+      checks += 1;
+      const proxied = await probeSupabaseKey(origin, PUBLISHABLE, "tournaments", 2000);
+      assert.equal(proxied.reachable, true, "the socket did answer");
+      assert.equal(proxied.conclusive, false, "a non-PostgREST 403 proves nothing about the key");
+      assert.equal(proxied.authenticated, false, "and must never read as authenticated");
+
+      checks += 1;
+      const gated = await preflightSupabaseKeys({
+        supabaseUrl: origin,
+        publicKey: PUBLISHABLE,
+        elevatedKey: SECRET,
+        expectedRef: DEV_REF,
+      });
+      assert.equal(gated.ok, false, "a gateway denial must fail the preflight");
+      assert.equal(gated.unreachable, true, "and be reported as unverified, not as a bad key");
+    }
+  );
+
+  // A genuine PostgREST rejection is conclusive: the key really is wrong.
+  await withServer(
+    (_req, res) => {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ message: "Invalid API key", hint: "Double check your key." }));
+    },
+    async (origin) => {
+      checks += 1;
+      const rejected = await probeSupabaseKey(origin, SECRET, "contacts", 2000);
+      assert.equal(rejected.conclusive, true, "PostgREST answered, so this is conclusive");
+      assert.equal(rejected.authenticated, false, "and the key was rejected");
+    }
+  );
+
+  // A key PostgREST accepts reads rows.
+  await withServer(
+    (_req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify([{ id: 1 }, { id: 2 }]));
+    },
+    async (origin) => {
+      checks += 1;
+      const ok = await probeSupabaseKey(origin, SECRET, "contacts", 2000);
+      assert.equal(ok.authenticated, true);
+      assert.equal(ok.conclusive, true);
+      assert.equal(ok.rows, 2, "row count is what distinguishes an elevated key from a public one");
+    }
+  );
+}
+
+/** Run `body` against a throwaway localhost HTTP server, then close it. */
+async function withServer(
+  handler: (req: IncomingMessage, res: ServerResponse) => void,
+  body: (origin: string) => Promise<void>
+): Promise<void> {
+  const server = createServer(handler);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  try {
+    await body(`http://127.0.0.1:${port}`);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+unreachableChecks().then(() => {
+  console.log(`stage22 guard: ${checks} checks passed`);
+  console.log(
+    `  Production (${PRODUCTION_SUPABASE_REF}) refused in ${PRODUCTION_FORMS.length} distinct forms.`
+  );
+  console.log(`  API keys: shape, slot fit and wrong-project rejection covered;`);
+  console.log(`  an unreachable API is reported as UNVERIFIED, never as passing.`);
+});

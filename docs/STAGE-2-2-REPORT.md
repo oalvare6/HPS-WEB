@@ -175,10 +175,26 @@ failed** — a PGRST201 ambiguous embed, a broken cookie, or a roster route that
 Three commands on a machine with normal network access close that gap:
 
 ```powershell
-npx tsx scripts/stage22-setup-env.ts     # writes .env.stage22.local; the key is never echoed
+npx tsx scripts/stage22-setup-env.ts     # asks for BOTH keys; neither is echoed
+npx tsx scripts/stage22-dev.ts --check   # verifies target AND that the keys authenticate
 npx tsx scripts/stage22-dev.ts           # isolated app on http://127.0.0.1:3022
 npx tsx scripts/stage22-verify-local.ts  # automated acceptance run, second terminal
 ```
+
+**The keys are verified against the live project, not assumed.** A matching project ref proves
+only that the URL is right; it says nothing about whether the keys open it, and a rejected key
+is invisible until the first query — which is how the admin came up looking healthy and then
+answered `Invalid API key` to everything. The preflight probes both keys: the public one must
+authenticate and read **no** private rows, the server one must authenticate and read them.
+Supabase's `sb_secret_…` keys encode no project, so a secret key from another project cannot be
+caught any other way.
+
+One trap worth recording, because it nearly shipped: an egress proxy answered
+`403 Host not in allowlist`, which is not a 401, and a first version of the preflight scored two
+fabricated keys as "authenticated". Only a recognisable PostgREST response now counts as an
+answer; anything else is reported as **unverified**, never as passing.
+`scripts/test-stage22-guard.ts` holds that line, and its own tripwire was checked by
+reintroducing the bug and confirming the suite fails.
 
 The database is already seeded, so there is nothing to create by hand. The verifier signs in
 through `/api/admin/login` and asserts, against the app's own routes, the same facts §5

@@ -28,12 +28,22 @@
 The database is already migrated and seeded, so there are no records to create by hand:
 
 ```powershell
-npx tsx scripts/stage22-setup-env.ts     # writes .env.stage22.local; the key is never echoed
+npx tsx scripts/stage22-setup-env.ts     # asks for BOTH keys; neither is echoed
+npx tsx scripts/stage22-dev.ts --check   # verifies target AND that the keys authenticate
 npx tsx scripts/stage22-dev.ts           # isolated app on http://127.0.0.1:3022
 npx tsx scripts/stage22-verify-local.ts  # automated acceptance run, in a second terminal
 ```
 
 `scripts/stage22-guard.ts` refuses Production in every one of them, before any network call.
+
+**Both API keys are required and are verified live.** §3's template above lists them, but the
+setup script no longer hardcodes any key value: a key pinned in source goes stale when it is
+rotated, and — worse — an `sb_secret_…` key encodes no project, so a secret key belonging to a
+*different* project passes every offline check and then fails every query with `Invalid API
+key`. The preflight is the only thing that catches that, so it runs before the file is written
+and again on every `--check`. Either key format works: the current
+`sb_publishable_…` / `sb_secret_…` pair or the legacy `anon` / `service_role` pair, but the
+public and elevated slots must not be swapped and the guard refuses if they are.
 
 ---
 

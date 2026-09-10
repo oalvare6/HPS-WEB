@@ -37,6 +37,7 @@ import {
   assertStage22Target,
   buildStage22Env,
   loadEnvFile,
+  preflightSupabaseKeys,
 } from "./stage22-guard";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -64,14 +65,17 @@ const COPIED_PATHS = [
   "next-env.d.ts",
 ] as const;
 
-function parseArgs(argv: string[]): { checkOnly: boolean; port: number } {
+function parseArgs(argv: string[]): { checkOnly: boolean; port: number; offline: boolean } {
   let checkOnly = false;
+  let offline = false;
   let port = DEFAULT_PORT;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--check") {
       checkOnly = true;
+    } else if (arg === "--offline") {
+      offline = true;
     } else if (arg === "--port") {
       port = Number(argv[i + 1]);
       i += 1;
@@ -85,11 +89,11 @@ function parseArgs(argv: string[]): { checkOnly: boolean; port: number } {
   if (!Number.isInteger(port) || port < 1024 || port > 65535) {
     throw new Stage22GuardError(`Use a local port between 1024 and 65535, not ${port}.`);
   }
-  return { checkOnly, port };
+  return { checkOnly, port, offline };
 }
 
-function main(): void {
-  const { checkOnly, port } = parseArgs(process.argv.slice(2));
+async function main(): Promise<void> {
+  const { checkOnly, port, offline } = parseArgs(process.argv.slice(2));
 
   const envFile =
     process.env.HPS_STAGE22_ENV_FILE?.trim() || path.join(ROOT, ".env.stage22.local");
@@ -146,8 +150,40 @@ function main(): void {
     `  Withheld      database URI, Stripe, DocuSeal, Resend, HPS_TEST_DATABASE_URL, VERCEL_*`
   );
 
+  // Matching refs proves only that the URL points at the right project. It says
+  // nothing about whether the keys open it — and a rejected key is invisible
+  // until the first query, which is how a whole admin can come up looking fine
+  // and then answer "Invalid API key" to everything. So ask the project.
+  if (offline) {
+    console.log(
+      `\n  --offline: the API keys were NOT verified. Only the target ref was checked.`
+    );
+  } else {
+    console.log(`\nVerifying the keys against ${ref}…`);
+    const report = await preflightSupabaseKeys({
+      supabaseUrl: values.NEXT_PUBLIC_SUPABASE_URL,
+      publicKey: values.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      elevatedKey: values.SUPABASE_SERVICE_ROLE_KEY,
+      expectedRef: ref,
+    });
+    for (const line of report.lines) console.log(`  ${line}`);
+    if (!report.ok) {
+      const how = report.unreachable
+        ? `\n  If this machine genuinely has no route to Supabase, re-run with --offline —\n  but the app will not work either, because it makes the same calls.`
+        : `\n  Fix the key in ${envFile}, or re-run:  npx tsx scripts/stage22-setup-env.ts --force`;
+      throw new Stage22GuardError(
+        `API key preflight failed.\n\n  - ${report.problems.join("\n  - ")}${how}`
+      );
+    }
+    console.log(`  Both keys authenticate to ${ref}.`);
+  }
+
   if (checkOnly) {
-    console.log("\n--check: target and environment verified. Nothing was started.");
+    console.log(
+      offline
+        ? "\n--check: target and environment verified. The API keys were NOT verified. Nothing was started."
+        : "\n--check: target, environment and API keys verified. Nothing was started."
+    );
     return;
   }
 
@@ -202,12 +238,10 @@ function main(): void {
   }
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error: unknown) => {
   if (error instanceof Stage22GuardError) {
     console.error(`\nStage 2.2 refused to start.\n\n  ${error.message}\n`);
     process.exit(1);
   }
   throw error;
-}
+});
