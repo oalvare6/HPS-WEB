@@ -33,6 +33,7 @@ import { SchedulePanel } from "@/components/admin/SchedulePanel";
 import { TournamentUpdatesPanel } from "@/components/admin/TournamentUpdatesPanel";
 import { Breadcrumbs } from "@/components/admin/Breadcrumbs";
 import { eventKindCopy } from "@/lib/event-kind";
+import { eventLastDay } from "@/lib/tournament-state";
 import { useQueryParam } from "@/lib/admin-url-state";
 import { TournamentDetailSkeleton } from "@/components/shared/skeleton";
 
@@ -199,6 +200,7 @@ function ViewContent({ id }: { id: string }) {
                 <SchedulePanel
                   tournamentId={tournament.id}
                   tournamentSlug={tournament.slug}
+                  eventLastDay={eventLastDay(tournament)}
                 />
               )}
 

@@ -29,7 +29,7 @@ import {
   viewerEventCta,
   type ViewerEventCta,
 } from "@/lib/tournament-public-links";
-import { isHappeningToday, resolveEventState } from "@/lib/tournament-state";
+import { isHappeningToday, type EventState } from "@/lib/tournament-state";
 import { isOpenPlay } from "@/lib/event-kind";
 import type { Tournament } from "@/lib/types";
 
@@ -89,7 +89,6 @@ export default async function MePage() {
           state,
           teamName,
           entryFeeLabel,
-          isFinished: resolveEventState(event) === "finished",
         }),
       };
     })
@@ -100,10 +99,10 @@ export default async function MePage() {
   // a spot they just gave up. It drops to the history below instead of
   // vanishing, so there is still a record of having signed up at all.
   const upcoming = visible.filter(
-    (r) => isUpcomingStatus(r.tournament_status) && !r.cancelled_at
+    (r) => isCurrentEvent(r.tournament_state) && !r.cancelled_at
   );
   const past = visible.filter(
-    (r) => !isUpcomingStatus(r.tournament_status) || Boolean(r.cancelled_at)
+    (r) => !isCurrentEvent(r.tournament_state) || Boolean(r.cancelled_at)
   );
 
   return (
@@ -276,8 +275,14 @@ export default async function MePage() {
   );
 }
 
-function isUpcomingStatus(status: string | null): boolean {
-  return status === "upcoming" || status === "ongoing";
+/**
+ * A registration is current while its event is neither over nor called off.
+ * Read from the resolver, not the stored status: that column said "upcoming"
+ * about a season two rounds in, and would keep saying it after the final.
+ * A row with no event at all (37 legacy rows) is history.
+ */
+function isCurrentEvent(state: EventState | null): boolean {
+  return state !== null && state !== "finished" && state !== "cancelled";
 }
 
 /**

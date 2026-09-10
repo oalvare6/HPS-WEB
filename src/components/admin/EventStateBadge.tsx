@@ -1,10 +1,9 @@
-import type { EventState } from "@/lib/tournament-state";
-import { resolveEventState } from "@/lib/tournament-state";
+import { resolveEventView, type EventState } from "@/lib/tournament-state";
 import type { Tournament } from "@/lib/types";
 
 /**
  * The single badge that replaces the Status / Registration / Payments trio in
- * the admin. It reads the same `resolveEventState` the public site and every
+ * the admin. It reads the same `resolveEventView` the public site and every
  * money path use, so what the owner sees here is what actually happens — the
  * three separate dots could previously disagree with each other and with the
  * calendar all at once.
@@ -17,14 +16,6 @@ const STATE_STYLES: Record<EventState, string> = {
   cancelled: "bg-red-500/20 text-red-400",
 };
 
-const STATE_LABELS: Record<EventState, string> = {
-  draft: "Draft",
-  open: "Open",
-  closed: "Closed",
-  finished: "Finished",
-  cancelled: "Cancelled",
-};
-
 export function EventStateBadge({
   tournament,
   className = "",
@@ -32,17 +23,25 @@ export function EventStateBadge({
   tournament: Tournament;
   className?: string;
 }) {
-  const state = resolveEventState(tournament);
+  const view = resolveEventView(tournament);
+  // "Open · in progress" tells the owner at a glance which event is the one
+  // running tonight. The stored status used to say "Upcoming" about a season
+  // two rounds in, because nothing rewrites it between saves.
+  const underWay =
+    view.phase === "in_progress" &&
+    (view.state === "open" || view.state === "closed");
+  const label = underWay ? `${view.stateLabel} · in progress` : view.stateLabel;
+  const title = view.isFinished
+    ? "Set automatically from the end date."
+    : underWay
+      ? "Under way, by its dates."
+      : undefined;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${STATE_STYLES[state]} ${className}`}
-      title={
-        state === "finished"
-          ? "Set automatically from the end date."
-          : undefined
-      }
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${STATE_STYLES[view.state]} ${className}`}
+      title={title}
     >
-      {STATE_LABELS[state]}
+      {label}
     </span>
   );
 }

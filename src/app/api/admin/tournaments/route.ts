@@ -9,10 +9,10 @@ import {
   ensureFeaturedCapNotExceeded,
   parseOptionalMoney,
   parseOptionalNonNegInt,
-  parseTournamentStatus,
   resolveFreeEntryTournamentIds,
 } from "@/lib/tournament-api-validation";
 import { parseEventKind } from "@/lib/event-kind";
+import { parseStoredEventState, storedColumnsFor } from "@/lib/tournament-state";
 import type { TournamentInput } from "@/lib/types";
 
 export async function GET() {
@@ -35,7 +35,9 @@ export async function POST(request: Request) {
   const unauthorized = await verifyAdmin();
   if (unauthorized) return unauthorized;
 
-  const body = (await request.json()) as Partial<TournamentInput>;
+  const body = (await request.json()) as Partial<TournamentInput> & {
+    state?: unknown;
+  };
 
   if (!body.title || typeof body.title !== "string") {
     return NextResponse.json({ error: "Title is required." }, { status: 400 });
@@ -46,9 +48,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Slug could not be generated." }, { status: 400 });
   }
 
-  const status = parseTournamentStatus(body.status, "upcoming");
-  if (status === "invalid") {
-    return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+  /*
+    Event status is the one dropdown value (D1), expanded through
+    `storedColumnsFor` — never the four columns posted individually. Absent
+    means "closed": published and not selling, which is what a POST with no
+    state produced before (status upcoming, both flags false, not a draft) and
+    is what the form sends nothing for when it creates an event whose dates
+    have already passed.
+  */
+  const state =
+    body.state === undefined ? "closed" : parseStoredEventState(body.state);
+  if (!state) {
+    return NextResponse.json({ error: "Invalid event status." }, { status: 400 });
   }
 
   const entryFee = parseOptionalMoney(body.entry_fee);
@@ -85,9 +96,12 @@ export async function POST(request: Request) {
     null
   );
 
-  const isDraft = body.is_draft === true;
+  const stateColumns = storedColumnsFor(state, {
+    start_date: body.start_date ?? null,
+    end_date: body.end_date ?? null,
+  });
   // A draft is not public, so it cannot headline the homepage.
-  const isFeatured = body.is_featured === true && !isDraft;
+  const isFeatured = body.is_featured === true && !stateColumns.is_draft;
   if (isFeatured) {
     const capError = await ensureFeaturedCapNotExceeded(null);
     if (capError) return capError;
@@ -96,10 +110,7 @@ export async function POST(request: Request) {
   const row: Record<string, unknown> = {
     title: body.title,
     slug,
-    status,
-    is_draft: isDraft,
-    registration_open: body.registration_open ?? false,
-    payments_open: body.payments_open ?? false,
+    ...stateColumns,
     description: body.description ?? null,
     start_date: body.start_date ?? null,
     end_date: body.end_date ?? null,

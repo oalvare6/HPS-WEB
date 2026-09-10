@@ -34,6 +34,7 @@ import {
   groupMatchesByRound,
   isMatchPlayed,
   nextMatchday,
+  scheduleOverrunDay,
   scorerLabel,
   type RoundGroup,
 } from "@/lib/schedule";
@@ -1486,9 +1487,15 @@ function RoundCard({
 export function SchedulePanel({
   tournamentId,
   tournamentSlug,
+  eventLastDay = null,
 }: {
   tournamentId: string;
   tournamentSlug: string;
+  /**
+   * The event's last calendar day from its Settings (YYYY-MM-DD), so the panel
+   * can say when the schedule runs past it. Null when the event is undated.
+   */
+  eventLastDay?: string | null;
 }) {
   const [rounds, setRounds] = useState<TournamentRound[]>([]);
   const [matches, setMatches] = useState<AdminMatch[]>([]);
@@ -1848,6 +1855,16 @@ export function SchedulePanel({
     setAddRoundOpen(true);
   };
 
+  /*
+    The headline end date decides when the public site calls an event finished
+    (lib/tournament-state.ts); the schedule does not extend it. The World Cup
+    row ended 2026-07-17 while its final was dated 07-31, so for two weeks the
+    site said "Past event" over fixtures still to play. Say so here, where the
+    owner is looking at those dates, rather than quietly widening the sale
+    window from a second source.
+  */
+  const overrunDay = loading ? null : scheduleOverrunDay(eventLastDay, rounds, matches);
+
   return (
     <div className="space-y-6">
       <div className="dashboard-card p-6 md:p-8">
@@ -1862,6 +1879,15 @@ export function SchedulePanel({
           <p className="mt-2 text-xs text-zinc-500">
             No teams yet. Make them on the Teams tab first; a match needs two
             teams (or placeholder names like 1st place).
+          </p>
+        )}
+        {overrunDay && (
+          <p className="mt-2 text-xs text-amber-300">
+            The schedule runs to {formatShortDate(overrunDay)}, after this
+            event&apos;s end date ({formatShortDate(eventLastDay)}). The public
+            site shows an event as finished the day after its end date, so move
+            the end date on the Settings tab to keep sign-ups and scores live
+            until the last match.
           </p>
         )}
       </div>

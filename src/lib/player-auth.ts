@@ -3,6 +3,11 @@ import type { User } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeEmail } from "@/lib/contacts";
+import {
+  resolveEventState,
+  type EventState,
+  type StatefulTournament,
+} from "@/lib/tournament-state";
 import type { Contact } from "@/lib/types";
 
 /**
@@ -177,7 +182,13 @@ export type PlayerRegistrationRow = {
   tournament_id: string | null;
   tournament_title: string | null;
   tournament_slug: string | null;
-  tournament_status: string | null;
+  /**
+   * The event's effective state through `resolveEventState`, or null when the
+   * row has no event. Derived rather than the stored `status` column, which is
+   * never rewritten when an event ends (D1) and so cannot say whether a
+   * registration is current or history.
+   */
+  tournament_state: EventState | null;
   registration_type: "adult" | "youth";
   payment_status: string;
   payment_amount: number | null;
@@ -223,7 +234,7 @@ export async function getPlayerProfileData(
       .select(
         `id, created_at, tournament_id, registration_type, payment_status,
          payment_amount, docuseal_status, cancelled_at,
-         tournament:tournaments!registrations_tournament_id_fkey ( id, title, slug, status )`
+         tournament:tournaments!registrations_tournament_id_fkey ( id, title, slug, status, is_draft, registration_open, payments_open, start_date, end_date )`
       )
       .eq("contact_id", contactId)
       .order("created_at", { ascending: false }),
@@ -246,12 +257,13 @@ export async function getPlayerProfileData(
     payment_amount: number | null;
     docuseal_status: string;
     cancelled_at: string | null;
-    tournament: {
-      id: string;
-      title: string;
-      slug: string;
-      status: string;
-    } | null;
+    tournament:
+      | ({
+          id: string;
+          title: string;
+          slug: string;
+        } & StatefulTournament)
+      | null;
   };
   type PayRowRaw = {
     id: string;
@@ -271,7 +283,7 @@ export async function getPlayerProfileData(
       tournament_id: r.tournament_id,
       tournament_title: r.tournament?.title ?? null,
       tournament_slug: r.tournament?.slug ?? null,
-      tournament_status: r.tournament?.status ?? null,
+      tournament_state: r.tournament ? resolveEventState(r.tournament) : null,
       registration_type: r.registration_type,
       payment_status: r.payment_status,
       payment_amount: r.payment_amount,

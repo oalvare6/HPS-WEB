@@ -2,8 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 import {
   acceptsPayments,
   acceptsRegistrations,
-  isPastEvent,
-  resolveEventState,
+  resolveEventView,
 } from "@/lib/tournament-state";
 import type {
   MatchScorer,
@@ -67,7 +66,13 @@ export async function getPublicTournaments(): Promise<PublicTournamentsResult> {
       console.error("[tournaments] fetch failed:", error.message, error);
       return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
-    return { tournaments: (data ?? []) as Tournament[], loadError: null };
+    // The query already excludes drafts and cancellations; the resolver is
+    // applied as well so this list can never disagree with the pages that
+    // render it about what belongs in public.
+    const listed = ((data ?? []) as Tournament[]).filter(
+      (t) => resolveEventView(t).isListed
+    );
+    return { tournaments: listed, loadError: null };
   } catch (err) {
     console.error("[tournaments] fetch failed:", err);
     return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
@@ -131,12 +136,14 @@ export async function getPaymentsOpenTournaments(): Promise<PublicTournamentsRes
 
 /**
  * Returns up to 3 tournaments to show in the homepage hero carousel:
- *   1. Admin-pinned (`is_featured = true`), in display_order/start_date order.
- *   2. Fallback when nothing is pinned: the next single tournament with
- *      status in ('upcoming', 'ongoing'), ordered by start_date asc. This
- *      keeps the hero from going empty while there's anything active or
- *      coming up. Registration-open is intentionally NOT required so an
- *      ongoing tournament with closed sign-ups still surfaces.
+ *   1. Admin-pinned (`is_featured = true`), in display_order/start_date order,
+ *      that `resolveEventView` still considers eligible — a star on a finished
+ *      event is ignored, however long it stays flagged.
+ *   2. Fallback when nothing is pinned: the next single event that is public
+ *      and not over, ordered by start_date asc. This keeps the hero from going
+ *      empty while there's anything active or coming up. Registration-open is
+ *      intentionally NOT required so an ongoing tournament with closed
+ *      sign-ups still surfaces.
  */
 export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResult> {
   try {
@@ -157,16 +164,22 @@ export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResul
 
     // A pinned event that has already happened must not headline the homepage,
     // however long it stays flagged as featured.
-    const livePinned = ((pinned ?? []) as Tournament[]).filter((t) => !isPastEvent(t));
+    const livePinned = ((pinned ?? []) as Tournament[]).filter(
+      (t) => resolveEventView(t).isFeatured
+    );
     if (livePinned.length > 0) {
       return { tournaments: livePinned, loadError: null };
     }
 
+    // Deliberately not `.in("status", ["upcoming", "ongoing"])`: the stored
+    // status is not rewritten when an event ends, so it can neither be trusted
+    // to exclude finished events nor to include a running one. The resolver
+    // decides below; the query only drops what can never headline.
     const { data: fallback, error: fallbackErr } = await supabaseAdmin
       .from("tournaments")
       .select("*")
       .eq("is_draft", false)
-      .in("status", ["upcoming", "ongoing"])
+      .neq("status", "cancelled")
       .order("start_date", { ascending: true });
 
     if (fallbackErr) {
@@ -178,7 +191,7 @@ export async function getFeaturedTournaments(): Promise<FeaturedTournamentsResul
       return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
     const nextUp = ((fallback ?? []) as Tournament[])
-      .filter((t) => !isPastEvent(t))
+      .filter((t) => resolveEventView(t).headlineEligible)
       .slice(0, 1);
     return { tournaments: nextUp, loadError: null };
   } catch (err) {
@@ -412,7 +425,7 @@ export async function getRecentEvents(limit = 3): Promise<RecentEventsResult> {
       return { tournaments: [], loadError: TOURNAMENTS_LOAD_USER_MESSAGE };
     }
     const finished = ((data ?? []) as Tournament[])
-      .filter((t) => resolveEventState(t) === "finished")
+      .filter((t) => resolveEventView(t).bucket === "past")
       .slice(0, limit);
     return { tournaments: finished, loadError: null };
   } catch (err) {

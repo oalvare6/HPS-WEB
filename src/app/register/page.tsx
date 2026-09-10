@@ -22,7 +22,7 @@ import { getCurrentPlayer } from "@/lib/player-auth";
 import { isContactWaiverValid } from "@/lib/contacts";
 import { createPayResumeToken } from "@/lib/app-signing";
 import { buildPayResumePath, buildWaiverSignPath } from "@/lib/pay-resume-url";
-import { acceptsRegistrations } from "@/lib/tournament-state";
+import { resolveEventView } from "@/lib/tournament-state";
 import { eventKindCopy, isOpenPlay, resolveEventKind } from "@/lib/event-kind";
 import { reconcileIfUnsigned } from "@/lib/waiver-reconcile";
 import {
@@ -82,7 +82,11 @@ export default async function RegisterPage({
     );
   }
 
-  const canRegister = acceptsRegistrations(event);
+  // The same resolver every card, badge and gate reads. `loadEventStanding`
+  // below asks the identical functions, so this screen cannot disagree with
+  // the button that sent the player here.
+  const view = resolveEventView(event);
+  const canRegister = view.canRegister;
 
   let registration = contact
     ? await findEventRegistration(event.id, contact.id)
@@ -146,7 +150,9 @@ export default async function RegisterPage({
       subtitle={eventSubtitle(event)}
       event={event}
     >
-      {state.kind === "closed" && <ClosedCard tournamentTitle={event.title} />}
+      {state.kind === "closed" && (
+        <ClosedCard tournamentTitle={event.title} eventState={view.state} />
+      )}
 
       {state.kind === "already_paid" && (
         <AlreadyPaidCard

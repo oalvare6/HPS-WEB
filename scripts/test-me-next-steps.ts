@@ -17,13 +17,20 @@
 import { viewerEventCta } from "../src/lib/tournament-public-links";
 import type { SignupState } from "../src/lib/signup-state";
 
+/** 10:00 in Houston on 2026-09-10. Both fixtures are live on that day. */
+const NOW = new Date("2026-09-10T15:00:00Z");
+
 /** The shape `viewerEventCta` reads — widened so both kinds share one type. */
 type EventFixture = {
   slug: string;
   register_url: string | null;
   pay_url: string | null;
+  status: "upcoming" | "ongoing" | "completed" | "cancelled";
+  is_draft: boolean;
   registration_open: boolean;
   payments_open: boolean;
+  start_date: string | null;
+  end_date: string | null;
   kind: "tournament" | "open_play";
 };
 
@@ -31,17 +38,25 @@ const cup: EventFixture = {
   slug: "community-cup-fall-2026",
   register_url: null,
   pay_url: null,
+  status: "upcoming",
+  is_draft: false,
   registration_open: true,
   payments_open: true,
+  start_date: "2026-08-21 12:00:00+00",
+  end_date: "2026-10-23 12:00:00+00",
   kind: "tournament",
 };
 
 const openPlay: EventFixture = {
-  slug: "open-play-july-27-28-2026",
+  slug: "open-play-sept-11-2026",
   register_url: null,
   pay_url: null,
+  status: "upcoming",
+  is_draft: false,
   registration_open: true,
   payments_open: true,
+  start_date: "2026-09-11 12:00:00+00",
+  end_date: "2026-09-11 12:00:00+00",
   kind: "open_play",
 };
 
@@ -152,7 +167,7 @@ for (const c of cases) {
     state: c.state,
     teamName: c.team,
     entryFeeLabel: c.fee,
-    isFinished: false,
+    now: NOW,
   });
 
   // Exactly what NextStepCard puts on screen.

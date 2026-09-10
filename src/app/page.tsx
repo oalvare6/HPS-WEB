@@ -17,7 +17,8 @@ import {
   getRecentEvents,
   TOURNAMENTS_LOAD_USER_MESSAGE,
 } from "@/lib/tournaments";
-import { getSiteSetting } from "@/lib/site-settings";
+import { getHomeStatusPills } from "@/lib/status-pills";
+import { resolveEventView, type EventView } from "@/lib/tournament-state";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,16 @@ function formatRecentEventDate(start: string | null): string {
   return new Date(start).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
+/**
+ * The archive card's badge, from the resolver rather than the stored status.
+ * The stored column is never rewritten when an event ends (D1), so it could
+ * read "Upcoming" over an event sitting in the "Recent Events" section.
+ */
 function recentEventStatus(
-  status: string
+  view: EventView
 ): "completed" | "upcoming" | "registration-open" {
-  if (status === "upcoming") return "upcoming";
-  return "completed";
+  if (view.bucket === "past") return "completed";
+  return view.canRegister ? "registration-open" : "upcoming";
 }
 
 function formatFeaturedTournamentDate(start: string | null): string {
@@ -46,15 +52,22 @@ export default async function Home() {
   const [
     { tournaments: featuredTournaments, loadError: featuredLoadError },
     { tournaments: recentEvents },
+    // The "Registration open" dot is derived from the events (see
+    // lib/status-pills.ts), shared with the header so the two cannot differ.
     statusItems,
   ] = await Promise.all([
     getFeaturedTournaments(),
     getRecentEvents(3),
-    getSiteSetting("home.status_pills"),
+    getHomeStatusPills(),
   ]);
+
   const heroTournament = featuredTournaments[0];
+  // Same resolver as the cards, the event page and the sign-up gate. The hero
+  // used to read `registration_open` raw, so it could offer "Sign up now" on an
+  // event `/register` would then call closed.
+  const heroView = heroTournament ? resolveEventView(heroTournament) : null;
   const heroTournamentHref = heroTournament
-    ? heroTournament.registration_open
+    ? heroView?.canRegister
       ? safeInternalLink(heroTournament.register_url, `/events/${heroTournament.slug}`)
       : `/events/${heroTournament.slug}`
     : "/events";
@@ -168,7 +181,7 @@ export default async function Home() {
                     href={heroTournamentHref}
                     className="mx-5 mb-5 inline-flex items-center gap-2 rounded-lg border border-brand/35 bg-brand/10 px-3 py-2 text-sm font-semibold text-white hover:bg-brand/20 transition-colors group"
                   >
-                    {heroTournament.registration_open ? "Sign up now" : "View event"}
+                    {heroView?.canRegister ? "Sign up now" : "View event"}
                     <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
                   </Link>
                 </>
@@ -340,7 +353,7 @@ export default async function Home() {
                   title={t.title}
                   date={formatRecentEventDate(t.start_date)}
                   division={t.format ?? "7v7"}
-                  status={recentEventStatus(t.status)}
+                  status={recentEventStatus(resolveEventView(t))}
                 />
               </Link>
             ))}

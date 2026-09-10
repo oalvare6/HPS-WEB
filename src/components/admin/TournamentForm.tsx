@@ -24,20 +24,21 @@ import { copyForKind, resolveEventKind } from "@/lib/event-kind";
 import { TOURNAMENT_IMAGE_PRESETS, getPresetUrl } from "@/lib/tournament-image-presets";
 import { slugify } from "@/lib/slug";
 import { dateInputToIsoPreservingCalendarDay } from "@/lib/date-input";
-import { deriveStoredStatus, isPastEvent } from "@/lib/tournament-state";
+import {
+  isPastEvent,
+  storedEventState,
+  type StoredEventState,
+} from "@/lib/tournament-state";
 
 const DEFAULT_LOCATION = "14062 Ambrose St, Houston TX";
 
-/**
- * The states an operator can actually *choose* (D1).
- *
- * `finished` is deliberately absent: it is derived from the end date by
- * `isPastEvent`, never stored. If it were selectable, the owner could mark a
- * future event finished, or leave a past event open — which is exactly the
- * failure this replaces.
- */
-type StoredEventState = "draft" | "open" | "closed" | "cancelled";
-
+/*
+  The states an operator can actually *choose* (D1) are `StoredEventState` in
+  lib/tournament-state.ts. `finished` is deliberately absent: it is derived
+  from the end date by `isPastEvent`, never stored. If it were selectable, the
+  owner could mark a future event finished, or leave a past event open — which
+  is exactly the failure this replaces.
+*/
 const EVENT_STATE_OPTIONS: {
   value: StoredEventState;
   label: string;
@@ -67,17 +68,15 @@ const EVENT_STATE_OPTIONS: {
 ];
 
 /**
- * Which state to show for an event that is already stored. Mirrors
- * `resolveEventState` minus the calendar backstop — "finished" is rendered
- * separately, not selected, so the operator's underlying choice stays intact.
+ * Which state to show for an event that is already stored: the operator's
+ * choice read back through `storedEventState`, the same ladder the resolver
+ * and the admin API use. "Finished" is rendered separately, not selected, so
+ * the underlying choice stays intact.
  */
 function storedStateFrom(t: Tournament | null): StoredEventState {
   // A brand-new event starts hidden. The owner publishes it deliberately.
   if (!t) return "draft";
-  if (t.status === "cancelled") return "cancelled";
-  if (t.is_draft) return "draft";
-  if (t.registration_open || t.payments_open) return "open";
-  return "closed";
+  return storedEventState(t);
 }
 
 function formatEventDay(dateInput: string): string {
@@ -409,33 +408,19 @@ export function TournamentForm({
           ? Math.max(0, Math.round(Number(form.drop_in_fee) * 100))
           : 0;
 
-    const dates = {
-      start_date: form.start_date || null,
-      end_date: form.end_date || null,
-    };
     /**
-     * The one dropdown expanded into the columns that still back it. Every
-     * combination is produced here and nowhere else, so the contradictory
-     * states the owner used to be able to build by hand — "completed but
-     * payments open", "registration open, payments closed" — are simply not
-     * reachable any more.
+     * The one dropdown is sent as-is. The API expands it into the columns that
+     * still back it through `storedColumnsFor` (lib/tournament-state.ts), so
+     * the contradictory states the owner used to be able to build by hand —
+     * "completed but payments open", "registration open, payments closed" —
+     * are not reachable from here or from any other caller.
      *
-     * A finished event contributes NOTHING: its four state columns are left out
-     * of the payload entirely, so saving an edit to a past event (fixing a
-     * typo, adding a photo) can never write "finished" into the database. That
-     * is D1's rule that finished is derived and never stored.
+     * A finished event contributes NOTHING: `state` is left out of the payload
+     * entirely, so saving an edit to a past event (fixing a typo, adding a
+     * photo) can never write "finished" into the database. That is D1's rule
+     * that finished is derived and never stored.
      */
-    const stateFields = finished
-      ? {}
-      : {
-          is_draft: form.state === "draft",
-          registration_open: form.state === "open",
-          payments_open: form.state === "open",
-          status:
-            form.state === "cancelled"
-              ? ("cancelled" as const)
-              : deriveStoredStatus(dates),
-        };
+    const stateFields = finished ? {} : { state: form.state };
     const payload = {
       ...stateFields,
       title: form.title.trim(),

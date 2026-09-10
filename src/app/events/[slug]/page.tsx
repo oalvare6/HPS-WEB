@@ -57,7 +57,7 @@ import {
 import { loadEventStanding } from "@/lib/event-standing";
 import { eventKindCopy, isOpenPlay } from "@/lib/event-kind";
 import { getCurrentPlayer } from "@/lib/player-auth";
-import { resolveEventState } from "@/lib/tournament-state";
+import { resolveEventView } from "@/lib/tournament-state";
 import { TournamentBannerImage } from "@/components/shared/TournamentBannerImage";
 import { WhatsAppCommunityLinkFromSite } from "@/components/shared/WhatsAppCommunityLink";
 import { ShareTournamentButton } from "@/components/shared/ShareTournamentButton";
@@ -145,24 +145,21 @@ const OPEN_PLAY_FEATURES: {
   },
 ];
 
-const STATUS_PILL: Record<TournamentStatus, { text: string; cls: string; dot: string }> = {
+/** Styles only. The words come from the resolver, so the header cannot say its own thing. */
+const STATUS_PILL: Record<TournamentStatus, { cls: string; dot: string }> = {
   upcoming: {
-    text: "Upcoming",
     cls: "text-brand bg-brand/10 border-brand/20",
     dot: "bg-brand",
   },
   ongoing: {
-    text: "Ongoing",
     cls: "text-green-400 bg-green-500/10 border-green-500/20",
     dot: "bg-green-400",
   },
   completed: {
-    text: "Completed",
     cls: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
     dot: "bg-zinc-500",
   },
   cancelled: {
-    text: "Cancelled",
     cls: "text-red-400 bg-red-500/10 border-red-500/20",
     dot: "bg-red-400",
   },
@@ -367,7 +364,14 @@ export default async function TournamentDetailPage({
   const groups = openPlay ? [] : groupMatchesByRound(rounds, matches);
   const initialTab = parseHubTab(tab);
 
-  const pill = STATUS_PILL[tournament.status];
+  /*
+    One answer for the header pill, the badges and the CTA card below. Reading
+    the stored status and the raw flags here is what put "Ongoing / Registration
+    Open / Payments Open" at the top of a page whose CTA card, forty lines
+    further down, said "Past event".
+  */
+  const view = resolveEventView(tournament);
+  const pill = STATUS_PILL[view.status];
   const bannerUrl = tournament.image_url || getPresetUrl(tournament.image_preset);
 
   /*
@@ -394,7 +398,6 @@ export default async function TournamentDetailPage({
     state: standing?.state ?? null,
     teamName: standing?.teamName ?? null,
     entryFeeLabel: standing?.entryFeeLabel ?? null,
-    isFinished: resolveEventState(tournament) === "finished",
   });
   const timeRange =
     tournament.time_start && tournament.time_end
@@ -566,7 +569,7 @@ export default async function TournamentDetailPage({
         Display only — /api/register/join re-derives the entitlement at
         write time; this line just makes the deal visible signed-out.
       */}
-      {openPlay && freeEntryEvents.length > 0 && (
+      {openPlay && view.canRegister && freeEntryEvents.length > 0 && (
         <p className="text-xs text-emerald-300/90 text-center pt-1">
           Free for{" "}
           {freeEntryEvents.map((t, i) => (
@@ -621,19 +624,19 @@ export default async function TournamentDetailPage({
           >
             <span
               className={`w-1.5 h-1.5 ${pill.dot} rounded-full ${
-                tournament.status === "upcoming" || tournament.status === "ongoing"
+                view.status === "upcoming" || view.status === "ongoing"
                   ? "animate-pulse"
                   : ""
               }`}
             />
-            {pill.text}
+            {view.label}
           </span>
-          {tournament.registration_open && (
+          {view.availability === "open" && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-brand-deep text-white border border-brand">
               Registration Open
             </span>
           )}
-          {tournament.payments_open && tournament.status !== "completed" && (
+          {view.availability === "pay_only" && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono uppercase tracking-wider font-semibold bg-surface-2 text-brand border border-brand/30">
               Payments Open
             </span>

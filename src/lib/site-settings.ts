@@ -74,12 +74,14 @@ function validateHttpUrl(raw: unknown): string | "invalid" {
 
 export const SITE_SETTING_DEFS = {
   "home.status_pills": {
-    default: [
-      { label: "Registration Open", status: "open" },
-      { label: "Fields: Open", status: "open" },
-    ],
+    // "Registration Open" used to be the first default here, so the homepage
+    // said registration was open whatever the events were doing. That pill is
+    // now derived from the events themselves (src/app/page.tsx) and shown ahead
+    // of these; this list is for facility status the site cannot know.
+    default: [{ label: "Fields: Open", status: "open" }],
     validate: validateStatusPills,
-    description: "Status indicators shown in the home hero (1–6 entries).",
+    description:
+      "Status indicators shown in the home hero after the live registration indicator (1–6 entries).",
   } satisfies SettingDef<StatusPill[]>,
   "footer.address": {
     default: "14062 Ambrose St, Houston, TX 77045",

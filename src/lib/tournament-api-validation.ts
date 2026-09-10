@@ -1,24 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { parseFreeEntryTournamentIds } from "@/lib/open-play-free-entry";
-import {
-  MAX_FEATURED_TOURNAMENTS,
-  TOURNAMENT_STATUSES,
-  type TournamentStatus,
-} from "@/lib/types";
+import { MAX_FEATURED_TOURNAMENTS } from "@/lib/types";
 
-const STATUS_SET = new Set<string>(TOURNAMENT_STATUSES.map((s) => s.value));
-
-export function parseTournamentStatus(v: unknown, fallback: TournamentStatus): TournamentStatus | "invalid" {
-  if (v === undefined || v === null) return fallback;
-  if (typeof v !== "string" || !STATUS_SET.has(v)) return "invalid";
-  return v as TournamentStatus;
-}
-
-export function assertTournamentStatus(v: unknown): TournamentStatus | "invalid" {
-  if (typeof v !== "string" || !STATUS_SET.has(v)) return "invalid";
-  return v as TournamentStatus;
-}
+// Event status is no longer parsed here. The admin API takes the one dropdown
+// value (`state`) and expands it through `storedColumnsFor` in
+// lib/tournament-state.ts; a raw `status` in a request body is ignored.
 
 export function parseOptionalMoney(v: unknown): number | null | "invalid" {
   if (v === undefined || v === null) return null;

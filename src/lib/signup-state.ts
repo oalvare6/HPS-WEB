@@ -48,7 +48,11 @@ export type SignupStateInput = {
 };
 
 export type SignupState =
-  /** Event is over, draft, or closed to both signups and money. */
+  /**
+   * Nothing this screen can do: the event is over, a draft, closed to both
+   * sign-ups and money — or closed to sign-ups for someone not yet on the
+   * roster, since the pay door only serves people who already are.
+   */
   | { kind: "closed" }
   /**
    * Already on the roster and square with us. Carries `teamId` because paying
@@ -113,6 +117,15 @@ export function resolveSignupState(input: SignupStateInput): SignupState {
       teamId: registration.team_id,
       payingCash: isPayingCash(registration.payment_method),
     };
+  }
+
+  // Not on this roster, and sign-ups are shut: there is nothing this screen
+  // can offer. Money may still be open (`canPay`), but that door serves people
+  // already on the roster; handing a stranger the full form would let them
+  // submit a sign-up that `/api/register` refuses — the same event card sends
+  // them to `/pay` instead, and the two must not disagree.
+  if (!canRegister) {
+    return { kind: "closed" };
   }
 
   // Not on this roster yet. A valid waiver means we already have everything we

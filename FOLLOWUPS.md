@@ -752,3 +752,46 @@ applied, no ledger row was touched, no row was changed. Nothing deployed or merg
   dead and still worth deleting — discovered 2026-09-10
 - **Not changed:** the production migration ledger is still drifted (report §8), and
   `supabase db push` against production is still forbidden until it is repaired.
+
+## 2026-09-10 — Stage 2.0: one event-state resolver for every surface
+
+Full write-up in `docs/STAGE-2-0-EVENT-STATE.md`. Branch `claude/event-state-source-of-truth-5eztx6`,
+not deployed, not merged. No migration; no production row changed; production read-only.
+
+- **F-03 is closed in code.** `resolveEventView` (`src/lib/tournament-state.ts`) is the one
+  answer every card, badge, CTA, list order, archive bucket and `/me` split reads; its
+  `canRegister` / `canPay` are the gate functions themselves. The stored `status` column and the
+  raw `registration_open` / `payments_open` flags are no longer read by any UI. Production's
+  Aug-14 open play (stored `ongoing`, both flags on) renders Completed with no button; Community
+  Cup (stored `upcoming`, two rounds in) renders Ongoing — Registration Open.
+- **The admin API is no longer a second writer.** `POST`/`PATCH /api/admin/tournaments` take the
+  dropdown value `state` and expand it through `storedColumnsFor`; `status`, `is_draft`,
+  `registration_open`, `payments_open` in a body are ignored. The form sends `state`. Anything
+  outside the repo that posted the columns individually (none known) must send `state`.
+- **`/api/register` refuses an explicit event that is not taking sign-ups** (400,
+  `reason: "closed"`). It used to fall through to "the single open event" or to a registration
+  with `tournament_id = NULL` — one of the ways the 37 orphan rows in REBUILD-PLAN §2 arose.
+- **`resolveSignupState` answers `closed` for anyone not on the roster when sign-ups are shut**,
+  even if payments are open. The full form was being offered for a sign-up the API refused; the
+  card CTA already sent the same person to `/pay`. Rostered unpaid players still get their card.
+- **The hero's "Registration Open" dot was a hardcoded default** in `site-settings.ts`. It is now
+  derived (`src/lib/status-pills.ts`) from the same loader `/register` uses. The default pills
+  are just "Fields: Open". The header shows the operator pills only — it is baked into the static
+  pages at build time, where a derived claim would freeze at the last deploy.
+- **The schedule does not extend the event.** The World Cup row ended 07-17 while its final was
+  07-31; the site called it finished for two weeks with fixtures still to play. The end date
+  still wins (nothing is loosened from a second data source); `scheduleOverrunDay()` reports the
+  mismatch and the admin Schedule tab shows an amber note asking the owner to move the end date.
+  Business question §11.1.
+- **`max_teams` still gates nothing** — it caps teams on the Teams tab. The display deliberately
+  does not invent a "full" state the API would not enforce. Business question §11.2.
+- **Tests:** `scripts/test-event-state.ts` (edge cases + a 160-row invariant matrix, 5,494
+  checks), `scripts/verify-event-state-pages.mjs` (headless Chromium against an in-memory
+  PostgREST stub with fixtures laid out relative to today; 46 checks, all four surfaces agree for
+  nine event states). The production Supabase host is proxy-blocked here, so the browser check
+  runs on fixtures, not production data.
+- **Not verified in a browser:** the admin badge ("Open · in progress") and the Schedule tab's
+  overrun note — typechecked and built, not clicked, for the usual reason (no admin session here).
+- **Deliberately not touched:** Stripe settlement, waiver/auth logic, refunds/disputes,
+  migration-ledger drift, the `FeaturedTournamentCarousel` (unused before this stage, still
+  unused), the World Cup standings override.
