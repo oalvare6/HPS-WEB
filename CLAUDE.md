@@ -48,6 +48,7 @@ npx tsx scripts/test-event-cta.ts
 npx tsx scripts/test-me-next-steps.ts
 npx tsx scripts/test-cancel-eligibility.ts
 npx tsx scripts/test-waiver-reconcile.ts
+npx tsx scripts/test-stage22-guard.ts         # proves the Stage 2.2 guard refuses Production
 npx tsx scripts/test-finalize-sql.ts          # needs a PostgreSQL; see below
 npx tsx scripts/test-stripe-integration.ts    # needs a PostgreSQL; see below
 npx tsx scripts/test-migrations-from-empty.ts # needs a PostgreSQL; see below
@@ -232,7 +233,8 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 |---|---|
 | [`docs/ASTRA-HANDOFF.md`](docs/ASTRA-HANDOFF.md) | **Start here for product, UI or admin work.** The current system in one read: architecture, the invariants that must not break, the route map, the admin problem to solve, and what a designer is free to change. |
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md) | **Most recent session.** One event-state resolver for every surface: why five pages disagreed about the same event, the `EventView` model, the invariant matrix, the headless-Chromium agreement check, and the business questions left open. |
+| [`docs/STAGE-2-2-REPORT.md`](docs/STAGE-2-2-REPORT.md) | **Most recent session.** The isolated `hps-dev` project: built from the 41 migrations and verified object-by-object against the production catalog, seeded with synthetic data, and validated in SQL — the payment split, every waiver branch, the integrity constraints and the score math. Says plainly what is *not* proved (anything involving the UI) and the three commands that close it. |
+| [`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md) | One event-state resolver for every surface: why five pages disagreed about the same event, the `EventView` model, the invariant matrix, the headless-Chromium agreement check, and the business questions left open. |
 | [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, and the ledger repair still owed. |
 | [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md) | Supabase made the single source of price, the authorised amount recorded per Checkout Session, and the Stripe sandbox procedure written down. **Closes the pricing trap Stage 1.4 opened.** |
 | [`docs/STAGE-1-4-STRIPE-VALIDATION.md`](docs/STAGE-1-4-STRIPE-VALIDATION.md) | The settlement SQL executed for the first time (against a real PostgreSQL, and `xmax` checked on production's own 17.6): two defects found and fixed, the $80 repair rehearsed, and `--apply` fenced. **Corrects §13 and §15 of the Stage 1.2 report.** |

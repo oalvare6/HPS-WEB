@@ -1,5 +1,24 @@
 # Stage 2.2 — Development database readiness
 
+> **Superseded in part, 2026-09-10. Read [STAGE-2-2-REPORT.md](STAGE-2-2-REPORT.md) first.**
+>
+> Two findings below are now out of date:
+>
+> 1. **A Supabase management connector IS available and authenticated.** The bullet further
+>    down recording "no usable management login… No Supabase connector is available in this
+>    session" was true when written and is not true now. The connector is what created
+>    `hps-dev` and applied all 41 migrations — no Supabase CLI, and no database password, so
+>    no database secret passed through the session.
+> 2. **The preferred preview branch `ddjfsqqaywmmtvaqnfqn` does not exist.** A read-only
+>    listing shows one project (Production) and two branches: `main` and the obsolete June
+>    `cursor/…` branch. The "check the dashboard first" step under *Safest minimal next step*
+>    is therefore answered, and the standalone-project path was taken.
+>
+> The isolated project now exists — `hps-dev` / `tfkdtwgxnumnuiiayrld`, PostgreSQL 17.6 — and
+> is migrated, seeded and validated at the database layer. The acceptance matrix below is
+> still the right matrix; the report records which rows are proved, which are proved only in
+> SQL, and which still need the browser.
+
 Status: **environment inspection complete; database-backed validation has not started.** No application, database, environment-file, Supabase configuration or deployment changes were made for this inspection.
 
 ## Findings verified in this workspace
@@ -8,7 +27,7 @@ Status: **environment inspection complete; database-backed validation has not st
 - That local file does not contain the Supabase anonymous key, service-role key or admin password needed for this standalone development setup. Existing integration credentials in the file were not printed or used.
 - The repository has **41 migration files**, but no `supabase/config.toml`, local Supabase project link or seed configuration.
 - No Docker-compatible runtime, PostgreSQL tools or running local PostgreSQL/Supabase service was found in the inspected standard locations, PATH or relevant listening ports.
-- A cached Supabase CLI exists, but a read-only project-list request reports no usable management login. No Supabase connector is available in this session.
+- A cached Supabase CLI exists, but a read-only project-list request reports no usable management login. ~~No Supabase connector is available in this session.~~ **Corrected 2026-09-10: an authenticated Supabase management connector is available, and it is what created and migrated `hps-dev`. See the banner at the top of this file.**
 - The user prefers the previously documented preview branch, `ddjfsqqaywmmtvaqnfqn`, if available. Its health hostname currently fails DNS resolution (`ENOTFOUND`) from this machine. This does **not** prove deletion; its current management status could not be checked. The historical Stage 1.6 report records a successful 41-migration build on that branch.
 - The older failed June preview branch must not be reused; the migration report explains its obsolete migration history.
 

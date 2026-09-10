@@ -1,6 +1,43 @@
 # Stage 2.2: standalone development Supabase checklist
 
-**Status: documentation only; awaiting approval.** No project creation, configuration, migration, reset, seed, environment-file edit or application launch is authorized by this checklist. Execute the steps below only after approval. Production must remain untouched. No push, merge, PR or deployment is part of this work.
+> **Executed 2026-09-10, with two deviations. Read [STAGE-2-2-REPORT.md](STAGE-2-2-REPORT.md)
+> for what was actually done and what is still owed.**
+>
+> The owner approved project creation, connector-based migration, and direct writes limited to
+> synthetic development cases no application route can produce. `hps-dev` /
+> `tfkdtwgxnumnuiiayrld` (PostgreSQL 17.6) exists, carries all 41 migrations, and is seeded
+> and validated at the database layer.
+>
+> **Deviation 1 — the connector, not the CLI.** §2's PowerShell `supabase db push` sequence was
+> not used. An authenticated Supabase management connector was available (contradicting
+> [STAGE-2-2-INTEGRATION-READINESS.md](STAGE-2-2-INTEGRATION-READINESS.md), which recorded that
+> none was), and it applied the migrations over the management API. That needs no CLI and **no
+> database password**, so no database secret entered the session. The CLI sequence below stays
+> valid for an operator who prefers it. One consequence to know: the management API assigns its
+> own ledger versions, so the ledger was rewritten to the filenames afterwards —
+> `scripts/stage22-migrations.ts --verify` is what proves the result.
+>
+> **Deviation 2 — §3–§5 did not run in the remote session.** The session's egress policy denies
+> `*.supabase.co`, so the app could never reach the project; only the connector could. The
+> launcher, the seed and the acceptance run are therefore scripted for the operator's machine
+> and are listed under "Running it locally" below. **Until those run, Stage 2.2 is not
+> complete**, and the SQL-level results in the report must not be presented as UI coverage.
+
+## Running it locally
+
+The database is already migrated and seeded, so there are no records to create by hand:
+
+```powershell
+npx tsx scripts/stage22-setup-env.ts     # writes .env.stage22.local; the key is never echoed
+npx tsx scripts/stage22-dev.ts           # isolated app on http://127.0.0.1:3022
+npx tsx scripts/stage22-verify-local.ts  # automated acceptance run, in a second terminal
+```
+
+`scripts/stage22-guard.ts` refuses Production in every one of them, before any network call.
+
+---
+
+**Original status, kept for the record: documentation only; awaiting approval.** No project creation, configuration, migration, reset, seed, environment-file edit or application launch is authorized by this checklist. Execute the steps below only after approval. Production must remain untouched. No push, merge, PR or deployment is part of this work.
 
 The owner separately authorized committing/pushing the Stage 2 handoff to `astra/stage-2-1-admin`. That Git-only authorization does not approve database setup. See [the current Claude handoff](CLAUDE-STAGE-2-HANDOFF.md).
 
