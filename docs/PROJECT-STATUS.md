@@ -1,45 +1,137 @@
 # HPS project status
 
-Last updated: 2026-06-03.
+**Last updated: 2026-09-10**, after Stage 1.6 (schema and migrations) and Stage 2.0 (event
+state). This is a status page, not a history. For how any decision was reached, follow the
+links; for what to do next, read [`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md).
 
-## Shipped on `main`
+## Where the system stands
 
-| Track | Scope | Docs / code |
-|-------|--------|-------------|
-| Phases 0–8 | Admin, registrants, teams, contacts | git `f95adfb` … `d8c15fc` |
-| Phases 9–15 | Player auth, smart pay, diagnostics | `docs/AUTH.md`, `docs/AUTH-RUNBOOK.md` |
-| World Cup WC-0–7 | Jun 2026 tournament launch | `docs/WORLD-CUP-ACCEPTANCE.md`, `src/lib/world-cup-pricing.ts` |
-| Pay gate T1–T4 | Email/waiver gate on `/pay`, eligibility API, WhatsApp unify | `docs/PAY-GATE-ACCEPTANCE.md` |
+The public site, sign-up, waiver and payment flows are live at
+`www.houstonpremiersoccer.com` and carry real money and real rosters. The admin area runs the
+operation: rosters, teams, schedules, scores, people and site settings. A remediation programme
+through Stages 1.2 to 2.0 has closed most of `backend_audit_v1.md`. The exceptions are named below
+— two of them, **F-00 (exposed credentials never rotated)** and **F-05 (no brute-force protection
+on admin login)**, are still fully open and sit under "Pending operator actions" and "Known gaps".
+What remains after that is product work, principally the owner-facing admin experience.
 
-### World Cup quick reference
+⚠ **Stage 2.0 is merged into this branch but not into `main` and not deployed.** Everything in
+the event-state section below is true of the code, not yet of production.
 
-- Slug: `world-cup-summer-tournament`
-- Team fee: **$960** (`WORLD_CUP_TEAM_FEE_CENTS`)
-- Scripts: `scripts/update-world-cup-tournament.mjs`, `scripts/verify-world-cup-launch.mjs`
+## Completed (in the repository)
 
-### Pay gate quick reference
+**Security and access** (Stage 1.2 — Stage 1.3's only deliverable, DocuSeal replay protection, was
+written on a branch that never merged; see "Known gaps")
+- Knowing an email address authorizes nothing. `POST /api/pay/eligibility` returns one neutral
+  body to every caller and emails a one-time link instead.
+- A signed-out player's only capability is an HttpOnly `hps_resume` cookie backed by a
+  server-side row, scoped to one registration and a fixed set of actions.
+- Resume state changes require same-origin proof.
 
-- Entry: `/pay?tournament=<slug>` (gate); bypass: `registrationId` + valid `payToken`
-- API: `POST /api/pay/eligibility`
-- WhatsApp: `footer.whatsapp_url` in `/admin/site`
-- Verify: `scripts/verify-pay-email-gate-prereqs.mjs`, `scripts/verify-pay-gate-t4.mjs`
+**Payments** (Stages 1.4–1.4.1)
+- One settlement path: the database function `finalize_checkout_payment`. Amount, currency and
+  event are re-derived from server rows before a registration is confirmed; replays converge;
+  the webhook returns 5xx on local failure so Stripe retries.
+- Supabase is the only price. Checkout is created with a server-computed amount, and the amount
+  a customer was quoted is recorded per Checkout Session, so editing an event's fee cannot
+  invalidate a session already in flight. That record is best-effort: if the write fails it is
+  logged and settlement re-derives today's fee instead.
+- The payment repair script refuses to write anything the operator has not named.
 
-## Active work
+**Schema and migrations** (Stage 1.6)
+- `supabase/migrations/` now builds the entire schema from an empty database — it could not for
+  four months, which is why every Preview branch failed. Five baseline migrations capture
+  objects that only loose hand-run scripts had defined; those scripts are archived.
+- A test applies all 41 files to an empty PostgreSQL, twice, and diffs the result against a
+  captured production catalog. Seven differences remain, each allow-listed with a reason.
+- A tripwire in that test catches statements PostgreSQL 16 tolerates and Supabase's
+  PostgreSQL 17 rejects — the failure mode that let a broken chain pass locally.
 
-**Player pay/register UX fix** — operator handoff for Claude: `CLAUDE.md`, `docs/HANDOFF-PLAYER-PAY-FLOW.md` (email gate loop, single CTA, enroll copy, tournament context). Pay gate T1–T4 code is on `main` but needs redesign/debug.
+**Event state** (Stage 2.0 — *not yet deployed*)
+- One resolver, `resolveEventView`, answers what an event is. Every card, badge, call to
+  action, list order and archive bucket reads it, and its `canRegister` / `canPay` *are* the
+  functions the money and sign-up routes gate on, so a page cannot advertise a door the backend
+  will refuse.
+- The admin's single status dropdown is now the only writer of the four columns behind it.
+- Fixed by consequence: a closed event can no longer receive a sign-up through the API, and the
+  homepage's registration indicator is derived from the events rather than typed in.
 
-Stack conventions: `.cursor/rules/hps-phases.mdc`
+## Test baseline
 
-## Not built (removed from active planning)
+Run on the Stage 2.0 branch, 2026-09-10, from a clean install:
 
-Former “Phases 16–19” (open-play `event_type`, auto-hide lists, simplified register,
-public roster) were **never implemented**. Do not assume that work exists.
+| | |
+|---|---|
+| `npx tsc --noEmit`, `npm run lint`, `npm run build` | all clean |
+| 23 script suites | **6,203 assertions**, all passing |
+| Headless-browser page agreement | **46 assertions** |
+| Pay-gate static checks | passing |
 
-## Follow-ups
+Three suites execute real SQL against a PostgreSQL they provision themselves: the two
+settlement suites and the from-empty migration suite. They fail rather than skip. The full
+command list is in [`../CLAUDE.md`](../CLAUDE.md).
 
-Append-only: `FOLLOWUPS.md`
+## Remaining work
 
-## Archive
+**Next up — the owner's admin experience.** The admin is being handed to a non-technical owner.
+Stage 2.1 is expected to rework its information architecture and visual design.
+[`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md) is the brief.
 
-Completed session plans: `docs/archive/`  
-World Cup Cursor rule (reference only): `.cursor/rules/world-cup-launch.mdc`
+**Pending operator actions** (production changes, deliberately not automated)
+- **The migration ledger is still drifted.** 22 rows against 41 files. Until the repair in
+  [`STAGE-1-6-MIGRATION-RECONCILIATION.md`](STAGE-1-6-MIGRATION-RECONCILIATION.md) §8 is run,
+  **do not `supabase db push` against production** — it would re-run nineteen files, one of
+  which cancels duplicate registrations. A green Supabase preview branch does not change this:
+  preview proves the files build from *empty*, and production is not empty. The two migrations
+  dated 2026-09-10 — the settlement lock-order fix and the checkout-attempts table — **are** live
+  in production; verified against the deployed function and catalog on 2026-09-10.
+- **The exposed credentials have still not been rotated** (audit finding F-00). A service-role
+  key, the JWT secret and the Postgres password were reachable behind a public preview URL for
+  roughly two months. The exposure was closed; rotation was deferred and no document records it
+  happening. [`../credential_containment_plan.md`](../credential_containment_plan.md) is a
+  read-only plan — it states plainly that nothing in it has been executed.
+- **No Stripe webhook delivery has been recorded yet.** `stripe_webhook_events` is empty, so
+  the deployed endpoint has not yet been proved end to end. The sandbox procedure needs an
+  operator with a test-mode key.
+- **One historical payment is still unreconciled** — a registration that remains unpaid against
+  a succeeded Stripe payment. Verified still present on 2026-09-10. The repair is rehearsed and
+  scoped; it has not been run.
+- Google sign-in works; Apple was removed. Legal pages are published but not lawyer-reviewed.
+
+**Known gaps in the code** (found while writing this; not yet scheduled)
+- **The DocuSeal webhook is not replay-protected.** The table and claim function exist in
+  production and in `supabase/migrations/`, but nothing in `src/` calls them — that code was
+  written on a branch that never merged. A replayed delivery with no `completed_at` can re-stamp
+  a signature date and silently extend a waiver by up to a year.
+- **A second signed-out credential is still live.** Besides the resume session, a 90-day HMAC
+  `payToken` travels in URLs and is accepted by eight surfaces. Stage 1.2 removed the *oracle*
+  that handed one out for an email address; it did not remove the token.
+- **Admin login has no brute-force protection** (audit finding F-05) on its one static credential:
+  no rate limit, no lockout, no delay, and no rate limiting anywhere else in `src/` either.
+- Waiver validity is stricter at the gates (`isContactWaiverValid`, exact adult/youth match) than
+  in the admin display (`waiverStatusFor`, which is never passed a waiver type at all), so the
+  roster can show a green tick for someone a youth gate would refuse. Note this is a separate thing
+  from the operator's deliberate decision to show a covered person a green tick whatever the paper
+  trail; the type-blindness is a defect.
+
+## Deferred by decision
+
+- **Refunds and disputes.** `charge.refunded` and `charge.dispute.*` are unhandled; a refund is
+  an admin-set status only.
+- **Public-site UX, SEO, accessibility and performance** — after the admin.
+- **Schema cleanup**: `tournaments.stripe_price_id` / `stripe_product_id` are still written and
+  nothing *prices* from them, though the admin routes and the reconcile script do read them — so a
+  drop is a real change, not a no-op. `drop_ins` and `team_members` hold no production rows but
+  still have live code paths, including guest rows in the admin roster.
+- The deeper data-model rebuild in [`REBUILD-PLAN.md`](REBUILD-PLAN.md) Track B (one roster
+  table, people keyed by phone).
+
+## Reading order for a new contributor
+
+1. [`../README.md`](../README.md) — what this is and how to run it
+2. [`../CLAUDE.md`](../CLAUDE.md) — conventions and the traps already paid for
+3. [`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md) — the current system and the invariants
+4. [`REBUILD-PLAN.md`](REBUILD-PLAN.md) — the operator's product decisions
+
+Everything else under `docs/` is evidence of how a decision was reached. `FOLLOWUPS.md`, the
+session logs and `backend_audit_v1.md` are **history**: useful for the reasoning, superseded by
+the code and by the documents above wherever they disagree.

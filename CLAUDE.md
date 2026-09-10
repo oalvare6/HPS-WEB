@@ -46,6 +46,8 @@ npx tsx scripts/test-checkout-pricing.ts
 npx tsx scripts/test-event-state.ts
 npx tsx scripts/test-event-cta.ts
 npx tsx scripts/test-me-next-steps.ts
+npx tsx scripts/test-cancel-eligibility.ts
+npx tsx scripts/test-waiver-reconcile.ts
 npx tsx scripts/test-finalize-sql.ts          # needs a PostgreSQL; see below
 npx tsx scripts/test-stripe-integration.ts    # needs a PostgreSQL; see below
 npx tsx scripts/test-migrations-from-empty.ts # needs a PostgreSQL; see below
@@ -228,6 +230,7 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 
 | Doc | What |
 |---|---|
+| [`docs/ASTRA-HANDOFF.md`](docs/ASTRA-HANDOFF.md) | **Start here for product, UI or admin work.** The current system in one read: architecture, the invariants that must not break, the route map, the admin problem to solve, and what a designer is free to change. |
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
 | [`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md) | **Most recent session.** One event-state resolver for every surface: why five pages disagreed about the same event, the `EventView` model, the invariant matrix, the headless-Chromium agreement check, and the business questions left open. |
 | [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, and the ledger repair still owed. |
@@ -243,7 +246,7 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 | [`docs/SESSION-LOG-2026-08-14.md`](docs/SESSION-LOG-2026-08-14.md) | Earlier still: auth URLs, one canonical host. |
 | [`docs/SESSION-LOG-2026-08-13.md`](docs/SESSION-LOG-2026-08-13.md) | The session before it. |
 | [`FOLLOWUPS.md`](FOLLOWUPS.md) | Append-only log of known issues |
-| [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md) | Shipped status (pre-dates the rebuild plan) |
+| [`docs/PROJECT-STATUS.md`](docs/PROJECT-STATUS.md) | What is done, what is open, what is deferred |
 | [`docs/AUTH.md`](docs/AUTH.md), [`docs/AUTH-RUNBOOK.md`](docs/AUTH-RUNBOOK.md) | Auth config + triage |
 | [`docs/PAY-GATE-ACCEPTANCE.md`](docs/PAY-GATE-ACCEPTANCE.md) | Pay gate regression checklist |
 | [`.cursor/rules/hps-phases.mdc`](.cursor/rules/hps-phases.mdc) | Conventions (phase list is stale) |
