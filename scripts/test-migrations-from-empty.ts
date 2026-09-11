@@ -79,7 +79,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Harness } from "./_test-fakes";
-import { provisionEmptyDatabase, REPO_ROOT, skipRequested, type PgDb } from "./_pg";
+import { lit, provisionEmptyDatabase, REPO_ROOT, skipRequested, type PgDb } from "./_pg";
 
 const t = new Harness();
 
@@ -379,13 +379,12 @@ function migrationFiles(): { file: string; version: string; name: string }[] {
     });
 }
 
-const LEDGER_TAG = "$hpsmigration$";
-
 async function recordInLedger(db: PgDb, version: string, name: string, sql: string) {
-  if (sql.includes(LEDGER_TAG)) throw new Error(`${name} contains the ledger quote tag`);
+  // lit() rather than a dollar quote: the file text travels in psql's argv, and
+  // on Windows anything non-ASCII in argv is mangled (see asciiStringLiteral).
   await db.exec(
     `insert into supabase_migrations.schema_migrations (version, statements, name)
-     values ('${version}', array[${LEDGER_TAG}${sql}${LEDGER_TAG}], '${name}')
+     values ('${version}', array[${lit(sql)}], '${name}')
      on conflict (version) do nothing`
   );
 }

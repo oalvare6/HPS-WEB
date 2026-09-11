@@ -67,6 +67,12 @@ a throwaway database: they use `HPS_TEST_DATABASE_URL` if it is set, otherwise a
 port 54329, otherwise they start their own cluster with `initdb`. If none of that is possible
 they **fail rather than skip** — a silent skip is how a suite stops proving what its name
 says. `HPS_SKIP_PG_TESTS=1` skips them deliberately and prints that the SQL was not executed.
+**On Windows the harness cannot boot its own cluster** (it shells through `sh`/`su`), so give it
+one on 54329 with trust auth, once: `initdb -D %LOCALAPPDATA%\hps-pg17 -U postgres -A trust`,
+then `port = 54329`, `listen_addresses = '127.0.0.1'` and `timezone = 'UTC'` (Supabase is UTC;
+a local-time cluster fails the `created_at` date checks) in its `postgresql.conf`, and
+`pg_ctl -D %LOCALAPPDATA%\hps-pg17 start` before the run. Never point them at a scram-auth
+server: the fixture's `authenticator` role has no password and `psql` will sit on a prompt.
 
 **The schema builds from an empty database, and only migrations define it (2026-09-10,
 [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md)).**
