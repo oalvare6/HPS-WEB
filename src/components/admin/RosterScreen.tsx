@@ -502,6 +502,7 @@ export default function RosterScreen({
         {messaging && (
           <MessagePreview
             rows={messaging}
+            eventId={tournamentId}
             initial={filter === "waiver-missing" ? "waiver" : "payment"}
             onClose={() => setMessaging(null)}
           />

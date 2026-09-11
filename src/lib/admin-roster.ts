@@ -133,6 +133,23 @@ export function walkInEmailForPhone(normalizedPhone: string): string {
 }
 
 /** Whether a `waiver_signed_at` is still inside the 365-day window. */
+/**
+ * The payment statuses that count as financially accounted for.
+ *
+ * `waived` sits beside `paid` because a comped player owes nothing — the
+ * operator settled it another way. This is the definition behind the roster's
+ * "7 accounted for, 5 outstanding", and it lives here rather than in the roster
+ * route because Stage 2.3's messaging needs the same answer: "everyone unpaid on
+ * this event" must mean exactly the people the roster shows as unpaid. Two
+ * copies of this set would eventually disagree, and the owner would have no way
+ * to tell which screen was lying.
+ */
+export const SETTLED_PAYMENT_STATUSES = ["paid", "waived"] as const;
+
+export function isFinanciallySettled(status: string | null | undefined): boolean {
+  return (SETTLED_PAYMENT_STATUSES as readonly string[]).includes(status ?? "");
+}
+
 export function isWaiverDateValid(
   signedAt: string | null | undefined,
   now = Date.now()

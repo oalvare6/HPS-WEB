@@ -36,15 +36,15 @@ const MIGRATIONS_DIR = path.join(ROOT, "supabase", "migrations");
 
 /**
  * The manifest recorded in docs/STAGE-2-2-SETUP-CHECKLIST.md §2 was 41 files
- * ending at 20260910130000. Stage 2.3 added two more — the cross-event team
- * guard and the offline-payments schema — so the expected shape is 43.
+ * ending at 20260910130000. Stage 2.3 added three — the cross-event team guard,
+ * the offline-payments schema and the message log — so it is 44.
  *
  * These stay hardcoded rather than derived from the directory listing. Derived,
  * they would agree with whatever happens to be on disk and prove nothing; fixed,
  * they catch a half-applied checkout or a file added without anyone noticing.
  */
-const EXPECTED_COUNT = 43;
-const EXPECTED_LATEST = "20260911091000";
+const EXPECTED_COUNT = 44;
+const EXPECTED_LATEST = "20260911120000";
 
 export interface MigrationFile {
   version: string;

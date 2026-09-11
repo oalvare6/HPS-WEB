@@ -7,6 +7,7 @@ import {
   totalsFromRows,
   walkInEmailForPhone,
   isPlaceholderEmail,
+  isFinanciallySettled,
   WALK_IN_PLACEHOLDER,
   type RosterPayload,
   type RosterRow,
@@ -19,7 +20,9 @@ type Ctx = { params: Promise<{ id: string }> };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Statuses that mean "this person does not owe us money". */
-const SETTLED = new Set(["paid", "waived"]);
+// One definition, shared with Stage 2.3 messaging so "unpaid" means the same
+// thing on the roster and in a reminder audience. See admin-roster.ts.
+const SETTLED = { has: (s: string) => isFinanciallySettled(s) };
 
 type ContactJoin = {
   id: string;

@@ -270,6 +270,37 @@ const KNOWN_DIFFERENCES: KnownDifference[] = [
     "void_manual_payment(p jsonb)",
   ]),
   ...stage23FreshOnly("table_grants", ["manual_payments.service_role"]),
+  /* Stage 2.3 item B — message batches and per-recipient outcomes. */
+  ...stage23FreshOnly("tables", ["message_batches", "message_recipients"]),
+  ...stage23FreshOnly("columns", [
+    ...["audience", "body", "created_at", "created_by", "id", "idempotency_key", "subject",
+        "team_id", "template", "tournament_id"].map((c) => `message_batches.${c}`),
+    ...["attempts", "batch_id", "contact_id", "email", "error", "id", "name", "provider_id",
+        "registration_id", "sent_at", "status", "updated_at"].map((c) => `message_recipients.${c}`),
+  ]),
+  ...stage23FreshOnly("constraints", [
+    ...["message_batches_body_check", "message_batches_created_by_check",
+        "message_batches_idempotency_key", "message_batches_pkey",
+        "message_batches_subject_check", "message_batches_team_id_fkey",
+        "message_batches_tournament_id_fkey"].map((c) => `message_batches.${c}`),
+    ...["message_recipients_attempts_check", "message_recipients_batch_id_fkey",
+        "message_recipients_contact_id_fkey", "message_recipients_one_per_email",
+        "message_recipients_pkey", "message_recipients_registration_id_fkey",
+        "message_recipients_status_check"].map((c) => `message_recipients.${c}`),
+  ]),
+  ...stage23FreshOnly("indexes", [
+    ...["message_batches_idempotency_key", "message_batches_pkey",
+        "message_batches_tournament_idx"].map((i) => `message_batches.${i}`),
+    ...["message_recipients_batch_idx", "message_recipients_one_per_email",
+        "message_recipients_pkey", "message_recipients_registration_idx"].map(
+      (i) => `message_recipients.${i}`
+    ),
+  ]),
+  ...stage23FreshOnly("functions", ["mark_message_sent(p jsonb)", "record_message_batch(p jsonb)"]),
+  ...stage23FreshOnly("table_grants", [
+    "message_batches.service_role",
+    "message_recipients.service_role",
+  ]),
 ];
 
 /* ------------------------------------------------------------------ */

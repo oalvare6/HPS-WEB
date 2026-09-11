@@ -1,7 +1,25 @@
 # Stage 2.3 — proposal
 
-> **Accepted 2026-09-11, with A + C first and B to follow. A and C are now built and validated
-> against `hps-dev`; B is not started.**
+> **Accepted 2026-09-11. A, C and B are now all built and validated against `hps-dev`.**
+>
+> **B (Resend) shipped 2026-09-11.** `supabase/migrations/20260911120000` adds `message_batches`
+> and `message_recipients`; `src/lib/email/message-sender.ts` extends the transport the operator
+> already chose; the Stage 2.1 composer can now actually send. The three guarantees the proposal
+> named are enforced in SQL and executed by `scripts/test-messages-sql.ts` (30 checks): a repeated
+> idempotency key returns the first batch and queues nobody again, one address gets one row per
+> batch, and a row already `sent` is never re-sent — so Retry touches only failures.
+> `scripts/test-admin-messages.ts` (48 checks) covers audience resolution and rendering, including
+> that "everyone unpaid" uses the same `isFinanciallySettled` the roster displays, now a single
+> exported definition rather than a copy in the roster route.
+>
+> Two limits stated rather than hidden. **Nothing can actually be delivered from `hps-dev`**: the
+> Stage 2.2 launcher strips `RESEND_*` by design, so the unconfigured path records every recipient
+> as `failed` with `email_provider_not_configured` and sends nothing — deliberately, rather than
+> pretending. Real delivery needs a Resend key and a verified domain, which is your call.
+> And **`sent` means the provider accepted it, not that it arrived**; there is no bounce webhook
+> yet, `provider_id` is stored so one can reconcile later, and the UI says so in those words.
+>
+> Scheduled and automated reminders remain out of scope, as proposed.
 >
 > The owner settled the invariant question this document said had to be settled first: the
 > "no second writer" rule governs **Stripe/card money**. Stripe stays authoritative for card

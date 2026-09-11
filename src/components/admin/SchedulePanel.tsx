@@ -2200,6 +2200,7 @@ export function SchedulePanel({
       {messaging && (
         <MessagePreview
           rows={rosterRows}
+          eventId={tournamentId}
           initial="schedule"
           onClose={() => setMessaging(false)}
         />
