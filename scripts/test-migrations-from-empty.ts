@@ -169,6 +169,21 @@ type KnownDifference = { section: Section; key: string; kind: DiffKind; reason: 
  * followed used `create ... if not exists`, so production kept the draft's
  * index shapes and an orphan function. None of them changes a query result.
  */
+/**
+ * Objects this repository has and production does not yet, because their
+ * migration has only reached the isolated development project. One reason for
+ * the lot, since the reason really is the same one.
+ */
+function stage23FreshOnly(section: Section, keys: string[]): KnownDifference[] {
+  return keys.map((key) => ({
+    section,
+    key,
+    kind: "fresh_only" as DiffKind,
+    reason:
+      "Stage 2.3 (A: offline cash/Zelle receipts, C: the cross-event team guard). Created by supabase/migrations/20260911090000 and 20260911091000, applied to hps-dev only. Expected until production has them and the catalog is re-captured.",
+  }));
+}
+
 const KNOWN_DIFFERENCES: KnownDifference[] = [
   {
     section: "constraints",
@@ -213,6 +228,48 @@ const KNOWN_DIFFERENCES: KnownDifference[] = [
     kind: "production_only",
     reason: "orphan from the hand-created draft; no trigger calls it (both match triggers use set_updated_at_matches).",
   },
+  /*
+    Stage 2.3 A + C. Everything below exists in this repository and not yet in
+    production, because the two migrations that create it have only been applied
+    to the isolated hps-dev project. This is the FRESH-ONLY case CLAUDE.md
+    describes: expected until production has the migration and
+    docs/production-schema-catalog-2026-09-10.json is re-captured, at which point
+    these entries go stale and the check below will say so.
+  */
+  ...stage23FreshOnly("tables", ["manual_payments"]),
+  ...stage23FreshOnly(
+    "columns",
+    [
+      "amount_cents", "contact_id", "created_at", "currency", "id", "method",
+      "note", "received_at", "recorded_by", "registration_id", "tournament_id",
+      "void_reason", "voided_at", "voided_by",
+    ].map((c) => `manual_payments.${c}`)
+  ),
+  ...stage23FreshOnly(
+    "constraints",
+    [
+      "manual_payments_amount_cents_check", "manual_payments_contact_id_fkey",
+      "manual_payments_method_check", "manual_payments_pkey",
+      "manual_payments_recorded_by_check", "manual_payments_registration_id_fkey",
+      "manual_payments_tournament_id_fkey", "manual_payments_void_is_complete",
+    ].map((c) => `manual_payments.${c}`)
+  ),
+  ...stage23FreshOnly(
+    "indexes",
+    [
+      "manual_payments_live_idx", "manual_payments_pkey",
+      "manual_payments_registration_idx", "manual_payments_tournament_idx",
+    ].map((i) => `manual_payments.${i}`)
+  ),
+  ...stage23FreshOnly("triggers", ["registrations.registrations_team_same_event"]),
+  ...stage23FreshOnly("functions", [
+    "apply_manual_payment_status(p_registration_id uuid)",
+    "assert_registration_team_same_event()",
+    "manual_payments_total_cents(p_registration_id uuid)",
+    "record_manual_payment(p jsonb)",
+    "void_manual_payment(p jsonb)",
+  ]),
+  ...stage23FreshOnly("table_grants", ["manual_payments.service_role"]),
 ];
 
 /* ------------------------------------------------------------------ */

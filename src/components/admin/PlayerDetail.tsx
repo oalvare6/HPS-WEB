@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AdminDialog } from "./AdminDialog";
+import { ManualPayments } from "./ManualPayments";
 import { DROP_IN_PAYMENT_STATUSES } from "@/lib/types";
 import { paymentLabel } from "./workspace";
 import {
@@ -31,6 +32,7 @@ export function PlayerDetail({
   onDetails,
   onMessage,
   onRemove,
+  onRecorded,
 }: {
   row: RosterRow;
   teams: RosterTeam[];
@@ -44,6 +46,12 @@ export function PlayerDetail({
   onDetails: () => void;
   onMessage: () => void;
   onRemove: () => Promise<void>;
+  /**
+   * Refresh the roster after offline money is recorded or voided: a receipt can
+   * move the payment status, and the list behind this dialog would otherwise
+   * keep showing the old one.
+   */
+  onRecorded: () => void;
 }) {
   const [status, setStatus] = useState(row.paymentStatus);
   const [removing, setRemoving] = useState(false);
@@ -250,34 +258,14 @@ export function PlayerDetail({
               )}
             </div>
           </details>
-          <button
-            type="button"
-            className="admin-link text-xs"
-            onClick={() => setReceiptPreview((v) => !v)}
-          >
-            Preview Cash / Zelle receipt form
-          </button>
-          {receiptPreview && (
-            <fieldset className="border border-dashed border-border-token p-3 space-y-3">
-              <legend className="text-xs px-2">
-                Prototype · Nothing will be recorded
-              </legend>
-              <label className="admin-field">
-                Method
-                <select defaultValue="cash">
-                  <option value="cash">Cash</option>
-                  <option value="zelle">Zelle</option>
-                </select>
-              </label>
-              <label className="admin-field">
-                Amount received (USD)
-                <input type="number" min="0" step="0.01" placeholder="0.00" />
-              </label>
-              <p className="text-xs text-zinc-400">
-                Receipt tracking will be connected in a later stage. This
-                preview does not change the payment status.
-              </p>
-            </fieldset>
+          {row.role !== "guest" && (
+            <ManualPayments
+              registrationId={row.id}
+              busy={busy}
+              open={receiptPreview}
+              onToggle={() => setReceiptPreview((v) => !v)}
+              onRecorded={onRecorded}
+            />
           )}
         </section>
         <section className="border-t border-border-token pt-4">

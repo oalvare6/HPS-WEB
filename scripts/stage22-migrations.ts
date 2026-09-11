@@ -34,9 +34,17 @@ import { Stage22GuardError, assertStage22Target, loadEnvFile } from "./stage22-g
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = path.join(ROOT, "supabase", "migrations");
 
-/** The manifest recorded in docs/STAGE-2-2-SETUP-CHECKLIST.md §2. */
-const EXPECTED_COUNT = 41;
-const EXPECTED_LATEST = "20260910130000";
+/**
+ * The manifest recorded in docs/STAGE-2-2-SETUP-CHECKLIST.md §2 was 41 files
+ * ending at 20260910130000. Stage 2.3 added two more — the cross-event team
+ * guard and the offline-payments schema — so the expected shape is 43.
+ *
+ * These stay hardcoded rather than derived from the directory listing. Derived,
+ * they would agree with whatever happens to be on disk and prove nothing; fixed,
+ * they catch a half-applied checkout or a file added without anyone noticing.
+ */
+const EXPECTED_COUNT = 43;
+const EXPECTED_LATEST = "20260911091000";
 
 export interface MigrationFile {
   version: string;

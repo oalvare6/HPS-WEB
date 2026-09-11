@@ -1,6 +1,26 @@
 # Stage 2.3 — proposal
 
-**Status: a proposal for the owner to accept, reorder or cut. Nothing here is started.**
+> **Accepted 2026-09-11, with A + C first and B to follow. A and C are now built and validated
+> against `hps-dev`; B is not started.**
+>
+> The owner settled the invariant question this document said had to be settled first: the
+> "no second writer" rule governs **Stripe/card money**. Stripe stays authoritative for card
+> settlement, manual actions never overwrite or fabricate Stripe payment state, and offline
+> money — which Stripe has no record of — gets its own admin-controlled path preserving amount,
+> method, received date, notes and who recorded it, with an auditable history rather than a
+> flipped status.
+>
+> **What shipped for A and C:** `supabase/migrations/20260911090000` (the cross-event team
+> trigger) and `20260911091000` (the `manual_payments` table and its writers), applied to
+> `hps-dev` only; `POST/GET /api/admin/registrations/[id]/manual-payments` and the void route;
+> and the Stage 2.1 Cash/Zelle prototype replaced in place by a working form — an integration
+> change in the same component, not a redesign. `scripts/test-manual-payments-sql.ts` executes
+> the rules against a real PostgreSQL: 28 checks, all passing.
+>
+> Production has neither migration. The from-empty suite lists both as FRESH-ONLY against the
+> production catalog, with the reason, exactly as CLAUDE.md prescribes.
+
+**Status of the rest: a proposal for the owner to accept, reorder or cut.**
 It follows [STAGE-2-2-REPORT.md](STAGE-2-2-REPORT.md) and assumes its local acceptance run has
 been completed and read.
 

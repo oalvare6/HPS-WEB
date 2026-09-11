@@ -50,6 +50,7 @@ npx tsx scripts/test-cancel-eligibility.ts
 npx tsx scripts/test-waiver-reconcile.ts
 npx tsx scripts/test-stage22-guard.ts         # proves the Stage 2.2 guard refuses Production
 npx tsx scripts/test-stage22-verify-contract.ts # runs the Stage 2.2 verifier against the real route envelopes
+npx tsx scripts/test-manual-payments-sql.ts   # needs a PostgreSQL; Stage 2.3 A+C
 npx tsx scripts/test-finalize-sql.ts          # needs a PostgreSQL; see below
 npx tsx scripts/test-stripe-integration.ts    # needs a PostgreSQL; see below
 npx tsx scripts/test-migrations-from-empty.ts # needs a PostgreSQL; see below

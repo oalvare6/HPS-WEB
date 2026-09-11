@@ -484,6 +484,7 @@ export default function RosterScreen({
             onDetails={() => setFixing(selected)}
             onMessage={() => setMessaging([selected])}
             onRemove={() => removePlayer(selected)}
+            onRecorded={() => void load({ quiet: true })}
           />
         )}
         {selectedId && !selected && !loading && !error && (
