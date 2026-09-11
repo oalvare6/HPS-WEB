@@ -1,16 +1,23 @@
 # Stage 2.2 — isolated `hps-dev`, built and validated at the database layer
 
-**Status: the database half is done and verified. The application half is bring-up complete but
-its acceptance run is unconfirmed, and this document does not claim it.** Everything in §2–§5
-was proved by executing SQL against the real development project. None of it proves the Stage
-2.1 admin renders correctly, because the remote session that did this work could not reach the
-project over HTTP.
+**Status: COMPLETE. Signed off 2026-09-11 — `44/44` acceptance checks passed against `hps-dev`
+through the running admin's own HTTP routes.**
 
-The operator has since taken the local path (§8). It got as far as a working app — admin
-authentication passes and `/api/admin/tournaments` answers 200 — and surfaced two real defects
-on the way, both fixed and both recorded in §7. **The acceptance run's own result has not been
-reported back at the time of writing, so Stage 2.2 is not signed off.** The remaining work is
-one command and reading its output.
+Two halves, and both now hold. §2–§5 were proved by executing SQL against the real development
+project. That was never enough on its own: none of it proves the Stage 2.1 admin renders or
+queries correctly, because the remote session that did the work could not reach the project over
+HTTP. The operator ran the local path (§8) and every check passed — authentication, the
+12-player split, all five waiver branches, empty-versus-failed, one person as two distinguishable
+registrations across events, the 2–1 result with its stats cross-check, and the cross-event team
+refusal.
+
+That distinction is the whole point of §8, and it earned itself: the bring-up surfaced two real
+defects (§7) that the SQL work could not have found, because both lived between the app and the
+database rather than inside either.
+
+**Not covered, and not to be read as covered:** a real Stripe charge, refund or webhook
+delivery; a DocuSeal callback; Google OAuth, skipped by decision; and browser rendering or
+interaction, since the verifier drives HTTP routes rather than a browser.
 
 Date: 2026-09-10. Branch: `claude/dazzling-wozniak-es39bo`. Production was never queried,
 migrated, seeded or configured.
@@ -157,13 +164,19 @@ browser keys exactly as intended.
 
 ## 6. Findings
 
-**A team from another event is not refused by the database.** No constraint forbids
-`registrations.team_id` pointing at a team belonging to a different tournament; the admin API
-is the sole enforcement point. Nothing is currently wrong — the route does check — but the
-invariant rests on application code alone, so a second writer or a future route would
-reintroduce it silently. This is a candidate for a Stage 2.3 database-level guard, and it is
-why that row of the acceptance matrix genuinely requires the route test in §8 rather than SQL.
-It is recorded in [FOLLOWUPS.md](../FOLLOWUPS.md) and proposed as Stage 2.3 item C.
+**A team from another event was not refused by the database. ~~Open.~~ CLOSED by Stage 2.3
+item C, 2026-09-11.** No constraint forbade `registrations.team_id` pointing at a team belonging
+to a different tournament; the admin API was the sole enforcement point. Nothing was wrong at
+the time — the route did check — but the invariant rested on application code alone, so a second
+writer or a future route would have reintroduced it silently.
+
+`supabase/migrations/20260911090000_registration_team_same_event.sql` now enforces it in the
+database, as a trigger rather than a composite foreign key: the declarative form would add a
+second `registrations`→`teams` relationship and make every embed between them answer PGRST201,
+and being MATCH SIMPLE it would skip the check entirely whenever `tournament_id` is null. The
+trigger also fires on `tournament_id`, so moving a rostered player to another event is caught
+too. Both layers now refuse it, which is the right end state: the route gives the owner a
+readable message, the trigger means no future writer can bypass it.
 
 **Security advisors report only pre-existing conditions that production shares:** thirteen
 RLS-enabled tables with no policy (that *is* the design — nothing but the service-role key may
@@ -251,15 +264,13 @@ all five waiver branches, empty-versus-failed, one person appearing as two disti
 registrations across events, the 2–1 result and its stats cross-check, and the cross-event team
 refusal that only the API enforces. It exits non-zero on any failure.
 
-**Confirmed working so far:** the launcher starts, the keys authenticate, admin sign-in
-succeeds, and `/api/admin/tournaments` answers 200 with all four events. **Not yet reported
-back:** the acceptance run's own result. Until that output exists, Stage 2.2 is bring-up
-complete and acceptance-unconfirmed — not done.
+**Result, 2026-09-11: `44/44` passed** — "Stage 2.2 acceptance: 44/44 checks passed against
+tfkdtwgxnumnuiiayrld. The Stage 2.1 admin agrees with the real database." Run twice, identical
+both times.
 
-One check in it has never run against a real route: the cross-event team refusal. If it reports
-a 2xx, that is a genuine finding about the admin route rather than another tooling bug, and it
-matches the §6 finding that the database does not enforce this at all. The verifier reverts the
-assignment either way.
+The cross-event team refusal, which had never executed against a real route, answered HTTP 400:
+an overlap-event registration was refused a main-event team. That closes the last open row of
+the acceptance matrix.
 
 Still outside Stage 2.2 in every case, and not to be represented otherwise: a real Stripe
 charge, refund or webhook delivery; a DocuSeal callback; Google OAuth, which was skipped by

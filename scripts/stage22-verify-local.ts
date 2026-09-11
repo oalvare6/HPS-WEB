@@ -335,10 +335,15 @@ async function main(): Promise<void> {
   check("an undated fixture is allowed", mList.some((m) => m.match_number === 5));
 
   // --- Cross-event integrity through the ROUTE ---------------------------
-  // The database has no constraint forbidding a team from another event; the
-  // admin API is the only enforcement point, which is exactly why this must be
-  // tested here rather than in SQL.
-  section("Cross-event integrity (enforced by the API, not the database)");
+  // When this check was written the admin API was the ONLY enforcement point:
+  // no database constraint forbade a team from another event, which is why it
+  // had to be tested here rather than in SQL. Stage 2.3 item C added the
+  // `registrations_team_same_event` trigger, so both layers now refuse it and a
+  // 4xx here may come from either. That is the desired end state — the route
+  // gives the owner a readable message, the trigger means no future writer can
+  // bypass it — and this check still earns its place by proving the route
+  // answers rather than surfacing a raw database error.
+  section("Cross-event integrity (refused by the API, and since Stage 2.3 by the database too)");
   const overlapEvent = bySlug.get(OVERLAP_SLUG);
   if (overlapEvent) {
     const overlapRoster = await get<RosterPayload>(

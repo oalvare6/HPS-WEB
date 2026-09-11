@@ -798,13 +798,15 @@ not deployed, not merged. No migration; no production row changed; production re
 
 ## Stage 2.2 — isolated `hps-dev` (2026-09-10)
 
-- **A team from another event is not refused by the database.** Nothing forbids
-  `registrations.team_id` pointing at a team whose `tournaments.id` differs from the
-  registration's. `PATCH /api/admin/registrations/[id]` does check (it compares the team's
-  `tournament_id`), so nothing is wrong today — but the invariant rests on application code
-  alone, and a second writer or a new route would reintroduce it silently. Proven by direct SQL
-  against `hps-dev`: the assignment was accepted with no constraint raised. Candidate for a
-  database-level guard in Stage 2.3.
+- **~~A team from another event is not refused by the database.~~ CLOSED 2026-09-11 by Stage 2.3
+  item C.** Nothing forbade `registrations.team_id` pointing at a team whose `tournaments.id`
+  differed from the registration's; the admin route checked, so nothing was wrong, but the
+  invariant rested on application code alone. `supabase/migrations/20260911090000` now enforces
+  it with a trigger — not a composite foreign key, which would have added a second
+  registrations→teams relationship (PGRST201 on every embed) and, being MATCH SIMPLE, skipped
+  the check whenever `tournament_id` was null. The trigger fires on `tournament_id` too, so
+  moving a rostered player to another event is caught. Covered by
+  `scripts/test-manual-payments-sql.ts`. Applied to `hps-dev`; production does not have it.
 - **Matching a project ref proves nothing about the API keys.** Stage 2.2's launcher verified the
   Supabase URL and reported the target good while every query answered `Invalid API key`. Keys
   are now preflighted against the live project (`scripts/stage22-guard.ts`); a `sb_secret_…` key
@@ -817,4 +819,5 @@ not deployed, not merged. No migration; no production row changed; production re
   naming the keys that arrived. `scripts/test-stage22-verify-contract.ts` holds the line.
 - **Google OAuth is untested** against `hps-dev` — skipped by decision, not by oversight.
 - **The SQL-level Stage 2.2 results are not UI coverage.** `docs/STAGE-2-2-REPORT.md` §5 was
-  proved by executing SQL; the admin's own routes are covered only by the local acceptance run.
+  proved by executing SQL; the admin's own routes are covered by the local acceptance run, which
+  passed 44/44 on 2026-09-11. Neither covers browser rendering — the verifier drives HTTP routes.
