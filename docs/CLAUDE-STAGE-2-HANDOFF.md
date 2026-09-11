@@ -15,7 +15,7 @@ Working branch: **`astra/stage-2-1-admin`**. The owner authorized committing and
 
 Paid and waived/free count equally as financially accounted for. Payment progress is information, with no enforced half-paid eligibility threshold or event-state effect. Partial and refunded remain separate recorded statuses.
 
-Message/reminder composition and detailed Cash/Zelle receipt capture remain clearly labeled prototypes. Public announcement posting and existing registration-status edits retain their existing behavior. No general Resend messaging backend or receipt-tracking backend has been added.
+~~Message/reminder composition and detailed Cash/Zelle receipt capture remain clearly labeled prototypes.~~ **Both shipped 2026-09-11 as Stage 2.3 items B and A** — see [STAGE-2-3-PROPOSAL.md](STAGE-2-3-PROPOSAL.md). Messages are sent through an idempotent, server-resolved audience with per-recipient outcomes; Cash/Zelle receipts persist amount, method, received date, note and who took them, append-only. Public announcement posting and existing registration-status edits retain their existing behavior.
 
 ## Stage 2.2 has only been planned/documented
 

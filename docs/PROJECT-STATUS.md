@@ -1,8 +1,14 @@
 # HPS project status
 
-**Last updated: 2026-09-10**, after Stage 1.6 (schema and migrations) and Stage 2.0 (event
-state). This is a status page, not a history. For how any decision was reached, follow the
-links; for what to do next, read [`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md).
+**Last updated: 2026-09-11**, after Stage 2.2 (the isolated `hps-dev` project) and Stage 2.3
+A + B + C (offline payments, the send path, the cross-event guard). This is a status page, not a
+history. For how any decision was reached, follow the links; for what to do next, read
+[`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md).
+
+⚠ **Nothing from Stage 2.1, 2.2 or 2.3 is in `main` or deployed.** It all lives on
+`claude/dazzling-wozniak-es39bo`, validated against the isolated development project. Production
+has none of the three new migrations, and its migration ledger is still drifted (below), so
+shipping any of this is a deliberate, separately planned step.
 
 ## Where the system stands
 
@@ -18,6 +24,21 @@ What remains after that is product work, principally the owner-facing admin expe
 the event-state section below is true of the code, not yet of production.
 
 ## Completed (in the repository)
+
+**Isolated development and Stage 2.3 backend** (Stages 2.2–2.3, 2026-09-10/11 — see
+[`STAGE-2-2-REPORT.md`](STAGE-2-2-REPORT.md) and [`STAGE-2-3-PROPOSAL.md`](STAGE-2-3-PROPOSAL.md))
+- **`hps-dev`** (`tfkdtwgxnumnuiiayrld`, PostgreSQL 17.6) — a standalone project, not a branch of
+  Production — built from the migrations and verified object-by-object against the production
+  catalog, then seeded with synthetic data. Stage 2.2 signed off at **44/44** acceptance checks
+  run through the admin's own HTTP routes.
+- **Offline payments (A).** `manual_payments`: amount, method, the date money changed hands, a
+  note and who took it. Append-only; a correction voids and re-enters. Stripe stays authoritative
+  for card settlement and is never overwritten.
+- **The send path (B).** `message_batches` / `message_recipients`: server-resolved audiences, a
+  compulsory dry run, idempotent sends, per-recipient outcomes and a retry that touches only
+  failures. Delivery still requires `RESEND_API_KEY` + `RESUME_EMAIL_FROM`.
+- **Cross-event team guard (C).** A trigger, not a composite FK — the PGRST201 trap.
+
 
 **Security and access** (Stage 1.2 — Stage 1.3's only deliverable, DocuSeal replay protection, was
 written on a branch that never merged; see "Known gaps")

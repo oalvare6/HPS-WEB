@@ -74,7 +74,7 @@ These are planned checks, not completed results. Stage 2.1's fixture browser pas
 
 ## Prototype-only and Stage 2.3 candidates
 
-Message composition, recipient selection and reminders remain non-sending previews. Cash/Zelle receipt capture remains non-persistent. Existing public announcement posting and registration-status edits retain their existing backend behavior.
+~~Message composition, recipient selection and reminders remain non-sending previews. Cash/Zelle receipt capture remains non-persistent.~~ **Both were built as Stage 2.3 items B and A on 2026-09-11** ([STAGE-2-3-PROPOSAL.md](STAGE-2-3-PROPOSAL.md)). Reminders — in the sense of *scheduled* or automated sending — remain deliberately out of scope. Existing public announcement posting and registration-status edits retain their existing backend behavior.
 
 Proposed Stage 2.3 work, after Stage 2.2 is validated:
 

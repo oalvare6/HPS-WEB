@@ -177,6 +177,42 @@ tag, and "needs waiver" is reserved for genuinely missing or expired. Do not rea
 `registrations.waiver_signed` directly in a UI again; that habit is what had the same
 person reading "signed" and "pending" on the same page.
 
+**Offline money is a separate ledger, and Stripe still owns card settlement (2026-09-11, Stage
+2.3 A, [`docs/STAGE-2-3-PROPOSAL.md`](docs/STAGE-2-3-PROPOSAL.md)).** The rule above says no second
+writer of `payments` **for card money**, and the owner confirmed that reading: cash and Zelle,
+which Stripe has no record of, live in `manual_payments` with their own writer,
+`record_manual_payment`. Nothing in that path writes `payments`. The table is **append-only** —
+money fields are never updated, a correction voids the receipt (recording who and why) and enters
+a new one, so the table *is* the audit history. `apply_manual_payment_status` decides the
+registration's status in a fixed order and the order is the design: **Stripe wins** (a succeeded
+`payments` row is never overwritten, the collision is flagged instead), then **the owner's own
+`waived`/`refunded` decisions win**, and only then do receipts decide — including downwards, so
+below the fee is `partial`, not `paid`. A registration with no receipts is never touched, so a
+status set by hand on the dropdown stands. Getting that third step wrong is easy: the first draft
+returned early on any `paid`, and voiding a receipt then left the row reading `paid` with $20
+against a $50 entry.
+
+**A message is sent exactly once (2026-09-11, Stage 2.3 B).** `message_batches` carries an
+`idempotency_key` minted by the composer; re-posting it returns the first batch and queues nobody
+again, the same shape `finalize_checkout_payment` uses for Stripe event ids. One address gets one
+`message_recipients` row per batch, and `mark_message_sent` refuses to change a row already
+`sent` — so Retry can only ever touch failures. Mail cannot be recalled, which is why all three
+live in the database rather than in the UI. **Audiences are resolved server-side**: "everyone
+unpaid" means who is unpaid at the moment of sending, via `isFinanciallySettled` in
+`src/lib/admin-roster.ts` — the same definition the roster displays, exported rather than copied.
+Nobody is dropped silently; a player with no email is reported as skipped with a reason. `sent`
+means the provider accepted it, **not** that it arrived — there is no bounce webhook yet — and
+nothing is delivered at all unless `RESEND_API_KEY` and `RESUME_EMAIL_FROM` are set, which the
+Stage 2.2 dev launcher deliberately strips.
+
+**A registration's team must belong to its own event (2026-09-11, Stage 2.3 C).** Enforced by the
+`registrations_team_same_event` trigger, which also fires on `tournament_id` so moving a rostered
+player to another event is caught. Deliberately **not** a composite foreign key: that would add a
+second `registrations`→`teams` relationship and make every embed between them answer PGRST201 (the
+trap below), and being MATCH SIMPLE it would skip the check whenever `tournament_id` is null. The
+admin route still checks too — it gives the owner a readable message; the trigger means no future
+writer can bypass it.
+
 **Match results have exactly one writer and one rule.** A match becomes `completed` only
 through `PUT /api/admin/tournaments/[id]/matches/[matchId]/result`, which calls the database
 function `save_match_result` (score + status + scorers in one transaction). The match PATCH
@@ -238,7 +274,7 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 |---|---|
 | [`docs/ASTRA-HANDOFF.md`](docs/ASTRA-HANDOFF.md) | **Start here for product, UI or admin work.** The current system in one read: architecture, the invariants that must not break, the route map, the admin problem to solve, and what a designer is free to change. |
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/STAGE-2-3-PROPOSAL.md`](docs/STAGE-2-3-PROPOSAL.md) | **Most recent session.** Stage 2.3 A + C are **done**: offline cash/Zelle receipts (append-only, Stripe stays authoritative for card money) and the cross-event team guard (a trigger, not a composite FK — the PGRST201 trap). B, the Resend send path, is next and not begun. |
+| [`docs/STAGE-2-3-PROPOSAL.md`](docs/STAGE-2-3-PROPOSAL.md) | **Most recent session. Stage 2.3 A, B and C are all done** (2026-09-11), built and validated against `hps-dev`: offline cash/Zelle receipts, the Resend send path, and the cross-event team guard. Read it for what is deliberately still out of scope — scheduled reminders, bounce callbacks — and for the two limits stated rather than hidden. |
 | [`docs/STAGE-2-2-REPORT.md`](docs/STAGE-2-2-REPORT.md) | **Stage 2.2, COMPLETE (44/44 through the running admin, 2026-09-11).** The isolated `hps-dev` project built from migrations and verified object-by-object against the production catalog, seeded, validated in SQL and then through the app's own routes. Read §7 for what the bring-up found: a key preflight that checked the URL and never the keys, and a verifier that reported its own parse bug as missing data. |
 | [`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md) | One event-state resolver for every surface: why five pages disagreed about the same event, the `EventView` model, the invariant matrix, the headless-Chromium agreement check, and the business questions left open. |
 | [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, and the ledger repair still owed. |

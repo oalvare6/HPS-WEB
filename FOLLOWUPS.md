@@ -821,3 +821,32 @@ not deployed, not merged. No migration; no production row changed; production re
 - **The SQL-level Stage 2.2 results are not UI coverage.** `docs/STAGE-2-2-REPORT.md` §5 was
   proved by executing SQL; the admin's own routes are covered by the local acceptance run, which
   passed 44/44 on 2026-09-11. Neither covers browser rendering — the verifier drives HTTP routes.
+
+## Stage 2.3 — offline payments, the send path, the team guard (2026-09-11)
+
+All three items are built and validated against `hps-dev`. Production has none of the three
+migrations. What is deliberately still open:
+
+- **Nothing is actually delivered without a provider.** `RESEND_API_KEY` and `RESUME_EMAIL_FROM`
+  must be set and the From domain verified in Resend. The Stage 2.2 dev launcher strips `RESEND_*`
+  on purpose, so in `hps-dev` every recipient records as `failed` with
+  `email_provider_not_configured` — deliberately, rather than pretending to have sent. Everything
+  up to the network hop is exercised; the hop itself is not.
+- **`sent` means the provider accepted it, not that it arrived.** There is no bounce or complaint
+  webhook. `message_recipients.provider_id` stores Resend's id so one can be reconciled later, and
+  the UI says this in those words. Worth building before reminders are trusted at scale.
+- **Scheduled and automated reminders were not built**, on purpose: one-tap sending has to be
+  trustworthy first, and automation on an unproven sender multiplies the blast radius.
+- **Receipts drive a registration's status once any receipt exists**, including downwards. So a
+  status set by hand on the dropdown plus a part-payment receipt becomes `partial`. A registration
+  with no receipts is never touched. This was a judgment call — predictable over
+  never-contradicting-the-operator — and is cheap to reverse now, awkward later.
+- **The cross-event overview composer is preview-only.** A batch belongs to one event and the
+  attention list spans several; it says so rather than quietly messaging a subset.
+- **Moving a team to another event is not guarded.** `registrations_team_same_event` catches a
+  registration changing team or event, but nothing stops `update teams set tournament_id = …`
+  orphaning existing assignments. No admin route does that today; if one is added, it needs the
+  mirror of that check.
+- **Production's migration ledger is still drifted** (22 rows for 41 files) and now three
+  migrations further behind. Shipping Stage 2.1–2.3 needs that repair planned first; it is
+  separately authorised and unchanged by this work.

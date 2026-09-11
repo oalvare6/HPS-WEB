@@ -58,8 +58,13 @@ Production ref `jqkiswwunrnyqjgroqtn` was never a target of any statement.
 All 41 files applied in filename order. The management API assigns its own version
 timestamps and keeps the supplied name, so the ledger was then rewritten to the filenames —
 without that repair a later `db push` would have re-run all 41 files, one of them
-data-bearing. `scripts/stage22-migrations.ts --verify` reports 41/41 with latest
+data-bearing. `scripts/stage22-migrations.ts --verify` reported 41/41 with latest
 `20260910130000`.
+
+**41 was the count at Stage 2.2.** Stage 2.3 added three more — the cross-event team guard, the
+offline-payments schema and the message log — so the same command now expects **44**, latest
+`20260911120000`, and `hps-dev`'s ledger was repaired the same way each time. Production still has
+none of the 44.
 
 **The build was compared, not assumed.** `scripts/test-migrations-from-empty.ts` passes 48/48
 locally, including its own PG17 tripwire self-check, and `hps-dev` was then measured against
@@ -279,8 +284,11 @@ verifier drives HTTP routes, not a browser.
 
 ## 9. Stage 2.3 candidates
 
-**Now written up in full as [STAGE-2-3-PROPOSAL.md](STAGE-2-3-PROPOSAL.md), with a recommended
-order and the one invariant question that must be answered first.** In summary:
+**All of these were built on 2026-09-11 and are recorded in
+[STAGE-2-3-PROPOSAL.md](STAGE-2-3-PROPOSAL.md).** The invariant question this section raised — how
+manual payments sit against "no second writer of `payments`" — was answered by the owner: the rule
+governs card money, so offline receipts got their own table and writer. The candidates as they
+stood:
 
 Unchanged from the plan, plus what this pass found: a general Resend delivery backend
 (a transport already exists at `src/lib/email/resend-sender.ts` but implements only the

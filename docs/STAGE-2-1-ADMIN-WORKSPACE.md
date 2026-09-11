@@ -32,9 +32,9 @@ This preview rejects database writes. Forms and dialogs can be inspected; succes
 
 **No half-paid threshold exists in this UI.** Payment progress is informational; it does not affect eligibility, event status or warnings. Paid and waived/free registrations are financially accounted for. The sample roster therefore shows **7 accounted for and 5 unpaid**. Partial and refunded remain distinct recorded statuses and appear in the outstanding list as dictated by the roster API.
 
-Message previews appear in the overview, player lists/details, teams, schedule and announcements. They allow template selection, recipient selection and text editing but have no Send action. Public announcement posting remains the existing operational feature; it does not email players.
+Message composition appears in the overview, player lists/details, teams, schedule and announcements. ~~They allow template selection, recipient selection and text editing but have no Send action.~~ **Stage 2.3 item B added Send, 2026-09-11**: a compulsory dry run resolves the audience on the server, the send is idempotent, and outcomes are recorded per recipient. The cross-event overview composer stays preview-only, because a batch belongs to one event and that list spans several. Public announcement posting remains the existing operational feature; it does not email players.
 
-The Cash/Zelle receipt form is explicitly a prototype and saves nothing. The separate existing registration-status update remains available. It does not create a receipt, charge a card, issue a refund or record payment method/amount/date.
+~~The Cash/Zelle receipt form is explicitly a prototype and saves nothing.~~ **Stage 2.3 item A replaced it in place, 2026-09-11**: same component, same visual language, now writing a real receipt (amount, method, received date, note, who took it) through `record_manual_payment`. Still true of it: it does not charge a card or issue a refund, and Stripe remains authoritative for card settlement — a receipt never overwrites a Stripe-settled status, it flags the collision instead. The separate registration-status update remains available.
 
 Review flags are shown honestly: the roster endpoint supplies a flag but no explanation. The UI does not invent a reason. General reminder delivery, receipt tracking, richer audit history and backend data-model work remain deferred.
 
