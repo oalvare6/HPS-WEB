@@ -21,8 +21,11 @@ Simplicity for that person outranks cleverness everywhere.
 **Stack:** Next.js 15 App Router, React 19, Supabase, Stripe, DocuSeal. Player auth =
 Supabase; admin = HMAC cookie.
 
-**Local dev:** `npm run dev` → http://localhost:3000 (needs `.env.local`, including
-`SUPABASE_SERVICE_ROLE_KEY` — most pages fail without it).
+**Local dev:** `npx tsx scripts/stage22-dev.ts` → http://127.0.0.1:3022, running this checkout
+against the isolated `hps-dev` Supabase project from `.env.stage22.local` (Stage 2.2; `--check`
+verifies the keys without starting anything). `npm run dev` is deliberately *not* the launch
+command: `.env.local` is a partial `vercel env pull` of production values and most pages fail
+without `SUPABASE_SERVICE_ROLE_KEY`, which is not kept locally on purpose.
 
 **Before claiming anything works:**
 
@@ -50,6 +53,7 @@ npx tsx scripts/test-cancel-eligibility.ts
 npx tsx scripts/test-waiver-reconcile.ts
 npx tsx scripts/test-admin-workspace.ts       # Stage 2.1 admin partitions, filters and links
 npx tsx scripts/test-admin-messages.ts        # Stage 2.3 B: message audiences and rendering
+npx tsx scripts/test-admin-review.ts          # Stage 2.3 D: review reasons, the live check, the Resolve rule
 npx tsx scripts/test-stage22-guard.ts         # proves the Stage 2.2 guard refuses Production
 npx tsx scripts/test-stage22-verify-contract.ts # runs the Stage 2.2 verifier against the real route envelopes
 npx tsx scripts/test-manual-payments-sql.ts   # needs a PostgreSQL; Stage 2.3 A+C
@@ -82,7 +86,7 @@ only ever defined by loose scripts under `supabase/` and applied by hand. Five b
 migrations now capture them and the loose scripts are archived under
 `docs/archive/loose-sql/`. Three rules follow. **Never put a `.sql` file directly under
 `supabase/` again** — only `supabase/migrations/YYYYMMDDHHMMSS_name.sql`, idempotent, with a
-rollback comment. **Production's migration ledger is still drifted** (22 rows for 41 files;
+rollback comment. **Production's migration ledger is still drifted** (22 rows for 44 files;
 repair commands in the report §8), so **do not run `supabase db push` against production**
 until it is repaired — it would re-run nineteen files, one of them data-bearing. And the
 from-empty test diffs a fresh build against `docs/production-schema-catalog-2026-09-10.json`:
@@ -219,6 +223,29 @@ trap below), and being MATCH SIMPLE it would skip the check whenever `tournament
 admin route still checks too — it gives the owner a readable message; the trigger means no future
 writer can bypass it.
 
+**A review flag is cleared by exactly one route, and never while something is still wrong
+(2026-09-11, Stage 2.3 D, `src/lib/admin-review.ts`).** `registrations.needs_admin_review` is raised
+by seven writers — contact collision at signup, the World Cup captain-paid claim, three branches of
+`finalize_checkout_payment`, two of `record_manual_payment` — and until Stage 2.3 D cleared by none;
+the admin PATCH still does not accept it. It is cleared only by `POST /api/admin/registrations/[id]/review`,
+which re-runs the **live check** server-side (a succeeded card payment against the status, live
+offline receipts, the number of People records that still match, the cancelled-spot cases) and answers
+409 with the list while anything is unsafe; the owner can resolve anyway only by saying in writing what
+they did, and that sentence — with what was still wrong — is what gets recorded. The model is the
+columns that already exist, on purpose: the boolean is what the "Needs review" filter reads and it
+stays a boolean; `notes` is the ledger, where the writers' fixed sentences are the *why* (the SQL
+suites pin those literals, `scripts/test-admin-review.ts` pins how they are read back — change one and
+both fail) and `Review resolved <ISO> — <what>` lines are the audit trail, appended by the route with a
+plain append so `append_note_line`'s dedupe never swallows one. Safety is **never** read from notes:
+a flag with no note (the ~24 legacy production rows) still gets a truthful "here is what is wrong now,
+or nothing is". Two consequences to keep: never make a UI decide a flag is safe from the sentence
+alone, and when the same SQL cause recurs after a resolution `append_note_line` appends nothing — the
+flag goes up, notes gain no line, and `reviewView` reports that as "flagged again" and leans on the
+live check. The two "paid AFTER this spot was cancelled" reasons land on cancelled rows the roster
+hides, so the roster payload carries them separately as `cancelledReviews`: shown under the review
+filter and on the overview, never in `rows`, so totals, teams, messaging and the schedule never see
+them.
+
 **Match results have exactly one writer and one rule.** A match becomes `completed` only
 through `PUT /api/admin/tournaments/[id]/matches/[matchId]/result`, which calls the database
 function `save_match_result` (score + status + scorers in one transaction). The match PATCH
@@ -280,7 +307,7 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 |---|---|
 | [`docs/ASTRA-HANDOFF.md`](docs/ASTRA-HANDOFF.md) | **Start here for product, UI or admin work.** The current system in one read: architecture, the invariants that must not break, the route map, the admin problem to solve, and what a designer is free to change. |
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/STAGE-2-3-PROPOSAL.md`](docs/STAGE-2-3-PROPOSAL.md) | **Most recent session. Stage 2.3 A, B and C are all done** (2026-09-11), built and validated against `hps-dev`: offline cash/Zelle receipts, the Resend send path, and the cross-event team guard. Read it for what is deliberately still out of scope — scheduled reminders, bounce callbacks — and for the two limits stated rather than hidden. |
+| [`docs/STAGE-2-3-PROPOSAL.md`](docs/STAGE-2-3-PROPOSAL.md) | **Most recent session. Stage 2.3 A, B, C and D are all done** (2026-09-11), built and validated against `hps-dev`: offline cash/Zelle receipts, the Resend send path, the cross-event team guard, and actionable review reasons with a Resolve action and audit trail. Read it for what is deliberately still out of scope — scheduled reminders, bounce callbacks — and for the limits stated rather than hidden. |
 | [`docs/STAGE-2-2-REPORT.md`](docs/STAGE-2-2-REPORT.md) | **Stage 2.2, COMPLETE (44/44 through the running admin, 2026-09-11).** The isolated `hps-dev` project built from migrations and verified object-by-object against the production catalog, seeded, validated in SQL and then through the app's own routes. Read §7 for what the bring-up found: a key preflight that checked the URL and never the keys, and a verifier that reported its own parse bug as missing data. |
 | [`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md) | One event-state resolver for every surface: why five pages disagreed about the same event, the `EventView` model, the invariant matrix, the headless-Chromium agreement check, and the business questions left open. |
 | [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, and the ledger repair still owed. |

@@ -1,6 +1,6 @@
 # Stage 2.1 — Owner/admin workspace
 
-**Stage 2.1 is the owner-approved frontend design direction.** The owner has authorized committing and pushing this work to `astra/stage-2-1-admin` for Claude Code handoff; no PR, merge or deployment is authorized. Backend contracts, authentication, Supabase schema, Stripe/payment processing, waiver authority, event-state rules and Production configuration are unchanged. See [the current Claude handoff](CLAUDE-STAGE-2-HANDOFF.md) before continuing.
+**Stage 2.1 is the owner-approved frontend design direction.** The owner has authorized committing and pushing this work to `astra/stage-2-1-admin` for Claude Code handoff; no PR, merge or deployment is authorized. Backend contracts, authentication, Supabase schema, Stripe/payment processing, waiver authority, event-state rules and Production configuration are unchanged. For the current state see [STAGE-2-2-REPORT.md](STAGE-2-2-REPORT.md) (Stage 2.2 complete) and [STAGE-2-3-PROPOSAL.md](STAGE-2-3-PROPOSAL.md) (A, B, C and D built); [CLAUDE-STAGE-2-HANDOFF.md](CLAUDE-STAGE-2-HANDOFF.md) is the pre-2.2 handoff, kept as history.
 
 Screenshots: [Overview](stage-2-1/overview.png), [Players](stage-2-1/players.png), [mobile result entry](stage-2-1/result-mobile.png).
 
@@ -36,7 +36,7 @@ Message composition appears in the overview, player lists/details, teams, schedu
 
 ~~The Cash/Zelle receipt form is explicitly a prototype and saves nothing.~~ **Stage 2.3 item A replaced it in place, 2026-09-11**: same component, same visual language, now writing a real receipt (amount, method, received date, note, who took it) through `record_manual_payment`. Still true of it: it does not charge a card or issue a refund, and Stripe remains authoritative for card settlement — a receipt never overwrites a Stripe-settled status, it flags the collision instead. The separate registration-status update remains available.
 
-Review flags are shown honestly: the roster endpoint supplies a flag but no explanation. The UI does not invent a reason. General reminder delivery, receipt tracking, richer audit history and backend data-model work remain deferred.
+~~Review flags are shown honestly: the roster endpoint supplies a flag but no explanation. The UI does not invent a reason.~~ **Stage 2.3 item D, 2026-09-11**: the roster payload now carries the reason (the sentence the writer left, reworded with a "what to do"), what is unsafe right now, and every past resolution; Player Detail has a Resolve action that refuses while something is still wrong. It still does not invent a reason: a flag with no note says "flagged before reasons were recorded". General reminder delivery (scheduled) and backend data-model work remain deferred; receipt tracking shipped as item A.
 
 ## Verification
 

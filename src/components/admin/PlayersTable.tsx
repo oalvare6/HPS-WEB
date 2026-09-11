@@ -1,6 +1,6 @@
 "use client";
 import { rosterFullName, type RosterRow } from "@/lib/admin-roster";
-import { paymentLabel } from "./workspace";
+import { paymentLabel, reviewSummary } from "./workspace";
 export function PlayersTable({
   rows,
   showTeams,
@@ -36,8 +36,14 @@ export function PlayersTable({
                 {row.phone || row.email || "Contact details missing"}
                 {row.role === "guest" ? " · Guest" : ""}
               </p>
+              {row.cancelledAt && (
+                <span className="text-xs text-zinc-400">Cancelled spot · </span>
+              )}
               {row.needsReview && (
-                <span className="text-xs text-amber-200">Needs review</span>
+                <span className="text-xs text-amber-200">
+                  Needs review
+                  <span className="block text-zinc-400">{reviewSummary(row)}</span>
+                </span>
               )}
             </td>
             {showTeams && (

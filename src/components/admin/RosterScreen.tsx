@@ -98,14 +98,30 @@ export default function RosterScreen({
   // on every render.
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const teams = useMemo(() => data?.teams ?? [], [data]);
+  /**
+   * Stage 2.3 D: cancelled spots that still carry an open review. They are
+   * not on the roster — nobody is waiting on them at the field — but the
+   * owner has to be able to find the "paid after cancelling" flags somewhere,
+   * so the "Needs review" filter is where they show, marked as cancelled.
+   */
+  const cancelledReviews = useMemo(
+    () => data?.cancelledReviews ?? [],
+    [data],
+  );
 
   const visibleFilters = PLAYER_FILTERS.filter(
     ([key]) => showTeams || key !== "no-team",
   );
-  const selected = rows.find((row) => row.id === selectedId);
+  const selected =
+    rows.find((row) => row.id === selectedId) ??
+    cancelledReviews.find((row) => row.id === selectedId);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
+    const pool =
+      filter === "review" && teamFilter === undefined
+        ? [...rows, ...cancelledReviews]
+        : rows;
+    return pool.filter((r) => {
       if (teamFilter !== undefined) {
         // Guests belong to no team, so they never survive a team filter —
         // matching how progressByTeam counts them.
@@ -121,7 +137,7 @@ export default function RosterScreen({
         (r.teamName ?? "").toLowerCase().includes(q)
       );
     });
-  }, [rows, search, filter, teamFilter]);
+  }, [rows, cancelledReviews, search, filter, teamFilter]);
 
   /**
    * Row edits are optimistic: at the field the owner is tapping through a queue

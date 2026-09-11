@@ -253,11 +253,13 @@ const TABLES = {
   registrations: [],
   contacts: [],
   payments: [],
+  manual_payments: [],
 };
 
 /* ------------------------------------------------------------------ *
  * The PostgREST stub. Enough of the query grammar for supabase-js reads:
- * eq / neq / is / in / gte / lte filters, order, limit, and rpc.
+ * eq / neq / is / in / gte / lte filters, `or=(a.op.v,b.op.v)`, order,
+ * limit, and rpc.
  * ------------------------------------------------------------------ */
 
 function matches_(cell, op, raw) {
@@ -292,6 +294,19 @@ function applyQuery(rows, params) {
   let out = rows;
   for (const [key, raw] of params) {
     if (["select", "order", "limit", "offset"].includes(key)) continue;
+    if (key === "or") {
+      // `or=(cancelled_at.is.null,needs_admin_review.eq.true)` — the roster
+      // (Stage 2.3 D) and the contact-candidate search both use this form.
+      const clauses = raw
+        .replace(/^\(|\)$/g, "")
+        .split(",")
+        .map((clause) => {
+          const [col, op, ...rest] = clause.split(".");
+          return { col, op, val: rest.join(".") };
+        });
+      out = out.filter((r) => clauses.some((c) => matches_(r[c.col], c.op, c.val)));
+      continue;
+    }
     const dot = raw.indexOf(".");
     if (dot < 0) continue;
     const op = raw.slice(0, dot);
@@ -410,7 +425,12 @@ for (let i = 0; i < 12; i++) {
     payment_status: paid ? "paid" : i < 7 ? "waived" : "pending",
     payment_method: i % 2 ? "card" : "cash",
     needs_admin_review: i === 0,
-    notes: i === 0 ? "Sample review explanation" : null,
+    // The sentence record_manual_payment writes on a card collision — the real
+    // thing, so the preview shows the reason the way the owner will see it.
+    notes:
+      i === 0
+        ? "Offline payment recorded for a registration that also has a settled Stripe payment — check for a double payment."
+        : null,
     cancelled_at: null,
     waiver_signed: signed,
     waiver_signed_at: contact.waiver_signed_at,

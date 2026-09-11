@@ -15,6 +15,7 @@ import {
   playerMatches,
   paymentLabel,
   outstandingMatches,
+  reviewSummary,
 } from "@/components/admin/workspace";
 import { EventStateBadge } from "@/components/admin/EventStateBadge";
 import { MessagePreview } from "@/components/admin/MessagePreview";
@@ -124,8 +125,10 @@ function Overview() {
       });
     return () => controller.abort();
   }, [attempt, scope]);
+  // Stage 2.3 D: a cancelled spot with an open review is attention too — the
+  // "paid after cancelling" flags live only on such rows.
   const rows: AttentionRow[] = work.flatMap(({ event, roster }) =>
-    roster.rows.map((row) => ({
+    [...roster.rows, ...(roster.cancelledReviews ?? [])].map((row) => ({
       ...row,
       eventId: event.id,
       eventTitle: event.title,
@@ -420,7 +423,10 @@ function Overview() {
                         className="text-zinc-400 text-xs"
                       >
                         {[
-                          row.needsReview ? "Flagged for review" : "",
+                          row.cancelledAt ? "Cancelled spot" : "",
+                          row.needsReview
+                            ? `Needs review: ${reviewSummary(row)}`
+                            : "",
                           ...row.missing.map((m) => `Missing ${m}`),
                         ]
                           .filter(Boolean)

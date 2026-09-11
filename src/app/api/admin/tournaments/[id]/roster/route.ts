@@ -14,6 +14,8 @@ import {
   type RosterTeam,
   type WaiverStatus,
 } from "@/lib/admin-roster";
+import { hasReviewContent } from "@/lib/admin-review";
+import { reviewFactsFor, reviewViewFor } from "@/lib/admin-review-server";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -99,7 +101,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         .select(
           `id, created_at, team_id, contact_id, first_name, last_name, email, phone, dob,
            emergency_name, emergency_phone, payment_status, payment_method,
-           needs_admin_review, waiver_signed_at, waiver_document_url,
+           needs_admin_review, notes, cancelled_at, waiver_signed_at, waiver_document_url,
            free_entry_tournament_id,
            free_entry_tournament:tournaments!registrations_free_entry_tournament_id_fkey ( id, title ),
            contact:contacts ( id, first_name, last_name, email, phone,
@@ -109,8 +111,11 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         .eq("tournament_id", id)
         // The roster is the list the owner reads at the field. Somebody who
         // cancelled is not on it, and counting them would have the owner
-        // waiting on a player who told us they weren't coming.
-        .is("cancelled_at", null)
+        // waiting on a player who told us they weren't coming. Cancelled rows
+        // are still fetched, then set aside below: the only ones kept are
+        // those flagged for review, and they go in `cancelledReviews`, never
+        // in `rows`.
+        .or("cancelled_at.is.null,needs_admin_review.eq.true")
         .order("created_at", { ascending: false }),
       supabaseAdmin
         .from("drop_ins")
@@ -143,7 +148,26 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
     const teams = (teamsRes.data ?? []) as RosterTeam[];
     const teamById = new Map(teams.map((t) => [t.id, t]));
 
-    const playerRows: RosterRow[] = (regsRes.data ?? []).map((r) => {
+    /*
+      Stage 2.3 D. The live check behind each review runs only for the rows
+      that are flagged — three batched queries plus one People lookup per
+      flagged row — and its answer rides on the row, so the list, the dialog
+      and the overview all read the same explanation.
+    */
+    const registrations = regsRes.data ?? [];
+    const facts = await reviewFactsFor(
+      registrations
+        .filter((r) => r.needs_admin_review === true)
+        .map((r) => ({
+          id: r.id,
+          email: r.email,
+          phone: r.phone,
+          payment_status: r.payment_status,
+          cancelled_at: r.cancelled_at,
+        }))
+    );
+
+    const allPlayerRows: RosterRow[] = registrations.map((r) => {
       const contact = firstOf(r.contact);
       const team = r.team_id ? teamById.get(r.team_id) ?? null : null;
       const waiver = waiverEvidenceFor(
@@ -179,6 +203,11 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         */
         freeEntryVia: embeddedTitle(r.free_entry_tournament),
         needsReview: r.needs_admin_review === true,
+        review: (() => {
+          const view = reviewViewFor(r, facts);
+          return hasReviewContent(view) ? view : null;
+        })(),
+        cancelledAt: r.cancelled_at ?? null,
         /*
           Named gaps, not a mystery flag. The emergency contact is the one
           that actually matters on a pitch, and it goes missing for two
@@ -221,6 +250,8 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         // definition, so there is no intent to record.
         paymentMethod: null,
         needsReview: false,
+        review: null,
+        cancelledAt: null,
         // A one-night guest is not asked for a season's worth of detail.
         missing: [],
         emergencyName: null,
@@ -228,6 +259,13 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
         createdAt: d.created_at,
       };
     });
+
+    // A cancelled row is on the roster only as an open review, never as a
+    // player; a cancelled row that is not flagged is not here at all.
+    const playerRows = allPlayerRows.filter((r) => r.cancelledAt === null);
+    const cancelledReviews = allPlayerRows.filter(
+      (r) => r.cancelledAt !== null && r.needsReview
+    );
 
     const rows = [...playerRows, ...guestRows].sort((a, b) =>
       a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)
@@ -237,6 +275,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       rows,
       teams,
       totals: totalsFromRows(rows),
+      cancelledReviews,
     };
     return NextResponse.json(payload);
   } catch (err) {

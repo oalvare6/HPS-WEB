@@ -57,6 +57,21 @@ export function playerMatches(row: RosterRow, filter: string) {
       return true;
   }
 }
+/**
+ * The one line under "Needs review" on a list row (Stage 2.3 D). What is
+ * unsafe right now outranks what was written when the flag went up; a flag
+ * with neither says so rather than inventing one. Null when not flagged.
+ */
+export function reviewSummary(row: RosterRow): string | null {
+  if (!row.needsReview) return null;
+  const view = row.review;
+  if (!view) return "Flagged before reasons were recorded.";
+  const first = view.live[0] ?? view.reasons[0];
+  if (first) return first.text;
+  return view.flaggedAgain
+    ? "Flagged again after it was resolved."
+    : "Flagged before reasons were recorded.";
+}
 export function playerLink(
   eventId: string,
   options: { filter?: string; team?: string; player?: string } = {},

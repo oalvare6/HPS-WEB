@@ -1,6 +1,9 @@
 # Stage 2.3 — proposal
 
-> **Accepted 2026-09-11. A, C and B are now all built and validated against `hps-dev`.**
+> **Accepted 2026-09-11. A, C, B and D are now all built and validated against `hps-dev`.**
+>
+> **D (review reasons) shipped 2026-09-11, without a migration.** See §D below for the design and
+> the one trade-off it carries.
 >
 > **B (Resend) shipped 2026-09-11.** `supabase/migrations/20260911120000` adds `message_batches`
 > and `message_recipients`; `src/lib/email/message-sender.ts` extends the transport the operator
@@ -127,29 +130,76 @@ a relationship between two tables is a breaking change to every embed between th
 deploy orders. Anything touching `registrations`' relationships gets the constraint-naming fix
 shipped first, then the migration, then the feature.
 
-## D. Review reasons — proposed, lower priority
+## D. Review reasons — DONE 2026-09-11
 
-The roster payload supplies `needsReview` as a flag with no explanation, and Stage 2.1 correctly
-refuses to invent one. A reason, and a record of who resolved it and when, would make the flag
-actionable. Smaller value than A or B, and it should follow the same audit pattern as A rather
-than inventing a second one — which is the argument for doing it after A, not before.
+As proposed: the roster payload supplied `needsReview` as a flag with no explanation, and Stage 2.1
+correctly refused to invent one. The audit before building found the flag had **seven writers and
+no clearer**: the signup contact-collision step (no note at all), the World Cup captain-paid
+acknowledgement, three branches of `finalize_checkout_payment` and two of `record_manual_payment`
+— six of which append a fixed English sentence to `registrations.notes` that no admin endpoint
+selected. The admin PATCH whitelist never accepted `needs_admin_review`, so "resolved" was not
+representable and the Needs review filter could only grow. Two of the seven reasons ("payment
+received AFTER this spot was cancelled") land only on cancelled rows, which the roster hides by
+design, so those flags were invisible on every screen.
+
+**What was built** (`src/lib/admin-review.ts`, `src/lib/admin-review-server.ts`,
+`src/app/api/admin/registrations/[id]/review/route.ts`, `src/components/admin/ReviewSection.tsx`):
+
+- **Why.** Every writer's sentence is recognised by its exact wording and reworded for the owner
+  with a "what to do" — the SQL suites pin the literals on the writing side,
+  `scripts/test-admin-review.ts` pins the reading side. The contact-collision writer now appends
+  its own sentence too. A flag with no note (the ~24 legacy production rows) says "flagged before
+  reasons were recorded" rather than inventing one.
+- **What is wrong right now.** A live check recomputed from the rows — succeeded card payment vs.
+  status, live offline receipts, the number of People records that still match, the cancelled-spot
+  cases, the unconfirmed captain claim — shown on the row and in Player Detail, and run again
+  server-side on every resolve. It is never read from notes.
+- **Resolve.** `POST /api/admin/registrations/[id]/review` is the only path that sets the flag
+  false. It answers 409 with the list while anything is still unsafe; the owner may resolve anyway
+  only by acknowledging that and saying what they did (required text). The line written is
+  `Review resolved <ISO> — <what>` or `Review resolved <ISO> despite: <what was still wrong> — <what>`,
+  appended with a plain append (not `append_note_line`, whose substring dedupe would swallow a
+  repeat). A compare-and-swap on `notes` and the flag refuses to clear if a writer got in between.
+- **History.** Nothing is ever removed from notes; the contact-merge route, which used to replace
+  notes on retired rows, now appends. Player Detail shows every resolution with its time, and the
+  earlier reasons under "Review history". The Needs review filter, its URL and the overview are
+  unchanged in mechanism — they still read the boolean — and the cancelled-spot flags now appear
+  under that filter and on the overview via `RosterPayload.cancelledReviews`, never in `rows`.
+- **Coverage.** `scripts/test-admin-review.ts` (121 checks): every writer's sentence, the live check
+  per condition, resolving, history preserved, refusal and acknowledgement, flagged-again, the
+  unflagged row untouched, the concurrent-writer refusal. `scripts/test-manual-payments-sql.ts`
+  gained the previously untested cancelled-spot branch and the exact sentences (34 checks).
+  `scripts/test-finalize-sql.ts` pins its sentences exactly (126). Exercised end to end against
+  `hps-dev` through the running admin: legacy flag resolved, a real double payment refused → receipt
+  voided → resolved, a cancelled spot with money surfaced and acknowledged.
+
+**Why no migration, and the trade-off.** The proposal asked D to follow A's audit pattern, which is a
+table. The audit found the existing columns can carry the workflow safely: the boolean is the filter,
+notes is an append-only ledger with dated resolution lines, and safety is recomputed from the rows.
+What a table would add is a queryable resolved-at and one row per occurrence. The cost of not having
+it: when the same SQL-written cause recurs after a resolution, `append_note_line` finds the identical
+earlier sentence and appends nothing — the flag goes up, notes gain no new line, and the admin reports
+that honestly as "flagged again" with the live check as the explanation (the money rows carry their
+own timestamps). For a one-owner site that cannot yet repair production's migration ledger, that is
+the better trade; if reviews ever need reporting across events, the table is the next step and the
+sentences already map 1:1 to codes.
 
 ## Explicitly not proposed
 
 - **Automated or scheduled reminders** — see B.
 - **A schema rewrite.** Track A avoids schema changes by design, and Stage 2.2 found nothing that
   demands one.
-- **Production migration-ledger repair.** Still owed (22 rows for 41 files,
+- **Production migration-ledger repair.** Still owed (22 rows for 44 files,
   STAGE-1-6-MIGRATION-RECONCILIATION.md §8), still separately authorised, and still not a
   prerequisite for any of the above.
 - **Stripe sandbox, DocuSeal callback and Google OAuth coverage.** Real gaps, each needing its
   own isolated credentials; they are test-coverage work rather than Stage 2.3 features, and
   should be scoped separately so they are not quietly dropped.
 
-## What I would want before starting
+## What I wanted before starting — all delivered
 
-1. **The Stage 2.2 acceptance output**, so the UI layer is actually signed off rather than assumed.
-2. **A decision on the payments invariant** in A — the *for card money* reading.
-3. **An order.** My recommendation is A, then C alongside it, then B, then D: A recovers
-   information the business is losing now, C is cheap and prevents a future regression, B is the
-   largest and benefits from being last, D refines something that already works honestly.
+1. **The Stage 2.2 acceptance output** — 44/44 through the running admin, 2026-09-11
+   (STAGE-2-2-REPORT.md §8).
+2. **A decision on the payments invariant** in A — the *for card money* reading, settled by the
+   owner (see the header).
+3. **An order.** A, then C alongside it, then B, then D — which is the order they were built in.

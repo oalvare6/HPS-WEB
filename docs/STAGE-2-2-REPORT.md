@@ -144,7 +144,7 @@ people who never paid. No half-paid threshold exists anywhere in the data.
 | a completed match with no score | **rejected, SQLSTATE 23514** |
 | `save_match_result` given a match from another event | rejected: "That match is not in this event." |
 | `save_match_result` given a scorer on neither team | rejected, and **0 partial rows left behind** |
-| a team belonging to another event | **not enforced by the database** — see §6 |
+| a team belonging to another event | enforced by the `registrations_team_same_event` trigger since Stage 2.3 C (was API-only at sign-off — see §6) |
 
 **Score math, through the real RPC.** Team A beat Team B 2–1 on a fresh league fixture:
 
@@ -284,7 +284,7 @@ verifier drives HTTP routes, not a browser.
 
 ## 9. Stage 2.3 candidates
 
-**All of these were built on 2026-09-11 and are recorded in
+**All four — A, B, C and D — were built on 2026-09-11 and are recorded in
 [STAGE-2-3-PROPOSAL.md](STAGE-2-3-PROPOSAL.md).** The invariant question this section raised — how
 manual payments sit against "no second writer of `payments`" — was answered by the owner: the rule
 governs card money, so offline receipts got their own table and writer. The candidates as they

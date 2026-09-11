@@ -9,6 +9,7 @@
  */
 import { WAIVER_VALIDITY_DAYS } from "@/lib/contacts";
 import { isPayingCash } from "@/lib/payment-method";
+import type { ReviewView } from "@/lib/admin-review";
 
 export type RosterRole = "player" | "guest";
 
@@ -56,8 +57,27 @@ export type RosterRow = {
    * applied at signup even after the night's free-entry list is edited.
    */
   freeEntryVia?: string | null;
-  /** Flagged by `linkRegistrationToContact` when email and phone disagree. */
+  /**
+   * Raw `registrations.needs_admin_review` — the one fact the "Needs review"
+   * filter reads. Raised by seven writers (contact collision at signup, the
+   * World Cup captain-paid claim, three branches of Stripe settlement, two of
+   * offline receipts) and cleared only by the Resolve action. `review` says
+   * why; this stays a boolean so the filter and the overview never change.
+   */
   needsReview: boolean;
+  /**
+   * Stage 2.3 D: why this row is flagged, what is still unsafe right now, and
+   * every past resolution — see `reviewView` in admin-review.ts. Null when
+   * there is nothing to say (never flagged, no history). Guests are never
+   * flagged.
+   */
+  review: ReviewView | null;
+  /**
+   * Set only on the rows in `RosterPayload.cancelledReviews`: a spot that was
+   * cancelled and is flagged anyway (money arrived after the cancel). The
+   * roster proper never lists cancelled people.
+   */
+  cancelledAt: string | null;
   /**
    * What this person still owes us, already in the owner's words — e.g.
    * `["emergency contact"]`. Empty when the record is complete.
@@ -97,6 +117,15 @@ export type RosterPayload = {
   rows: RosterRow[];
   teams: RosterTeam[];
   totals: RosterTotals;
+  /**
+   * Cancelled registrations that still carry an open review — two of the
+   * seven reasons ("payment received AFTER this spot was cancelled") can only
+   * ever land on a cancelled row, and the roster hides cancelled rows by
+   * design, so until Stage 2.3 D those flags were invisible everywhere. Kept
+   * out of `rows` so totals, teams, messaging and the schedule never see them;
+   * shown only under the "Needs review" filter and on the overview.
+   */
+  cancelledReviews: RosterRow[];
 };
 
 /**

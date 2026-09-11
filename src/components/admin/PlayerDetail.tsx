@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AdminDialog } from "./AdminDialog";
 import { ManualPayments } from "./ManualPayments";
+import { ReviewSection } from "./ReviewSection";
 import { DROP_IN_PAYMENT_STATUSES } from "@/lib/types";
 import { paymentLabel } from "./workspace";
 import {
@@ -95,7 +96,13 @@ export function PlayerDetail({
   return (
     <AdminDialog
       title={rosterFullName(row)}
-      description={row.role === "guest" ? "Event guest" : "Registered player"}
+      description={
+        row.role === "guest"
+          ? "Event guest"
+          : row.cancelledAt
+            ? "Cancelled registration"
+            : "Registered player"
+      }
       onClose={onClose}
       dismissDisabled={busy}
       widthClass="md:max-w-2xl"
@@ -127,13 +134,22 @@ export function PlayerDetail({
         >
           Find this player in People
         </Link>
-        {row.needsReview && (
-          <p className="border-l-2 border-amber-400 pl-3 text-sm text-amber-200">
-            This registration is flagged for review. The current record does not
-            include the reason; check its linked details before making changes.
+        {row.cancelledAt && (
+          <p className="border-l-2 border-zinc-500 pl-3 text-sm text-zinc-300">
+            This spot was cancelled on{" "}
+            {new Date(row.cancelledAt).toLocaleDateString("en-US")}. It is shown
+            here only because it is flagged for review; it is not on the roster.
           </p>
         )}
-        {showTeams && row.role === "player" && (
+        {row.review && (
+          <ReviewSection
+            registrationId={row.id}
+            review={row.review}
+            busy={busy}
+            onResolved={onRecorded}
+          />
+        )}
+        {showTeams && row.role === "player" && !row.cancelledAt && (
           <label className="admin-field">
             Team
             <select
@@ -294,7 +310,7 @@ export function PlayerDetail({
         <button type="button" onClick={onMessage} className="btn-secondary">
           Preview message
         </button>
-        {row.role === "player" && (
+        {row.role === "player" && !row.cancelledAt && (
           <div className="border-t border-border-token pt-4">
             {removing ? (
               <div className="space-y-3">

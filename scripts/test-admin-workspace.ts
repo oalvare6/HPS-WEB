@@ -26,6 +26,8 @@ const player: RosterRow = {
   paymentStatus: "pending",
   paymentMethod: null,
   needsReview: false,
+  review: null,
+  cancelledAt: null,
   missing: [],
   emergencyName: null,
   emergencyPhone: null,

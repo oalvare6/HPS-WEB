@@ -335,7 +335,8 @@ payments ledger**. Prefer watching `stripe_webhook_events` for the first real pa
 - **`/pay/success` settles money on an unauthenticated GET** with a session id from the query
   string. Pre-existing, unchanged, and worth its own look.
 - **`needs_admin_review` is never cleared by code.** Once flagged, a row stays flagged until
-  the owner clears it. 24 registrations currently carry it.
+  the owner clears it — which, until Stage 2.3 D (2026-09-11) added the Resolve action, nothing
+  in the admin could do. 24 registrations carried it at the time of writing.
 - **A `confirm=false` drop-in flags nothing**, because there is no registration to flag. The
   reason is on the payment row.
 - **An existing `payments` row's amount is never corrected.** If a row exists with the wrong

@@ -38,6 +38,7 @@ const REG = "dddddddd-0000-4000-8000-000000000001";
 const REG_CARD = "dddddddd-0000-4000-8000-000000000002";
 const REG_WAIVED = "dddddddd-0000-4000-8000-000000000003";
 const REG_OTHER_EVENT = "dddddddd-0000-4000-8000-000000000004";
+const REG_CANCELLED = "dddddddd-0000-4000-8000-000000000005";
 
 const FEE_CENTS = 5000;
 
@@ -86,6 +87,14 @@ async function seed(db: PgDb): Promise<void> {
        'E','555-0202','adult','waived', ${lit(EVENT)}, null),
       (${lit(REG_OTHER_EVENT)}, 'adult','Other','Player','other@example.com','555-0103','1990-01-01',
        'E','555-0203','adult','pending', ${lit(OTHER_EVENT)}, null);
+
+    -- A spot the player gave up before the money arrived (Stage 2.3 D).
+    insert into public.registrations
+      (id, registration_type, first_name, last_name, email, phone, dob,
+       emergency_name, emergency_phone, waiver_type, payment_status, tournament_id, contact_id, cancelled_at)
+    values
+      (${lit(REG_CANCELLED)}, 'adult','Gone','Player','gone@example.com','555-0104','1990-01-01',
+       'E','555-0204','adult','pending', ${lit(EVENT)}, null, now() - interval '1 day');
 
     insert into public.payments (registration_id, email, amount, status, tournament_id)
     values (${lit(REG_CARD)}, 'card@example.com', 50.00, 'succeeded', ${lit(EVENT)});
@@ -215,6 +224,50 @@ async function main(): Promise<void> {
   );
   t.eq("a Stripe-settled registration keeps its status", onCard.payment_status, "paid");
   t.check("and the collision is flagged for review", onCard.needs_review === true);
+  // Stage 2.3 D reads this sentence back (src/lib/admin-review.ts): if the
+  // wording here changes, the owner stops being told why.
+  t.eq(
+    "and the review says why, in the sentence the admin recognises",
+    await db.scalar(
+      `select notes from public.registrations where id = ${lit(REG_CARD)}`
+    ),
+    "Offline payment recorded for a registration that also has a settled Stripe payment — check for a double payment."
+  );
+  t.eq(
+    "and the flag is set on the row",
+    await db.scalar(`select needs_admin_review::text from public.registrations where id = ${lit(REG_CARD)}`),
+    "true"
+  );
+
+  /* Money after a cancellation is a refund decision, not a status change (Stage 2.3 D). */
+
+  const onCancelled = await db.json<{ payment_status: string; needs_review: boolean }>(
+    record({
+      registration_id: REG_CANCELLED,
+      amount_cents: 5000,
+      method: "zelle",
+      received_at: "2026-09-11",
+      recorded_by: "Front desk",
+    })
+  );
+  t.check("a receipt on a cancelled spot is recorded and flagged", onCancelled.needs_review === true);
+  t.eq(
+    "and the review says the spot was already cancelled",
+    await db.scalar(`select notes from public.registrations where id = ${lit(REG_CANCELLED)}`),
+    "Offline payment recorded AFTER this spot was cancelled — refund decision needed."
+  );
+  t.check(
+    "and the flag is set on the cancelled row too",
+    (await db.scalar(`select needs_admin_review::text from public.registrations where id = ${lit(REG_CANCELLED)}`)) === "true"
+  );
+  t.check(
+    "recording it twice does not say it twice (append_note_line dedupes)",
+    (await (async () => {
+      await db.json(record({ registration_id: REG_CANCELLED, amount_cents: 100, method: "cash", received_at: "2026-09-11", recorded_by: "Front desk" }));
+      const notes = await db.scalar(`select notes from public.registrations where id = ${lit(REG_CANCELLED)}`);
+      return (notes ?? "").split(/\r?\n/).filter((l) => l.includes("AFTER this spot was cancelled")).length === 1;
+    })())
+  );
   t.eq(
     "the money is still recorded — recording it outranks the collision",
     Number(

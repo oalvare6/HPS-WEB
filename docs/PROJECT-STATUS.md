@@ -1,8 +1,8 @@
 # HPS project status
 
 **Last updated: 2026-09-11**, after Stage 2.2 (the isolated `hps-dev` project) and Stage 2.3
-A + B + C (offline payments, the send path, the cross-event guard). This is a status page, not a
-history. For how any decision was reached, follow the links; for what to do next, read
+A + B + C + D (offline payments, the send path, the cross-event guard, actionable review reasons).
+This is a status page, not a history. For how any decision was reached, follow the links; for what to do next, read
 [`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md).
 
 ⚠ **Nothing from Stage 2.1, 2.2 or 2.3 is in `main` or deployed.** It all lives on
@@ -38,6 +38,15 @@ the event-state section below is true of the code, not yet of production.
   compulsory dry run, idempotent sends, per-recipient outcomes and a retry that touches only
   failures. Delivery still requires `RESEND_API_KEY` + `RESUME_EMAIL_FROM`.
 - **Cross-event team guard (C).** A trigger, not a composite FK — the PGRST201 trap.
+- **Actionable review reasons (D).** Every writer of `needs_admin_review` is read back as a
+  sentence with a "what to do"; a live check says what is unsafe right now; one route resolves,
+  refusing while it still is unless the owner says in writing what they did; every resolution is
+  a dated line in the ledger. No migration. The two cancelled-spot reasons are finally visible.
+
+**Admin workspace** (Stage 2.1, 2026-09-10, owner-approved — see
+[`STAGE-2-1-ADMIN-WORKSPACE.md`](STAGE-2-1-ADMIN-WORKSPACE.md))
+- One page per event with Players, Teams, Schedule & results, Announcements and Event settings;
+  filterable player lists with persistent URLs; one player-detail dialog; phone-first dialogs.
 
 
 **Security and access** (Stage 1.2 — Stage 1.3's only deliverable, DocuSeal replay protection, was
@@ -62,8 +71,9 @@ written on a branch that never merged; see "Known gaps")
 - `supabase/migrations/` now builds the entire schema from an empty database — it could not for
   four months, which is why every Preview branch failed. Five baseline migrations capture
   objects that only loose hand-run scripts had defined; those scripts are archived.
-- A test applies all 41 files to an empty PostgreSQL, twice, and diffs the result against a
-  captured production catalog. Seven differences remain, each allow-listed with a reason.
+- A test applies all 44 files to an empty PostgreSQL, twice, and diffs the result against a
+  captured production catalog (48/48). Every difference is allow-listed with a reason; the three
+  Stage 2.3 migrations show as fresh-only until production has them and the catalog is re-captured.
 - A tripwire in that test catches statements PostgreSQL 16 tolerates and Supabase's
   PostgreSQL 17 rejects — the failure mode that let a broken chain pass locally.
 
@@ -93,12 +103,14 @@ command list is in [`../CLAUDE.md`](../CLAUDE.md).
 
 ## Remaining work
 
-**Next up — the owner's admin experience.** The admin is being handed to a non-technical owner.
-Stage 2.1 is expected to rework its information architecture and visual design.
-[`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md) is the brief.
+**Next up — shipping Stage 2.1–2.3.** The admin workspace (2.1), the isolated development
+project (2.2) and all four Stage 2.3 items are built and validated against `hps-dev`; nothing is
+on `main` or deployed. Before any of it ships: the production migration-ledger repair (below),
+then a deploy-order plan for the three Stage 2.3 migrations. [`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md)
+was the brief Stage 2.1 answered; it is kept for the architecture and invariants.
 
 **Pending operator actions** (production changes, deliberately not automated)
-- **The migration ledger is still drifted.** 22 rows against 41 files. Until the repair in
+- **The migration ledger is still drifted.** 22 rows against 44 files. Until the repair in
   [`STAGE-1-6-MIGRATION-RECONCILIATION.md`](STAGE-1-6-MIGRATION-RECONCILIATION.md) §8 is run,
   **do not `supabase db push` against production** — it would re-run nineteen files, one of
   which cancels duplicate registrations. A green Supabase preview branch does not change this:

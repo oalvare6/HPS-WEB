@@ -847,6 +847,37 @@ migrations. What is deliberately still open:
   registration changing team or event, but nothing stops `update teams set tournament_id = …`
   orphaning existing assignments. No admin route does that today; if one is added, it needs the
   mirror of that check.
-- **Production's migration ledger is still drifted** (22 rows for 41 files) and now three
-  migrations further behind. Shipping Stage 2.1–2.3 needs that repair planned first; it is
+- **Production's migration ledger is still drifted** (22 rows for 44 files, the three Stage 2.3
+  files unapplied). Shipping Stage 2.1–2.3 needs that repair planned first; it is
   separately authorised and unchanged by this work.
+
+## Stage 2.3 D — review reasons (2026-09-11)
+
+Built without a migration on `claude/dazzling-wozniak-es39bo`; see STAGE-2-3-PROPOSAL.md §D and
+`src/lib/admin-review.ts`. The audit first: seven writers of `needs_admin_review`, no clearer
+anywhere (the admin PATCH whitelist never accepted it), six writers leaving a fixed sentence in
+`notes` that no admin endpoint selected, the contact-collision writer leaving nothing, and the two
+"paid AFTER this spot was cancelled" reasons landing only on cancelled rows the roster hides — so
+those two were invisible on every screen. What is deliberately still open:
+
+- **A recurrence of the same SQL-written cause after a resolution leaves no new note line.**
+  `append_note_line` finds the identical earlier sentence and appends nothing; the flag goes up
+  again. The admin shows that as "flagged again after it was resolved on <date>" and explains it
+  from the live check (which reads the rows, never the notes), and the money rows carry their own
+  timestamps. If reviews ever need reporting across events, a `registration_reviews` table with
+  one row per occurrence is the next step; the sentences already map 1:1 to reason codes.
+- **The ~24 legacy production flags carry no note.** They will read "Flagged before reasons were
+  recorded" with a truthful live check. That is the honest state, not a bug.
+- **"Resolved" for the three refund-shaped reasons is the owner's word.** There is no in-app
+  refund and no local refund record, so after a Stripe refund the rows still say a succeeded
+  payment exists on a cancelled or waived spot; the owner resolves with the acknowledgement and a
+  note ("Refunded in Stripe on Friday"), and that sentence is the record. Marking the status
+  Refunded first makes the live check pass without an acknowledgement.
+- **`scripts/test-register-phase5.ts` and `scripts/verify-phase5.ts` still write to whatever
+  `.env.local` names** (the pre-Stage-2.2 pattern) and are not in the CLAUDE.md gate; they are the
+  only live tests of the contact-collision writer and should be re-pointed at `hps-dev` behind the
+  Stage 2.2 guard before anyone runs them as documented.
+- **`scripts/_test-fakes.ts` has no double for `record_manual_payment` or the linking step**; those
+  paths are covered by the SQL suite and the end-to-end run against `hps-dev`, not by the fake.
+- **The contact-merge route now appends to a retired row's notes instead of replacing them.** The
+  old behaviour destroyed the only record of why the retired duplicate had been flagged.

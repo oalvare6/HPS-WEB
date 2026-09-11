@@ -423,10 +423,14 @@ export type Registration = {
   docuseal_sign_url: string | null;
   docuseal_status: DocuSealStatus;
   /**
-   * Set by Phase 5 contact-linking when more than one distinct contact
-   * matches the registration's email or phone. The registration is still
-   * linked (to the email-canonical contact), but an admin should review the
-   * duplicate before merging.
+   * Open-review flag. Originally set only by Phase 5 contact-linking (more
+   * than one distinct contact matched the registration's email or phone; the
+   * registration is still linked to the email-canonical contact). Now also
+   * raised by the captain-paid ack, three branches of
+   * `finalize_checkout_payment` and two of `record_manual_payment`, each
+   * leaving its sentence in `notes`. Cleared only by
+   * POST /api/admin/registrations/[id]/review (Stage 2.3 D; the rule and the
+   * sentences are in src/lib/admin-review.ts).
    */
   needs_admin_review: boolean;
   created_at: string;

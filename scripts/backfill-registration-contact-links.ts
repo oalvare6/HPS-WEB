@@ -24,6 +24,7 @@
  */
 
 import {
+  applyLinkResolution,
   findContactCandidates,
   resolveContactLink,
   type LinkResolution,
@@ -71,20 +72,11 @@ async function applyLink(
   registrationId: string,
   resolution: LinkResolution
 ): Promise<void> {
-  const patch: Record<string, unknown> = {};
-  if (resolution.contactId) patch.contact_id = resolution.contactId;
-  if (resolution.needsAdminReview) patch.needs_admin_review = true;
-  if (Object.keys(patch).length === 0) return;
-
-  const { error } = await supabaseAdmin
-    .from("registrations")
-    .update(patch)
-    .eq("id", registrationId);
-
-  if (error) {
-    throw new Error(
-      `Update failed for registration ${registrationId}: ${error.message}`
-    );
+  // Same writer as the live route, so a backfilled ambiguity carries the same
+  // review sentence the owner sees for a fresh signup (Stage 2.3 D).
+  const ok = await applyLinkResolution(registrationId, resolution);
+  if (!ok) {
+    throw new Error(`Update failed for registration ${registrationId}`);
   }
 }
 
