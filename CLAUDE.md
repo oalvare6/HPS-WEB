@@ -88,7 +88,10 @@ migrations now capture them and the loose scripts are archived under
 `supabase/` again** — only `supabase/migrations/YYYYMMDDHHMMSS_name.sql`, idempotent, with a
 rollback comment. **Production's migration ledger is still drifted** (22 rows for 44 files;
 repair commands in the report §8), so **do not run `supabase db push` against production**
-until it is repaired — it would re-run nineteen files, one of them data-bearing. And the
+until it is repaired — it would re-run **28** already-applied files, one of them data-bearing.
+(The reports' older figure of "nineteen" counts only files never recorded under *any* version;
+the nine MCP-versioned rows match no filename either, so a push re-runs those too —
+[`docs/RELEASE-READINESS-STAGE-2.md`](docs/RELEASE-READINESS-STAGE-2.md) §3.4.) And the
 from-empty test diffs a fresh build against `docs/production-schema-catalog-2026-09-10.json`:
 when you add a migration, expect it to show new objects as FRESH-ONLY until production has
 the migration and the catalog is re-captured (the query is `scripts/sql/schema-catalog.sql`).
@@ -305,6 +308,7 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 
 | Doc | What |
 |---|---|
+| [`docs/RELEASE-READINESS-STAGE-2.md`](docs/RELEASE-READINESS-STAGE-2.md) | **Read before shipping anything to production.** The controlled release plan for Stage 2.1+2.2+2.3: exact SHAs, migration state verified live against production, what is actually wrong with the ledger and what a push would re-run, the forced deploy order (migrations before code), stop conditions, rollback and a smoke checklist. |
 | [`docs/ASTRA-HANDOFF.md`](docs/ASTRA-HANDOFF.md) | **Start here for product, UI or admin work.** The current system in one read: architecture, the invariants that must not break, the route map, the admin problem to solve, and what a designer is free to change. |
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
 | [`docs/STAGE-2-3-PROPOSAL.md`](docs/STAGE-2-3-PROPOSAL.md) | **Most recent session. Stage 2.3 A, B, C and D are all done** (2026-09-11), built and validated against `hps-dev`: offline cash/Zelle receipts, the Resend send path, the cross-event team guard, and actionable review reasons with a Resolve action and audit trail. Read it for what is deliberately still out of scope — scheduled reminders, bounce callbacks — and for the limits stated rather than hidden. |

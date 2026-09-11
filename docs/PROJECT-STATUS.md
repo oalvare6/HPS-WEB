@@ -20,8 +20,11 @@ through Stages 1.2 to 2.0 has closed most of `backend_audit_v1.md`. The exceptio
 on admin login)**, are still fully open and sit under "Pending operator actions" and "Known gaps".
 What remains after that is product work, principally the owner-facing admin experience.
 
-⚠ **Stage 2.0 is merged into this branch but not into `main` and not deployed.** Everything in
-the event-state section below is true of the code, not yet of production.
+✅ **Stage 2.0 *is* in `main`** — commit `b2e2210`, merged by
+[PR #10](https://github.com/oalvare6/HPS-WEB/pull/10) as `44a475e` on 2026-09-10. An earlier
+revision of this page said it was not; that was wrong and is corrected here. Whether `main`'s
+current tip is the *deployed* build is a Vercel question, not a git one — confirm in the Vercel
+dashboard before relying on it.
 
 ## Completed (in the repository)
 
@@ -77,7 +80,7 @@ written on a branch that never merged; see "Known gaps")
 - A tripwire in that test catches statements PostgreSQL 16 tolerates and Supabase's
   PostgreSQL 17 rejects — the failure mode that let a broken chain pass locally.
 
-**Event state** (Stage 2.0 — *not yet deployed*)
+**Event state** (Stage 2.0 — in `main`; confirm the deployed build in Vercel)
 - One resolver, `resolveEventView`, answers what an event is. Every card, badge, call to
   action, list order and archive bucket reads it, and its `canRegister` / `canPay` *are* the
   functions the money and sign-up routes gate on, so a page cannot advertise a door the backend
@@ -88,31 +91,45 @@ written on a branch that never merged; see "Known gaps")
 
 ## Test baseline
 
-Run on the Stage 2.0 branch, 2026-09-10, from a clean install:
+Run on **`claude/dazzling-wozniak-es39bo` @ `40c39d2`** (Stage 2.1 + 2.2 + 2.3 A–D),
+2026-09-11 — not on the old Stage 2.0 branch:
 
 | | |
 |---|---|
 | `npx tsc --noEmit`, `npm run lint`, `npm run build` | all clean |
-| 23 script suites | **6,203 assertions**, all passing |
-| Headless-browser page agreement | **46 assertions** |
-| Pay-gate static checks | passing |
+| 30 script suites | **6,533 counted assertions**, all passing |
+| — of which 25 run in-process | 6,205 (24 report a count; `test-admin-workspace` passes but prints none) |
+| — of which 5 execute real SQL | 328 (`finalize` 126, `stripe-integration` 90, `migrations-from-empty` 48, `manual-payments` 34, `messages` 30) |
 
-Three suites execute real SQL against a PostgreSQL they provision themselves: the two
-settlement suites and the from-empty migration suite. They fail rather than skip. The full
-command list is in [`../CLAUDE.md`](../CLAUDE.md).
+Five suites execute real SQL against a PostgreSQL they provision themselves: the two settlement
+suites, the from-empty migration suite and the two Stage 2.3 suites. They fail rather than skip.
+The full command list is in [`../CLAUDE.md`](../CLAUDE.md).
+
+Two caveats on this run, stated rather than hidden. The SQL suites ran against **PostgreSQL
+16.13**, so they do not re-prove the PG17 `IF EXISTS … ON <relation>` behaviour — the
+from-empty suite's notice tripwire covers the specific trap, and the Supabase Preview branch on
+the pull request remains the last word. And `verify-event-state-pages.mjs` (headless Chromium,
+46 assertions on the Stage 2.0 branch) was **not** re-run here; it was unchanged by this branch.
 
 ## Remaining work
 
 **Next up — shipping Stage 2.1–2.3.** The admin workspace (2.1), the isolated development
 project (2.2) and all four Stage 2.3 items are built and validated against `hps-dev`; nothing is
-on `main` or deployed. Before any of it ships: the production migration-ledger repair (below),
-then a deploy-order plan for the three Stage 2.3 migrations. [`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md)
-was the brief Stage 2.1 answered; it is kept for the architecture and invariants.
+on `main` or deployed. **The plan for shipping it is written:
+[`RELEASE-READINESS-STAGE-2.md`](RELEASE-READINESS-STAGE-2.md)** — the exact SHAs, the migration
+state verified live against production, the ledger repair, the forced deploy order (migrations
+before code — the roster depends on `manual_payments`), stop conditions, rollback and a smoke
+checklist. Its verdict is **ready once operator actions are completed**; the first of those is
+reading one Supabase dashboard toggle. [`ASTRA-HANDOFF.md`](ASTRA-HANDOFF.md) was the brief Stage
+2.1 answered; it is kept for the architecture and invariants.
 
 **Pending operator actions** (production changes, deliberately not automated)
-- **The migration ledger is still drifted.** 22 rows against 44 files. Until the repair in
+- **The migration ledger is still drifted.** 22 rows against 44 files, confirmed live
+  2026-09-11. Until the repair in
   [`STAGE-1-6-MIGRATION-RECONCILIATION.md`](STAGE-1-6-MIGRATION-RECONCILIATION.md) §8 is run,
-  **do not `supabase db push` against production** — it would re-run nineteen files, one of
+  **do not `supabase db push` against production** — it would re-run **28** already-applied
+  files (not nineteen: the nine MCP-versioned rows match no filename either, so a push re-runs
+  those too — see [`RELEASE-READINESS-STAGE-2.md`](RELEASE-READINESS-STAGE-2.md) §3.4), one of
   which cancels duplicate registrations. A green Supabase preview branch does not change this:
   preview proves the files build from *empty*, and production is not empty. The two migrations
   dated 2026-09-10 — the settlement lock-order fix and the checkout-attempts table — **are** live
