@@ -795,3 +795,89 @@ not deployed, not merged. No migration; no production row changed; production re
 - **Deliberately not touched:** Stripe settlement, waiver/auth logic, refunds/disputes,
   migration-ledger drift, the `FeaturedTournamentCarousel` (unused before this stage, still
   unused), the World Cup standings override.
+
+## Stage 2.2 — isolated `hps-dev` (2026-09-10)
+
+- **~~A team from another event is not refused by the database.~~ CLOSED 2026-09-11 by Stage 2.3
+  item C.** Nothing forbade `registrations.team_id` pointing at a team whose `tournaments.id`
+  differed from the registration's; the admin route checked, so nothing was wrong, but the
+  invariant rested on application code alone. `supabase/migrations/20260911090000` now enforces
+  it with a trigger — not a composite foreign key, which would have added a second
+  registrations→teams relationship (PGRST201 on every embed) and, being MATCH SIMPLE, skipped
+  the check whenever `tournament_id` was null. The trigger fires on `tournament_id` too, so
+  moving a rostered player to another event is caught. Covered by
+  `scripts/test-manual-payments-sql.ts`. Applied to `hps-dev`; production does not have it.
+- **Matching a project ref proves nothing about the API keys.** Stage 2.2's launcher verified the
+  Supabase URL and reported the target good while every query answered `Invalid API key`. Keys
+  are now preflighted against the live project (`scripts/stage22-guard.ts`); a `sb_secret_…` key
+  encodes no project, so a wrong-project secret key cannot be caught any other way. Related:
+  an egress proxy answering `403 Host not in allowlist` is not a 401 and must never be scored as
+  authentication — only a recognisable PostgREST response counts.
+- **A verifier that cannot parse a response must say so.** `stage22-verify-local.ts` assumed
+  `/api/admin/tournaments` returned a bare array; it returns `{ tournaments: [...] }`, and the
+  fallback reported four seeded events as missing. Payload reads now raise a contract error
+  naming the keys that arrived. `scripts/test-stage22-verify-contract.ts` holds the line.
+- **Google OAuth is untested** against `hps-dev` — skipped by decision, not by oversight.
+- **The SQL-level Stage 2.2 results are not UI coverage.** `docs/STAGE-2-2-REPORT.md` §5 was
+  proved by executing SQL; the admin's own routes are covered by the local acceptance run, which
+  passed 44/44 on 2026-09-11. Neither covers browser rendering — the verifier drives HTTP routes.
+
+## Stage 2.3 — offline payments, the send path, the team guard (2026-09-11)
+
+All three items are built and validated against `hps-dev`. Production has none of the three
+migrations. What is deliberately still open:
+
+- **Nothing is actually delivered without a provider.** `RESEND_API_KEY` and `RESUME_EMAIL_FROM`
+  must be set and the From domain verified in Resend. The Stage 2.2 dev launcher strips `RESEND_*`
+  on purpose, so in `hps-dev` every recipient records as `failed` with
+  `email_provider_not_configured` — deliberately, rather than pretending to have sent. Everything
+  up to the network hop is exercised; the hop itself is not.
+- **`sent` means the provider accepted it, not that it arrived.** There is no bounce or complaint
+  webhook. `message_recipients.provider_id` stores Resend's id so one can be reconciled later, and
+  the UI says this in those words. Worth building before reminders are trusted at scale.
+- **Scheduled and automated reminders were not built**, on purpose: one-tap sending has to be
+  trustworthy first, and automation on an unproven sender multiplies the blast radius.
+- **Receipts drive a registration's status once any receipt exists**, including downwards. So a
+  status set by hand on the dropdown plus a part-payment receipt becomes `partial`. A registration
+  with no receipts is never touched. This was a judgment call — predictable over
+  never-contradicting-the-operator — and is cheap to reverse now, awkward later.
+- **The cross-event overview composer is preview-only.** A batch belongs to one event and the
+  attention list spans several; it says so rather than quietly messaging a subset.
+- **Moving a team to another event is not guarded.** `registrations_team_same_event` catches a
+  registration changing team or event, but nothing stops `update teams set tournament_id = …`
+  orphaning existing assignments. No admin route does that today; if one is added, it needs the
+  mirror of that check.
+- **Production's migration ledger is still drifted** (22 rows for 44 files, the three Stage 2.3
+  files unapplied). Shipping Stage 2.1–2.3 needs that repair planned first; it is
+  separately authorised and unchanged by this work.
+
+## Stage 2.3 D — review reasons (2026-09-11)
+
+Built without a migration on `claude/dazzling-wozniak-es39bo`; see STAGE-2-3-PROPOSAL.md §D and
+`src/lib/admin-review.ts`. The audit first: seven writers of `needs_admin_review`, no clearer
+anywhere (the admin PATCH whitelist never accepted it), six writers leaving a fixed sentence in
+`notes` that no admin endpoint selected, the contact-collision writer leaving nothing, and the two
+"paid AFTER this spot was cancelled" reasons landing only on cancelled rows the roster hides — so
+those two were invisible on every screen. What is deliberately still open:
+
+- **A recurrence of the same SQL-written cause after a resolution leaves no new note line.**
+  `append_note_line` finds the identical earlier sentence and appends nothing; the flag goes up
+  again. The admin shows that as "flagged again after it was resolved on <date>" and explains it
+  from the live check (which reads the rows, never the notes), and the money rows carry their own
+  timestamps. If reviews ever need reporting across events, a `registration_reviews` table with
+  one row per occurrence is the next step; the sentences already map 1:1 to reason codes.
+- **The ~24 legacy production flags carry no note.** They will read "Flagged before reasons were
+  recorded" with a truthful live check. That is the honest state, not a bug.
+- **"Resolved" for the three refund-shaped reasons is the owner's word.** There is no in-app
+  refund and no local refund record, so after a Stripe refund the rows still say a succeeded
+  payment exists on a cancelled or waived spot; the owner resolves with the acknowledgement and a
+  note ("Refunded in Stripe on Friday"), and that sentence is the record. Marking the status
+  Refunded first makes the live check pass without an acknowledgement.
+- **`scripts/test-register-phase5.ts` and `scripts/verify-phase5.ts` still write to whatever
+  `.env.local` names** (the pre-Stage-2.2 pattern) and are not in the CLAUDE.md gate; they are the
+  only live tests of the contact-collision writer and should be re-pointed at `hps-dev` behind the
+  Stage 2.2 guard before anyone runs them as documented.
+- **`scripts/_test-fakes.ts` has no double for `record_manual_payment` or the linking step**; those
+  paths are covered by the SQL suite and the end-to-end run against `hps-dev`, not by the fake.
+- **The contact-merge route now appends to a retired row's notes instead of replacing them.** The
+  old behaviour destroyed the only record of why the retired duplicate had been flagged.

@@ -17,6 +17,13 @@ import {
   Plus,
   X,
 } from "lucide-react";
+import { useQueryParam } from "@/lib/admin-url-state";
+import { computeStandings, computeTopScorers } from "@/lib/standings";
+import { getWorldCupStandingsOverride } from "@/lib/world-cup-standings";
+import { WORLD_CUP_TOURNAMENT_SLUG } from "@/lib/world-cup-pricing";
+import { StandingsList } from "@/components/tournament/StandingsList";
+import { ScorersList } from "@/components/tournament/ScorersList";
+import { MessagePreview } from "./MessagePreview";
 import { toast } from "sonner";
 import { ListRowsSkeleton } from "@/components/shared/skeleton";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
@@ -95,7 +102,9 @@ function addDays(iso: string, days: number): string {
   return `${dt.getFullYear()}-${mm}-${dd}`;
 }
 
-function timeRangeOf(r: Pick<TournamentRound, "time_start" | "time_end">): string | null {
+function timeRangeOf(
+  r: Pick<TournamentRound, "time_start" | "time_end">,
+): string | null {
   if (r.time_start && r.time_end) return `${r.time_start} – ${r.time_end}`;
   return r.time_start || r.time_end || null;
 }
@@ -135,7 +144,7 @@ function Pill({
 /** The team on one side of a match, as a name and whether it is a placeholder. */
 function sideOf(
   m: MatchWithDetails,
-  side: "home" | "away"
+  side: "home" | "away",
 ): { name: string; placeholder: boolean } {
   const team = side === "home" ? m.home_team : m.away_team;
   const label = side === "home" ? m.home_team_label : m.away_team_label;
@@ -162,7 +171,11 @@ function ActionMenu({ label, items }: { label: string; items: MenuItem[] }) {
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent | TouchEvent) => {
-      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) {
+      if (
+        ref.current &&
+        e.target instanceof Node &&
+        !ref.current.contains(e.target)
+      ) {
         setOpen(false);
       }
     };
@@ -345,7 +358,9 @@ function RoundForm({
               id={`${id}-start`}
               type="text"
               value={value.time_start}
-              onChange={(e) => onChange({ ...value, time_start: e.target.value })}
+              onChange={(e) =>
+                onChange({ ...value, time_start: e.target.value })
+              }
               placeholder="7:00 PM"
               className={inputCls}
             />
@@ -413,12 +428,21 @@ function RoundForm({
         </div>
       </div>
       <div className="flex items-center justify-end gap-2">
-        <button type="button" onClick={onCancel} disabled={busy} className={ghostBtn}>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className={ghostBtn}
+        >
           <X size={14} />
           Cancel
         </button>
         <button type="submit" disabled={busy} className={primarySmall}>
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+          {busy ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Check size={14} />
+          )}
           {submitLabel}
         </button>
       </div>
@@ -468,7 +492,10 @@ function emptyMatchForm(kickoff: string): MatchFormState {
   };
 }
 
-function matchFormFrom(m: TournamentMatch, roundDate: string | null): MatchFormState {
+function matchFormFrom(
+  m: TournamentMatch,
+  roundDate: string | null,
+): MatchFormState {
   const different = m.match_date != null && m.match_date !== roundDate;
   return {
     home: m.home_team_id ?? (m.home_team_label ? PLACEHOLDER : ""),
@@ -499,7 +526,10 @@ function validateMatchForm(f: MatchFormState): string | null {
   return null;
 }
 
-function matchFormToPayload(f: MatchFormState, roundDate: string | null): MatchPayload {
+function matchFormToPayload(
+  f: MatchFormState,
+  roundDate: string | null,
+): MatchPayload {
   const homeId = f.home && f.home !== PLACEHOLDER ? f.home : null;
   const awayId = f.away && f.away !== PLACEHOLDER ? f.away : null;
   return {
@@ -718,7 +748,12 @@ function MatchForm({
               : ""}
         </p>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <button type="button" onClick={onCancel} disabled={busy} className={ghostBtn}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className={ghostBtn}
+          >
             <X size={14} />
             Cancel
           </button>
@@ -733,7 +768,11 @@ function MatchForm({
             </button>
           )}
           <button type="submit" disabled={busy} className={primarySmall}>
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            {busy ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Check size={14} />
+            )}
             {mode === "add" ? "Add match" : "Save"}
           </button>
         </div>
@@ -756,12 +795,20 @@ type MatchHandlers = {
   patchMatch: (
     match: AdminMatch,
     patch: Partial<MatchPayload> & { round_id?: string | null },
-    successMessage: string
+    successMessage: string,
   ) => Promise<boolean>;
   deleteMatch: (match: AdminMatch) => Promise<void>;
-  setMatchStatus: (match: AdminMatch, body: StatusBody, successMessage: string) => Promise<boolean>;
+  setMatchStatus: (
+    match: AdminMatch,
+    body: StatusBody,
+    successMessage: string,
+  ) => Promise<boolean>;
   clearResult: (match: AdminMatch) => Promise<void>;
-  renameScorer: (match: AdminMatch, goal: MatchScorer, name: string) => Promise<boolean>;
+  renameScorer: (
+    match: AdminMatch,
+    goal: MatchScorer,
+    name: string,
+  ) => Promise<boolean>;
   openResult: (match: AdminMatch) => void;
 };
 
@@ -787,7 +834,10 @@ function MatchRow({
   const [postponeDate, setPostponeDate] = useState("");
   const [postponeNote, setPostponeNote] = useState(match.notes ?? "");
   const [moveTo, setMoveTo] = useState("");
-  const [renaming, setRenaming] = useState<{ goalId: string; value: string } | null>(null);
+  const [renaming, setRenaming] = useState<{
+    goalId: string;
+    value: string;
+  } | null>(null);
 
   const played = isMatchPlayed(match);
   const home = sideOf(match, "home");
@@ -798,7 +848,8 @@ function MatchRow({
     match.match_date != null && match.match_date !== roundDate
       ? formatShortDate(match.match_date)
       : null;
-  const numberLabel = match.match_number != null ? `#${match.match_number}` : "";
+  const numberLabel =
+    match.match_number != null ? `#${match.match_number}` : "";
   const describe = `${numberLabel ? `${numberLabel} ` : ""}${home.name} vs ${away.name}`;
 
   const openEdit = (focus: boolean) => {
@@ -820,7 +871,12 @@ function MatchRow({
           ? [{ label: "Postpone", onSelect: () => setPanel("postpone") }]
           : []),
         ...(rounds.length > 1 || !round
-          ? [{ label: "Move to another round", onSelect: () => setPanel("move") }]
+          ? [
+              {
+                label: "Move to another round",
+                onSelect: () => setPanel("move"),
+              },
+            ]
           : []),
         { label: "Edit match", onSelect: () => openEdit(false) },
         ...(match.status !== "cancelled"
@@ -830,13 +886,13 @@ function MatchRow({
                 onSelect: () => {
                   if (
                     window.confirm(
-                      `Cancel ${describe}? It stays on the schedule marked Cancelled.`
+                      `Cancel ${describe}? It stays on the schedule marked Cancelled.`,
                     )
                   ) {
                     void handlers.setMatchStatus(
                       match,
                       { status: "cancelled" },
-                      "Match cancelled."
+                      "Match cancelled.",
                     );
                   }
                 },
@@ -851,7 +907,7 @@ function MatchRow({
                   void handlers.setMatchStatus(
                     match,
                     { status: "scheduled" },
-                    "Back on the schedule."
+                    "Back on the schedule.",
                   ),
               },
             ]
@@ -873,7 +929,7 @@ function MatchRow({
       body,
       postponeDate
         ? `Postponed to ${formatShortDate(postponeDate) ?? postponeDate}.`
-        : "Postponed."
+        : "Postponed.",
     );
     if (ok) {
       setPanel(null);
@@ -887,14 +943,15 @@ function MatchRow({
       toast.error("Pick the round to move it to.");
       return;
     }
-    const keepsOwnDate = match.match_date != null && match.match_date !== roundDate;
+    const keepsOwnDate =
+      match.match_date != null && match.match_date !== roundDate;
     const ok = await handlers.patchMatch(
       match,
       {
         round_id: target.id,
         match_date: keepsOwnDate ? match.match_date : target.round_date,
       },
-      `Moved to ${target.label}.`
+      `Moved to ${target.label}.`,
     );
     if (ok) {
       setPanel(null);
@@ -1023,7 +1080,9 @@ function MatchRow({
             matchNumber={match.match_number}
             focusTeams={focusTeams}
             busy={busy}
-            onSubmit={(payload) => handlers.patchMatch(match, payload, "Match saved.")}
+            onSubmit={(payload) =>
+              handlers.patchMatch(match, payload, "Match saved.")
+            }
             onDone={() => setPanel(null)}
             onCancel={() => setPanel(null)}
           />
@@ -1065,12 +1124,21 @@ function MatchRow({
             </div>
           </div>
           <div className="flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setPanel(null)} disabled={busy} className={ghostBtn}>
+            <button
+              type="button"
+              onClick={() => setPanel(null)}
+              disabled={busy}
+              className={ghostBtn}
+            >
               <X size={14} />
               Cancel
             </button>
             <button type="submit" disabled={busy} className={primarySmall}>
-              {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Check size={14} />
+              )}
               Postpone
             </button>
           </div>
@@ -1104,16 +1172,30 @@ function MatchRow({
                 ))}
             </select>
             <p className="mt-1 text-xs text-zinc-500">
-              The match takes the new round&apos;s date unless it already has its own.
+              The match takes the new round&apos;s date unless it already has
+              its own.
             </p>
           </div>
           <div className="flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setPanel(null)} disabled={busy} className={ghostBtn}>
+            <button
+              type="button"
+              onClick={() => setPanel(null)}
+              disabled={busy}
+              className={ghostBtn}
+            >
               <X size={14} />
               Cancel
             </button>
-            <button type="submit" disabled={busy || !moveTo} className={primarySmall}>
-              {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            <button
+              type="submit"
+              disabled={busy || !moveTo}
+              className={primarySmall}
+            >
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Check size={14} />
+              )}
               Move
             </button>
           </div>
@@ -1159,7 +1241,9 @@ function ScorerLine({
   return (
     <p className="leading-relaxed">
       <span className="text-zinc-500">{teamName}: </span>
-      {scorers.length === 0 && <span className="italic">no scorers listed</span>}
+      {scorers.length === 0 && (
+        <span className="italic">no scorers listed</span>
+      )}
       {scorers.map((s, i) => {
         const isOwn = s.own_goal === true;
         const editing = renaming?.goalId === s.id;
@@ -1173,7 +1257,9 @@ function ScorerLine({
                 <input
                   type="text"
                   value={renaming.value}
-                  onChange={(e) => setRenaming({ goalId: s.id, value: e.target.value })}
+                  onChange={(e) =>
+                    setRenaming({ goalId: s.id, value: e.target.value })
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -1195,7 +1281,11 @@ function ScorerLine({
                   aria-label="Save name"
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md text-brand hover:bg-surface disabled:opacity-50"
                 >
-                  {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                  {saving ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Check size={14} />
+                  )}
                 </button>
                 <button
                   type="button"
@@ -1209,7 +1299,9 @@ function ScorerLine({
             ) : (
               <button
                 type="button"
-                onClick={() => setRenaming({ goalId: s.id, value: s.scorer_name })}
+                onClick={() =>
+                  setRenaming({ goalId: s.id, value: s.scorer_name })
+                }
                 title="Tap to fix the name"
                 className="-my-2.5 inline-block py-2.5 text-zinc-200 underline decoration-dotted underline-offset-2 hover:text-white"
               >
@@ -1231,7 +1323,7 @@ type RoundHandlers = {
   patchRound: (
     round: TournamentRound,
     patch: Partial<RoundPayload> & { status?: "scheduled" | "cancelled" },
-    successMessage: string
+    successMessage: string,
   ) => Promise<boolean>;
   deleteRound: (round: TournamentRound) => Promise<void>;
   moveRound: (round: TournamentRound, newDate: string) => Promise<boolean>;
@@ -1273,7 +1365,9 @@ function RoundCard({
       ? group.matches[group.matches.length - 1].kickoff_time
       : null;
   const defaultKickoff =
-    group.matches.length === 0 ? KICKOFF_SLOTS[0] : nextKickoffAfter(lastKickoff);
+    group.matches.length === 0
+      ? KICKOFF_SLOTS[0]
+      : nextKickoffAfter(lastKickoff);
 
   const openEdit = () => {
     if (!round) return;
@@ -1298,7 +1392,7 @@ function RoundCard({
                 void roundHandlers.patchRound(
                   round,
                   { status: "scheduled" },
-                  `${round.label} is back on.`
+                  `${round.label} is back on.`,
                 ),
             }
           : {
@@ -1306,13 +1400,13 @@ function RoundCard({
               onSelect: () => {
                 if (
                   window.confirm(
-                    `Cancel ${round.label}? Players see it marked Cancelled on the public page. You can undo this.`
+                    `Cancel ${round.label}? Players see it marked Cancelled on the public page. You can undo this.`,
                   )
                 ) {
                   void roundHandlers.patchRound(
                     round,
                     { status: "cancelled" },
-                    `${round.label} cancelled.`
+                    `${round.label} cancelled.`,
                   );
                 }
               },
@@ -1380,7 +1474,10 @@ function RoundCard({
                 <Loader2 size={16} className="animate-spin" />
               </span>
             ) : (
-              <ActionMenu label={`More actions for ${group.label}`} items={menu} />
+              <ActionMenu
+                label={`More actions for ${group.label}`}
+                items={menu}
+              />
             )}
           </div>
         )}
@@ -1432,12 +1529,25 @@ function RoundCard({
             </p>
           </div>
           <div className="flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setPanel(null)} disabled={busy} className={ghostBtn}>
+            <button
+              type="button"
+              onClick={() => setPanel(null)}
+              disabled={busy}
+              className={ghostBtn}
+            >
               <X size={14} />
               Cancel
             </button>
-            <button type="submit" disabled={busy || !moveDate} className={primarySmall}>
-              {busy ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            <button
+              type="submit"
+              disabled={busy || !moveDate}
+              className={primarySmall}
+            >
+              {busy ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Check size={14} />
+              )}
               Move round
             </button>
           </div>
@@ -1506,7 +1616,10 @@ export function SchedulePanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [addRoundOpen, setAddRoundOpen] = useState(false);
   const [addRoundForm, setAddRoundForm] = useState<RoundFormState | null>(null);
-  const [resultMatchId, setResultMatchId] = useState<string | null>(null);
+  const [resultMatchId, setResultMatchId] = useQueryParam("result", "");
+  const [roundParam, setRoundParam] = useQueryParam("round", "");
+  const [messaging, setMessaging] = useState(false);
+  const [rosterError, setRosterError] = useState("");
 
   const api = `/api/admin/tournaments/${tournamentId}`;
 
@@ -1527,12 +1640,20 @@ export function SchedulePanel({
     }
     setRounds(roundsRes.data.rounds ?? []);
     setMatches(
-      (matchesRes.data.matches ?? []).map((m) => ({ ...m, scorers: m.scorers ?? [] }))
+      (matchesRes.data.matches ?? []).map((m) => ({
+        ...m,
+        scorers: m.scorers ?? [],
+      })),
     );
     setTeams(teamsRes.data);
     // The roster only feeds the name list in the result sheet; if it fails the
     // schedule still works and names can be typed.
-    setRosterRows(rosterRes.ok ? rosterRes.data.rows ?? [] : []);
+    setRosterRows(rosterRes.ok ? (rosterRes.data.rows ?? []) : []);
+    setRosterError(
+      rosterRes.ok
+        ? ""
+        : "Player names could not be loaded. Retry before entering scorers or previewing a message.",
+    );
     return null;
   }, [api, tournamentId]);
 
@@ -1563,20 +1684,24 @@ export function SchedulePanel({
     }));
   }, [matches, teamById]);
 
-  const groups = useMemo(() => groupMatchesByRound(rounds, detailed), [rounds, detailed]);
+  const groups = useMemo(
+    () => groupMatchesByRound(rounds, detailed),
+    [rounds, detailed],
+  );
   const nextKey = useMemo(() => nextMatchday(groups)?.key ?? null, [groups]);
 
-  // Scroll the next matchday into view once, and only when it is not already
-  // at the top.
-  const cardEls = useRef(new Map<string, HTMLElement>());
-  const scrolledRef = useRef(false);
-  useEffect(() => {
-    if (loading || scrolledRef.current) return;
-    scrolledRef.current = true;
-    if (!nextKey || groups[0]?.key === nextKey) return;
-    const el = cardEls.current.get(nextKey);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [loading, nextKey, groups]);
+  const visibleGroups = roundParam
+    ? groups.filter((g) => g.key === roundParam)
+    : groups;
+  const publishedTable = tournamentSlug === WORLD_CUP_TOURNAMENT_SLUG;
+  const standings = useMemo(
+    () =>
+      publishedTable
+        ? getWorldCupStandingsOverride(teams)
+        : computeStandings(teams, detailed, rounds),
+    [publishedTable, teams, detailed, rounds],
+  );
+  const topScorers = useMemo(() => computeTopScorers(detailed), [detailed]);
 
   // ---- state helpers -------------------------------------------------------
 
@@ -1584,13 +1709,15 @@ export function SchedulePanel({
     setRounds((prev) => prev.map((r) => (r.id === round.id ? round : r)));
 
   const mergeMatch = (id: string, patch: Partial<TournamentMatch>) =>
-    setMatches((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    setMatches((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    );
 
   const replaceMatch = (match: AdminMatch) =>
     setMatches((prev) =>
       prev.some((m) => m.id === match.id)
         ? prev.map((m) => (m.id === match.id ? match : m))
-        : [...prev, match]
+        : [...prev, match],
     );
 
   const withBusy = async <T,>(id: string, fn: () => Promise<T>): Promise<T> => {
@@ -1609,7 +1736,7 @@ export function SchedulePanel({
       adminFetch<{ round: TournamentRound }>(`${api}/rounds`, {
         method: "POST",
         json: payload,
-      })
+      }),
     );
     if (!res.ok) {
       toast.error(res.error);
@@ -1626,7 +1753,7 @@ export function SchedulePanel({
         adminFetch<{ round: TournamentRound }>(`${api}/rounds/${round.id}`, {
           method: "PATCH",
           json: patch,
-        })
+        }),
       );
       if (!res.ok) {
         toast.error(res.error);
@@ -1640,13 +1767,15 @@ export function SchedulePanel({
     deleteRound: async (round) => {
       if (
         !window.confirm(
-          `Delete ${round.label}? It has no matches, so nothing else is removed.`
+          `Delete ${round.label}? It has no matches, so nothing else is removed.`,
         )
       ) {
         return;
       }
       const res = await withBusy(round.id, () =>
-        adminFetch<{ ok: true }>(`${api}/rounds/${round.id}`, { method: "DELETE" })
+        adminFetch<{ ok: true }>(`${api}/rounds/${round.id}`, {
+          method: "DELETE",
+        }),
       );
       if (!res.ok) {
         toast.error(res.error);
@@ -1660,8 +1789,8 @@ export function SchedulePanel({
       const res = await withBusy(round.id, () =>
         adminFetch<{ ok: true; round_date: string }>(
           `${api}/rounds/${round.id}/move`,
-          { method: "POST", json: { round_date: newDate } }
-        )
+          { method: "POST", json: { round_date: newDate } },
+        ),
       );
       if (!res.ok) {
         toast.error(res.error);
@@ -1673,19 +1802,25 @@ export function SchedulePanel({
       setRounds((prev) =>
         prev.map((r) =>
           r.id === round.id
-            ? { ...r, round_date: newDate, status: "scheduled", rescheduled_to: null }
-            : r
-        )
+            ? {
+                ...r,
+                round_date: newDate,
+                status: "scheduled",
+                rescheduled_to: null,
+              }
+            : r,
+        ),
       );
       setMatches((prev) =>
         prev.map((m) =>
-          m.round_id === round.id && (m.match_date == null || m.match_date === oldDate)
+          m.round_id === round.id &&
+          (m.match_date == null || m.match_date === oldDate)
             ? { ...m, match_date: newDate }
-            : m
-        )
+            : m,
+        ),
       );
       toast.success(
-        `${round.label} moved to ${formatShortDate(newDate) ?? newDate}. Its matches moved with it.`
+        `${round.label} moved to ${formatShortDate(newDate) ?? newDate}. Its matches moved with it.`,
       );
       return true;
     },
@@ -1695,18 +1830,21 @@ export function SchedulePanel({
         adminFetch<{ match: AdminMatch }>(`${api}/matches`, {
           method: "POST",
           json: { round_id: roundId, ...payload },
-        })
+        }),
       );
       if (!res.ok) {
         toast.error(res.error);
         return false;
       }
-      const created = { ...res.data.match, scorers: res.data.match.scorers ?? [] };
+      const created = {
+        ...res.data.match,
+        scorers: res.data.match.scorers ?? [],
+      };
       replaceMatch(created);
       toast.success(
         created.match_number != null
           ? `Match #${created.match_number} added.`
-          : "Match added."
+          : "Match added.",
       );
       return true;
     },
@@ -1720,7 +1858,7 @@ export function SchedulePanel({
         adminFetch<{ match: TournamentMatch }>(`${api}/matches/${match.id}`, {
           method: "PATCH",
           json: patch,
-        })
+        }),
       );
       if (!res.ok) {
         toast.error(res.error);
@@ -1736,13 +1874,15 @@ export function SchedulePanel({
       const n = match.match_number != null ? ` #${match.match_number}` : "";
       if (
         !window.confirm(
-          `Delete match${n}? This removes the match and any scorers.`
+          `Delete match${n}? This removes the match and any scorers.`,
         )
       ) {
         return;
       }
       const res = await withBusy(match.id, () =>
-        adminFetch<{ ok: true }>(`${api}/matches/${match.id}`, { method: "DELETE" })
+        adminFetch<{ ok: true }>(`${api}/matches/${match.id}`, {
+          method: "DELETE",
+        }),
       );
       if (!res.ok) {
         toast.error(res.error);
@@ -1754,10 +1894,13 @@ export function SchedulePanel({
 
     setMatchStatus: async (match, body, successMessage) => {
       const res = await withBusy(match.id, () =>
-        adminFetch<{ match: TournamentMatch }>(`${api}/matches/${match.id}/status`, {
-          method: "POST",
-          json: body,
-        })
+        adminFetch<{ match: TournamentMatch }>(
+          `${api}/matches/${match.id}/status`,
+          {
+            method: "POST",
+            json: body,
+          },
+        ),
       );
       if (!res.ok) {
         toast.error(res.error);
@@ -1772,24 +1915,34 @@ export function SchedulePanel({
       const n = match.match_number != null ? ` #${match.match_number}` : "";
       if (
         !window.confirm(
-          `Clear the result of match${n}? The score and every scorer are removed and the table updates.`
+          `Clear the result of match${n}? The score and every scorer are removed and the table updates.`,
         )
       ) {
         return;
       }
       const res = await withBusy(match.id, () =>
-        adminFetch<{ match: AdminMatch | null }>(`${api}/matches/${match.id}/result`, {
-          method: "DELETE",
-        })
+        adminFetch<{ match: AdminMatch | null }>(
+          `${api}/matches/${match.id}/result`,
+          {
+            method: "DELETE",
+          },
+        ),
       );
       if (!res.ok) {
         toast.error(res.error);
         return;
       }
       if (res.data.match) {
-        replaceMatch({ ...res.data.match, scorers: res.data.match.scorers ?? [] });
+        replaceMatch({
+          ...res.data.match,
+          scorers: res.data.match.scorers ?? [],
+        });
       } else {
-        mergeMatch(match.id, { home_score: null, away_score: null, status: "scheduled" });
+        mergeMatch(match.id, {
+          home_score: null,
+          away_score: null,
+          status: "scheduled",
+        });
       }
       toast.success("Result cleared. Table and scorers updated.");
     },
@@ -1797,7 +1950,7 @@ export function SchedulePanel({
     renameScorer: async (match, goal, name) => {
       const res = await adminFetch<{ scorer: MatchScorer }>(
         `${api}/matches/${match.id}/goals/${goal.id}`,
-        { method: "PATCH", json: { scorer_name: name } }
+        { method: "PATCH", json: { scorer_name: name } },
       );
       if (!res.ok) {
         toast.error(res.error);
@@ -1810,11 +1963,11 @@ export function SchedulePanel({
             ? {
                 ...m,
                 scorers: m.scorers.map((s) =>
-                  s.id === goal.id ? { ...s, ...updated } : s
+                  s.id === goal.id ? { ...s, ...updated } : s,
                 ),
               }
-            : m
-        )
+            : m,
+        ),
       );
       toast.success("Name updated.");
       return true;
@@ -1826,12 +1979,14 @@ export function SchedulePanel({
   // ---- result sheet --------------------------------------------------------
 
   const resultMatch = resultMatchId
-    ? matches.find((m) => m.id === resultMatchId) ?? null
+    ? (matches.find((m) => m.id === resultMatchId) ?? null)
     : null;
-  const resultHome: SideTeam | null =
-    resultMatch?.home_team_id ? (teamById.get(resultMatch.home_team_id) ?? null) : null;
-  const resultAway: SideTeam | null =
-    resultMatch?.away_team_id ? (teamById.get(resultMatch.away_team_id) ?? null) : null;
+  const resultHome: SideTeam | null = resultMatch?.home_team_id
+    ? (teamById.get(resultMatch.home_team_id) ?? null)
+    : null;
+  const resultAway: SideTeam | null = resultMatch?.away_team_id
+    ? (teamById.get(resultMatch.away_team_id) ?? null)
+    : null;
 
   const previousNamesByTeam = useMemo(() => {
     const map = new Map<string, PreviousName[]>();
@@ -1863,13 +2018,15 @@ export function SchedulePanel({
     owner is looking at those dates, rather than quietly widening the sale
     window from a second source.
   */
-  const overrunDay = loading ? null : scheduleOverrunDay(eventLastDay, rounds, matches);
+  const overrunDay = loading
+    ? null
+    : scheduleOverrunDay(eventLastDay, rounds, matches);
 
   return (
     <div className="space-y-6">
       <div className="dashboard-card p-6 md:p-8">
         <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
-          Schedule &amp; scores
+          Schedule &amp; results
         </h2>
         <p className="mt-1 text-sm text-zinc-400">
           One card per round. After a match, tap Enter result: the table and the
@@ -1892,6 +2049,66 @@ export function SchedulePanel({
         )}
       </div>
 
+      {!loading && !error && (
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="admin-field flex-1 min-w-48">
+            Round
+            <select
+              value={roundParam}
+              onChange={(e) => setRoundParam(e.target.value)}
+            >
+              <option value="">All rounds</option>
+              {groups.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.label} · {g.date || "Undated"} · {g.playedCount}/
+                  {g.matches.length} results
+                </option>
+              ))}
+            </select>
+          </label>
+          {nextKey && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setRoundParam(nextKey)}
+            >
+              Next round
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={!!rosterError || !rosterRows.length}
+            onClick={() => setMessaging(true)}
+          >
+            Preview schedule message
+          </button>
+        </div>
+      )}
+      {rosterError && (
+        <p role="alert" className="text-sm text-amber-200">
+          {rosterError}{" "}
+          <button
+            type="button"
+            className="admin-link"
+            onClick={() => void load()}
+          >
+            Retry
+          </button>
+        </p>
+      )}
+      {!loading && !error && roundParam && !visibleGroups.length && (
+        <p className="text-sm">
+          This round is no longer available.{" "}
+          <button
+            type="button"
+            className="admin-link"
+            onClick={() => setRoundParam(null)}
+          >
+            Show all rounds
+          </button>
+        </p>
+      )}
       {loading ? (
         <div className="dashboard-card overflow-hidden">
           <ListRowsSkeleton rows={6} />
@@ -1912,7 +2129,7 @@ export function SchedulePanel({
           />
         </div>
       ) : (
-        groups.map((g) => (
+        visibleGroups.map((g) => (
           <RoundCard
             key={g.key}
             group={g}
@@ -1922,16 +2139,14 @@ export function SchedulePanel({
             busyId={busyId}
             roundHandlers={roundHandlers}
             matchHandlers={matchHandlers}
-            cardRef={(el) => {
-              if (el) cardEls.current.set(g.key, el);
-              else cardEls.current.delete(g.key);
-            }}
+            cardRef={() => {}}
           />
         ))
       )}
 
-      {!loading && !error && (
-        addRoundOpen && addRoundForm ? (
+      {!loading &&
+        !error &&
+        (addRoundOpen && addRoundForm ? (
           <div className="dashboard-card p-4 md:p-6">
             <h3 className="mb-3 text-sm font-semibold text-white">Add round</h3>
             <RoundForm
@@ -1941,22 +2156,70 @@ export function SchedulePanel({
               busy={busyId === "new-round"}
               onCancel={() => setAddRoundOpen(false)}
               onSubmit={() => {
-                void createRound(roundFormToPayload(addRoundForm)).then((ok) => {
-                  if (ok) setAddRoundOpen(false);
-                });
+                void createRound(roundFormToPayload(addRoundForm)).then(
+                  (ok) => {
+                    if (ok) setAddRoundOpen(false);
+                  },
+                );
               }}
             />
           </div>
         ) : (
           <div>
-            <button type="button" onClick={openAddRound} className={primarySmall}>
+            <button
+              type="button"
+              onClick={openAddRound}
+              className={primarySmall}
+            >
               <Plus size={14} />
               Add round
             </button>
           </div>
-        )
-      )}
+        ))}
 
+      {!loading && !error && (
+        <details className="border-t border-border-token pt-4">
+          <summary className="cursor-pointer text-sm font-medium">
+            Standings & top scorers
+          </summary>
+          <p className="text-xs text-zinc-400 my-3">
+            {publishedTable
+              ? "This event uses its published final table. Scorers reflect recorded results."
+              : "Uses the same results and table rules as the public event page."}
+          </p>
+          <div className="space-y-6">
+            <StandingsList
+              standings={standings}
+              standingsSource={publishedTable ? "published" : "computed"}
+              showCutLine={false}
+            />
+            <ScorersList topScorers={topScorers} />
+          </div>
+        </details>
+      )}
+      {messaging && (
+        <MessagePreview
+          rows={rosterRows}
+          eventId={tournamentId}
+          initial="schedule"
+          onClose={() => setMessaging(false)}
+        />
+      )}
+      {!loading &&
+        resultMatchId &&
+        (!resultMatch || !resultHome || !resultAway) && (
+          <p role="alert" className="text-sm text-amber-200">
+            This result cannot be opened. Check that the match exists and both
+            teams are assigned.{" "}
+            <button
+              type="button"
+              className="admin-link"
+              onClick={() => setResultMatchId(null)}
+            >
+              Dismiss
+            </button>
+          </p>
+        )}
       {resultMatch && resultHome && resultAway && (
         <EnterResultSheet
           key={resultMatch.id}
@@ -1967,7 +2230,9 @@ export function SchedulePanel({
           awayTeam={resultAway}
           rosterRows={rosterRows}
           previousNamesByTeam={previousNamesByTeam}
-          onSaved={(saved) => replaceMatch({ ...saved, scorers: saved.scorers ?? [] })}
+          onSaved={(saved) =>
+            replaceMatch({ ...saved, scorers: saved.scorers ?? [] })
+          }
           onClose={() => setResultMatchId(null)}
         />
       )}

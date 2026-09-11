@@ -46,9 +46,9 @@ Admin authentication is a signed HMAC cookie, separate from player auth.
 **Player account** — `/login`, `/me` (registrations, payment history, waiver status, profile).
 Signing in is optional: registering and paying both work signed out.
 
-**Admin** — `/admin` (overview), `/admin/tournaments` (events; one page per event with Roster,
-Teams, Schedule & scores, Announcements and Settings tabs), `/admin/contacts` (people),
-`/admin/site` (site settings), `/admin/diagnostics`.
+**Admin** — `/admin` (overview), `/admin/tournaments` (events; one page per event with Players,
+Teams, Schedule & results, Announcements and Event settings tabs), `/admin/payments` (the Stripe
+ledger), `/admin/contacts` (people), `/admin/site` (site settings), `/admin/diagnostics`.
 
 ## Local setup
 

@@ -1,6 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useId,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -21,7 +31,10 @@ import {
   type Tournament,
 } from "@/lib/types";
 import { copyForKind, resolveEventKind } from "@/lib/event-kind";
-import { TOURNAMENT_IMAGE_PRESETS, getPresetUrl } from "@/lib/tournament-image-presets";
+import {
+  TOURNAMENT_IMAGE_PRESETS,
+  getPresetUrl,
+} from "@/lib/tournament-image-presets";
 import { slugify } from "@/lib/slug";
 import { dateInputToIsoPreservingCalendarDay } from "@/lib/date-input";
 import {
@@ -178,7 +191,7 @@ function fromInitial(t: Tournament | null): FormState {
     is_featured: t?.is_featured ?? false,
     free_entry_tournament_ids: Array.isArray(t?.free_entry_tournament_ids)
       ? t.free_entry_tournament_ids.filter(
-          (id): id is string => typeof id === "string"
+          (id): id is string => typeof id === "string",
         )
       : [],
   };
@@ -204,7 +217,7 @@ export function TournamentForm({
   const [form, setForm] = useState<FormState>(() => fromInitial(initial));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [imageTab, setImageTab] = useState<"upload" | "preset">(
-    initial?.image_url ? "upload" : "preset"
+    initial?.image_url ? "upload" : "preset",
   );
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -241,8 +254,8 @@ export function TournamentForm({
           (d.tournaments ?? []).filter(
             // Only real tournaments confer free entry, and an event can never
             // comp itself — offering either would be offering a mistake.
-            (c) => c.kind !== "open_play" && c.id !== initial?.id
-          )
+            (c) => c.kind !== "open_play" && c.id !== initial?.id,
+          ),
         );
       })
       .catch(() => {
@@ -287,7 +300,7 @@ export function TournamentForm({
         start_date: form.start_date || null,
         end_date: form.end_date || null,
       }),
-    [form.start_date, form.end_date]
+    [form.start_date, form.end_date],
   );
   const lastDay = form.end_date || form.start_date;
 
@@ -350,7 +363,10 @@ export function TournamentForm({
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/admin/tournaments/upload", { method: "POST", body: fd });
+      const res = await fetch("/api/admin/tournaments/upload", {
+        method: "POST",
+        body: fd,
+      });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error || "Upload failed.");
@@ -367,12 +383,16 @@ export function TournamentForm({
         });
         const patchData = (await patchRes.json()) as { error?: string };
         if (!patchRes.ok) {
-          toast.error(patchData.error || "Image stored but could not attach to this tournament.");
+          toast.error(
+            patchData.error ||
+              "Image stored but could not attach to this tournament.",
+          );
           return;
         }
         router.refresh();
         toast.success("Image saved", {
-          description: "Stored and linked to this event. Other edits still need Save event.",
+          description:
+            "Stored and linked to this event. Other edits still need Save event.",
         });
       } else {
         toast.success("Image uploaded", {
@@ -435,10 +455,12 @@ export function TournamentForm({
       format: form.format,
       description: form.description.trim() || null,
       start_date: form.start_date
-        ? dateInputToIsoPreservingCalendarDay(form.start_date) ?? new Date(form.start_date).toISOString()
+        ? (dateInputToIsoPreservingCalendarDay(form.start_date) ??
+          new Date(form.start_date).toISOString())
         : null,
       end_date: form.end_date
-        ? dateInputToIsoPreservingCalendarDay(form.end_date) ?? new Date(form.end_date).toISOString()
+        ? (dateInputToIsoPreservingCalendarDay(form.end_date) ??
+          new Date(form.end_date).toISOString())
         : null,
       recurrence: form.recurrence.trim() || null,
       time_start: form.time_start.trim(),
@@ -495,7 +517,10 @@ export function TournamentForm({
     `${inputBase} ${errors[key] ? "border-red-500" : "border-border-token"}`;
 
   return (
-    <form onSubmit={handleSubmit} className="dashboard-card p-6 md:p-8 space-y-8">
+    <form
+      onSubmit={handleSubmit}
+      className="admin-form dashboard-card p-6 md:p-8 space-y-8"
+    >
       {/* EVENT STATUS — the one switch (D1) */}
       <Section title="Event Status">
         {finished ? (
@@ -507,9 +532,9 @@ export function TournamentForm({
                   Finished{lastDay ? ` — ended ${formatEventDay(lastDay)}` : ""}
                 </p>
                 <p className="text-xs text-zinc-400">
-                  This is set automatically from the dates, so nobody has to remember
-                  to turn it off. A finished event stays on the site to look at, but it
-                  can never take sign-ups or payments again.
+                  This is set automatically from the dates, so nobody has to
+                  remember to turn it off. A finished event stays on the site to
+                  look at, but it can never take sign-ups or payments again.
                 </p>
               </div>
             </div>
@@ -528,7 +553,9 @@ export function TournamentForm({
           <Field label="Event status" required>
             <select
               value={form.state}
-              onChange={(e) => update("state", e.target.value as StoredEventState)}
+              onChange={(e) =>
+                update("state", e.target.value as StoredEventState)
+              }
               className={inputCls("state")}
             >
               {EVENT_STATE_OPTIONS.map((o) => (
@@ -661,7 +688,10 @@ export function TournamentForm({
             />
           </Field>
         </div>
-        <Field label="Recurrence Pattern" hint="e.g. Every Friday starting Mar 27">
+        <Field
+          label="Recurrence Pattern"
+          hint="e.g. Every Friday starting Mar 27"
+        >
           <input
             type="text"
             value={form.recurrence}
@@ -742,8 +772,9 @@ export function TournamentForm({
             <div className="flex items-start gap-2 px-4 py-3 text-xs text-zinc-400 bg-surface-2/40 border border-dashed border-border-token rounded-lg">
               <Info size={14} className="text-zinc-500 shrink-0 mt-0.5" />
               <span>
-                One price for an open play night — there is no separate guest tier
-                to configure, because everybody here is a guest for the evening.
+                One price for an open play night — there is no separate guest
+                tier to configure, because everybody here is a guest for the
+                evening.
               </span>
             </div>
 
@@ -761,7 +792,9 @@ export function TournamentForm({
               ) : (
                 <div className="space-y-2">
                   {freeEntryCandidates.map((c) => {
-                    const checked = form.free_entry_tournament_ids.includes(c.id);
+                    const checked = form.free_entry_tournament_ids.includes(
+                      c.id,
+                    );
                     return (
                       <label
                         key={c.id}
@@ -816,115 +849,134 @@ export function TournamentForm({
       <Divider />
 
       {/* BANNER IMAGE */}
-      <Section title="Banner Image">
-        <div className="flex gap-1 bg-surface-2 rounded-lg p-1 w-fit">
-          <button
-            type="button"
-            onClick={() => setImageTab("upload")}
-            className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
-              imageTab === "upload" ? "bg-base text-white" : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Upload size={14} />
-            Upload Image
-          </button>
-          <button
-            type="button"
-            onClick={() => setImageTab("preset")}
-            className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
-              imageTab === "preset" ? "bg-base text-white" : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <ImageIcon size={14} />
-            Choose Preset
-          </button>
-        </div>
-
-        {imageTab === "upload" && (
-          <div className="space-y-3">
-            <label
-              htmlFor="tournament-image-file"
-              className="flex flex-col items-center justify-center gap-2 px-4 py-8 border border-dashed border-border-token rounded-lg cursor-pointer bg-surface-2/40 hover:bg-surface-2 transition-colors"
+      <details>
+        <summary className="cursor-pointer text-sm font-medium">
+          Banner image & appearance
+        </summary>
+        <Section title="Banner Image">
+          <div className="flex gap-1 bg-surface-2 rounded-lg p-1 w-fit">
+            <button
+              type="button"
+              onClick={() => setImageTab("upload")}
+              className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
+                imageTab === "upload"
+                  ? "bg-base text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
             >
-              {uploading ? (
-                <Loader2 size={20} className="animate-spin text-brand" />
-              ) : (
-                <Upload size={20} className="text-brand" />
-              )}
-              <span className="text-sm text-zinc-300">
-                {uploading ? "Uploading…" : "JPG, PNG, or WebP (max 5MB). Images are resized and saved as WebP."}
-              </span>
-            </label>
-            <input
-              id="tournament-image-file"
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            {form.image_url && (
-              <button
-                type="button"
-                onClick={() => void handleClearImage()}
-                className="text-xs text-zinc-400 hover:text-white underline"
-              >
-                Clear uploaded image
-              </button>
-            )}
+              <Upload size={14} />
+              Upload Image
+            </button>
+            <button
+              type="button"
+              onClick={() => setImageTab("preset")}
+              className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
+                imageTab === "preset"
+                  ? "bg-base text-white"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <ImageIcon size={14} />
+              Choose Preset
+            </button>
           </div>
-        )}
 
-        {imageTab === "preset" && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {TOURNAMENT_IMAGE_PRESETS.map((p) => {
-              const selected = form.image_preset === p.key && !form.image_url;
-              return (
+          {imageTab === "upload" && (
+            <div className="space-y-3">
+              <label
+                htmlFor="tournament-image-file"
+                className="flex flex-col items-center justify-center gap-2 px-4 py-8 border border-dashed border-border-token rounded-lg cursor-pointer bg-surface-2/40 hover:bg-surface-2 transition-colors"
+              >
+                {uploading ? (
+                  <Loader2 size={20} className="animate-spin text-brand" />
+                ) : (
+                  <Upload size={20} className="text-brand" />
+                )}
+                <span className="text-sm text-zinc-300">
+                  {uploading
+                    ? "Uploading…"
+                    : "JPG, PNG, or WebP (max 5MB). Images are resized and saved as WebP."}
+                </span>
+              </label>
+              <input
+                id="tournament-image-file"
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {form.image_url && (
                 <button
                   type="button"
-                  key={p.key}
-                  onClick={() => {
-                    update("image_preset", p.key);
-                    update("image_url", null);
-                  }}
-                  className={`relative rounded-lg overflow-hidden border-2 transition-colors text-left ${
-                    selected ? "border-brand" : "border-border-token hover:border-zinc-500"
-                  }`}
+                  onClick={() => void handleClearImage()}
+                  className="text-xs text-zinc-400 hover:text-white underline"
                 >
-                  <div className="relative aspect-video bg-surface-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.url} alt={p.label} className="w-full h-full object-cover" />
-                    {selected && (
-                      <div className="absolute top-2 right-2 bg-brand text-white rounded-full w-6 h-6 flex items-center justify-center">
-                        <Check size={14} />
-                      </div>
-                    )}
-                  </div>
-                  <p className="px-2 py-2 text-xs text-zinc-300">{p.label}</p>
+                  Clear uploaded image
                 </button>
-              );
-            })}
-          </div>
-        )}
-
-        {previewUrl && (
-          <div className="space-y-2">
-            <p className="text-xs text-zinc-500 uppercase tracking-wide">Preview</p>
-            <p className="text-xs text-zinc-500">
-              Same wide banner crop as the public event page (16:7).
-            </p>
-            <div className="relative w-full aspect-[16/7] max-h-72 rounded-lg overflow-hidden bg-surface-2 border border-border-token">
-              <Image
-                src={previewUrl}
-                alt="Banner preview"
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 896px"
-              />
+              )}
             </div>
-          </div>
-        )}
-      </Section>
+          )}
+
+          {imageTab === "preset" && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {TOURNAMENT_IMAGE_PRESETS.map((p) => {
+                const selected = form.image_preset === p.key && !form.image_url;
+                return (
+                  <button
+                    type="button"
+                    key={p.key}
+                    onClick={() => {
+                      update("image_preset", p.key);
+                      update("image_url", null);
+                    }}
+                    className={`relative rounded-lg overflow-hidden border-2 transition-colors text-left ${
+                      selected
+                        ? "border-brand"
+                        : "border-border-token hover:border-zinc-500"
+                    }`}
+                  >
+                    <div className="relative aspect-video bg-surface-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.url}
+                        alt={p.label}
+                        className="w-full h-full object-cover"
+                      />
+                      {selected && (
+                        <div className="absolute top-2 right-2 bg-brand text-white rounded-full w-6 h-6 flex items-center justify-center">
+                          <Check size={14} />
+                        </div>
+                      )}
+                    </div>
+                    <p className="px-2 py-2 text-xs text-zinc-300">{p.label}</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {previewUrl && (
+            <div className="space-y-2">
+              <p className="text-xs text-zinc-500 uppercase tracking-wide">
+                Preview
+              </p>
+              <p className="text-xs text-zinc-500">
+                Same wide banner crop as the public event page (16:7).
+              </p>
+              <div className="relative w-full aspect-[16/7] max-h-72 rounded-lg overflow-hidden bg-surface-2 border border-border-token">
+                <Image
+                  src={previewUrl}
+                  alt="Banner preview"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 896px"
+                />
+              </div>
+            </div>
+          )}
+        </Section>
+      </details>
 
       <Divider />
 
@@ -985,8 +1037,12 @@ export function TournamentForm({
         )}
       </section>
 
-      <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border-token">
-        <button type="submit" disabled={saving} className="btn-primary disabled:opacity-60">
+      <div className="admin-form-footer flex flex-wrap items-center gap-3 pt-4 border-t border-border-token">
+        <button
+          type="submit"
+          disabled={saving}
+          className="btn-primary disabled:opacity-60"
+        >
           {saving ? <Loader2 size={16} className="animate-spin" /> : null}
           {saving ? "Saving…" : "Save event"}
         </button>
@@ -1002,10 +1058,18 @@ export function TournamentForm({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="space-y-4">
-      <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">{title}</h2>
+      <h2 className="text-xs font-mono text-brand uppercase tracking-wider font-semibold">
+        {title}
+      </h2>
       <div className="space-y-4">{children}</div>
     </section>
   );
@@ -1028,15 +1092,38 @@ function Field({
   error?: string;
   children: React.ReactNode;
 }) {
+  const id = useId();
+  const controls = Children.map(children, (child) =>
+    isValidElement(child) &&
+    typeof child.type === "string" &&
+    ["input", "select", "textarea"].includes(child.type)
+      ? cloneElement(child as ReactElement<Record<string, unknown>>, {
+          id,
+          "aria-describedby": hint || error ? `${id}-help` : undefined,
+          "aria-invalid": !!error,
+        })
+      : child,
+  );
   return (
     <div>
-      <label className="block text-sm font-medium text-zinc-300 mb-1">
+      <label
+        htmlFor={id}
+        className="block text-sm font-medium text-zinc-300 mb-1"
+      >
         {label}
         {required && <span className="text-brand ml-1">*</span>}
       </label>
-      {children}
-      {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
-      {!error && hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
+      {controls}
+      {error && (
+        <p id={`${id}-help`} className="mt-1 text-xs text-red-400">
+          {error}
+        </p>
+      )}
+      {!error && hint && (
+        <p id={`${id}-help`} className="mt-1 text-xs text-zinc-500">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

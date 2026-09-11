@@ -1,5 +1,7 @@
 # Handoff: the current system, for the next product/design agent
 
+> **Stage 2 update (2026-09-11):** this brief was answered by Stage 2.1, the owner-approved admin workspace ([STAGE-2-1-ADMIN-WORKSPACE.md](STAGE-2-1-ADMIN-WORKSPACE.md)); Stage 2.2 (the isolated `hps-dev` project) is complete ([STAGE-2-2-REPORT.md](STAGE-2-2-REPORT.md)) and Stage 2.3 A, B, C and D are built ([STAGE-2-3-PROPOSAL.md](STAGE-2-3-PROPOSAL.md)). The Stage 2.2 planning documents ([CLAUDE-STAGE-2-HANDOFF.md](CLAUDE-STAGE-2-HANDOFF.md), the setup checklist, the readiness matrix) are historical. The architecture and invariants below still hold; the admin-problem sections describe the state Stage 2.1 started from. The Stage 2.0 account below remains architectural background, not the current task status.
+
 **Written 2026-09-10, after Stage 2.0.** This is the primary context document. Read it before
 touching product, UI or admin code. It describes what exists now, what you must not break, and
 what you are free to redesign.
@@ -36,7 +38,14 @@ load if that query errors**, and the roster screen renders guests with their own
 column and total. Decide about that path deliberately; do not assume it is plumbing you would have
 to build, and do not break it by accident.
 
-⚠ **The product cannot message a player.** The one email it sends is the resume magic link.
+⚠ **Superseded 2026-09-11 by Stage 2.3 item B — read this paragraph as history.** The admin can
+now email a roster: audiences are resolved server-side, a dry run is compulsory, sends are
+idempotent and outcomes are recorded per recipient
+([`STAGE-2-3-PROPOSAL.md`](STAGE-2-3-PROPOSAL.md)). Two limits still hold — nothing is delivered
+unless `RESEND_API_KEY` and `RESUME_EMAIL_FROM` are set, and `sent` means the provider accepted it,
+not that it arrived. What follows was true until then:
+
+⚠ ~~**The product cannot message a player.**~~ The one email it sends is the resume magic link.
 DocuSeal's own invitation is deliberately suppressed (`send_email: false`) on both signing paths,
 there is no registration confirmation, no reminder and no way to email a roster; the only receipt
 is whatever Stripe is configured to send. Announcements publish to the public event page and
@@ -110,7 +119,7 @@ Three structural constraints that will bite a redesign specifically:
 
 - **Admin pages are client-gated, not server-protected.** `AdminGate` is a client component that
   fetches `/api/admin/me`; the page shell is served to anyone. The real boundary is
-  `verifyAdmin()`, called by 37 of the 39 admin API routes (login and logout are the two that do
+  `verifyAdmin()`, called by 43 of the 45 admin API routes (login and logout are the two that do
   not). Every admin page is `"use client"` and fetches its own data. **If you move loading into
   server components, add a server-side check yourself** — none exists under `src/app/admin/`.
   There is also **no automated coverage of any admin screen or admin API route**, so there is no
@@ -148,26 +157,36 @@ sign a waiver on the laptop, add a walk-in), and the Enter-result sheet is prope
   filter, no drill-through from a count to the people in it, no review-flag or cash signal. The
   counts say a problem exists; finding who is still done from memory.
 - *Who owes me money?* / *who hasn't signed a waiver?* — counts on that Overview card; **names**
-  only inside one event's roster filter, and only for card. Cash has no answer anywhere.
-- *Did cash get paid?* — the Paid toggle flips a status and records **no amount, method, date or
-  note**, so **cash income has no total anywhere**. Every money figure in the admin is Stripe-only.
+  only inside one event's roster filter. ~~Cash has no answer anywhere.~~ Stage 2.3 A records cash
+  and Zelle properly, so "who owes me" is now answerable for offline money too.
+- *Did cash get paid?* — ~~the Paid toggle flips a status and records **no amount, method, date or
+  note**, so **cash income has no total anywhere**.~~ **Answered 2026-09-11 by Stage 2.3 item A.**
+  `manual_payments` records amount, method, the date the money changed hands, a note and who took
+  it, through one writer (`record_manual_payment`). The table is append-only: a correction voids a
+  receipt and enters a new one, so it is an audit history rather than a current opinion. Stripe
+  remains authoritative for card settlement and is never overwritten by a receipt.
 - *Teams and rosters* — assignable in two places with different powers.
 - *Scores* — round-centric entry, but **the league table exists only on the public site**, so the
   owner leaves the admin to see the result of what he just typed.
 - *Exceptions* — the Paid toggle is lossy for `waived` / `partial` / `refunded`, and an event's
   stat cards and the roster totals ten pixels below them come from different endpoints and can
-  legitimately disagree. `needs_admin_review` is set by five different things but shows as one
-  small chip whose tooltip describes only one of them, with no filter and nothing that clears it.
-  Worse, the **machine-written explanation of why a row is flagged already exists** in the
-  `notes` columns and **no admin screen reads it** — the answer to "why is this flagged" is in the
-  database and invisible. That is probably the single richest thing to fix.
+  legitimately disagree. `needs_admin_review` is set by seven different things (contact
+  collision at signup, the World Cup captain-paid claim, three branches of `finalize_checkout_payment`,
+  two of `record_manual_payment`) ~~but shows as one small chip whose tooltip describes only one of
+  them, with no filter and nothing that clears it. Worse, the machine-written explanation of why a
+  row is flagged already exists in the `notes` columns and no admin screen reads it~~ — **fixed:
+  Stage 2.1 added the filter, Stage 2.3 D (2026-09-11) reads every writer's sentence back with a
+  "what to do", recomputes what is unsafe right now from the rows, and added the one route that
+  clears the flag, refusing while something is still wrong.** See `src/lib/admin-review.ts`.
 
 **Know the API's limits before scoping UI.** A roster row accepts exactly four fields
-(`payment_status`, `team_id`, `emergency_name`, `emergency_phone`), so recording a cash *amount* or
-writing a note are **API changes with settlement implications, not UI work**. Removing someone is
+(`payment_status`, `team_id`, `emergency_name`, `emergency_phone`). Recording a cash *amount* or a
+note was called out here as **an API change with settlement implications, not UI work** — which is
+exactly what Stage 2.3 item A turned out to be, and it landed as its own table, its own writer and
+its own route rather than a fifth field on this one. Removing someone is
 the opposite case: `DELETE /api/admin/registrations/[id]` already soft-cancels properly — stamps
-`cancelled_at`, appends a note, keeps the history — and **no admin screen calls it**. Pure UI work
-on a route that exists.
+`cancelled_at`, appends a note, keeps the history — and ~~no admin screen calls it~~ Stage 2.1
+wired it: roster removal confirms inline and calls this endpoint.
 
 ⚠ **Deleting an event is the sharpest edge in the admin**: an unguarded hard delete behind one
 inline confirm. Registrations and payments are `ON DELETE SET NULL` and survive detached, but

@@ -396,6 +396,13 @@ async function main() {
         (reg!.notes ?? "").includes(`marked ${status}`),
         `notes: ${reg!.notes}`
       );
+      // Stage 2.3 D reads this sentence back for the owner (src/lib/admin-review.ts
+      // and scripts/test-admin-review.ts pin the same string): exact wording.
+      t.eq(
+        `'${status}': the exact sentence the admin recognises`,
+        reg!.notes,
+        `Stripe payment received for a registration marked ${status} — review.`
+      );
       t.eq(`the money is still recorded for '${status}'`, await count(db, "payments"), 1);
       t.eq(`outcome for '${status}' is still 'finalized' (the payment settled)`, res.outcome, "finalized");
     }
@@ -415,6 +422,11 @@ async function main() {
       "the note asks for a refund decision",
       (reg!.notes ?? "").includes("refund decision needed"),
       `notes: ${reg!.notes}`
+    );
+    t.eq(
+      "cancelled: the exact sentence the admin recognises",
+      reg!.notes,
+      "Stripe payment received AFTER this spot was cancelled — refund decision needed."
     );
     t.check("it is still cancelled — settlement does not un-cancel a spot", reg!.cancelled_at !== null);
   }
@@ -439,6 +451,9 @@ async function main() {
     ]);
     t.check("the registration is flagged", reg!.needs_admin_review === true);
     t.eq("the reason is on the registration", reg!.notes, note);
+    // The admin reads `Stripe session <id>: <reason>` back for the owner
+    // (scripts/test-admin-review.ts pins the same shape).
+    t.check("confirm=false: the note keeps the `Stripe session <id>: <reason>` shape", /^Stripe session \S+: /.test(reg!.notes ?? ""));
     t.eq("the money is recorded anyway — it moved", await count(db, "payments"), 1);
     t.eq("the reason is on the payment row too", (await payments(db))[0].notes, note);
 

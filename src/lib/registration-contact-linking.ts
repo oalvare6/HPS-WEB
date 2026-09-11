@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeEmail, normalizePhone } from "@/lib/contacts";
+import { DUPLICATE_CONTACT_NOTE, appendNoteLine } from "@/lib/admin-review";
 
 /**
  * Why this exists (Phase 5):
@@ -149,6 +150,56 @@ export function resolveContactLink(candidates: ContactCandidate[]): LinkResoluti
 }
 
 /**
+ * Write a resolution to the registration row: the link, and — when the match
+ * was ambiguous — the review flag together with the sentence that explains it
+ * (Stage 2.3 D; before that the flag went up with no note, and the admin had
+ * no way to say why a player was flagged). Shared by the live route and the
+ * backfill script so both write the same thing. Returns false on database
+ * error; the caller decides whether that is fatal.
+ */
+export async function applyLinkResolution(
+  registrationId: string,
+  resolution: LinkResolution
+): Promise<boolean> {
+  const patch: Record<string, unknown> = {};
+  if (resolution.contactId) {
+    patch.contact_id = resolution.contactId;
+  }
+  if (resolution.needsAdminReview) {
+    patch.needs_admin_review = true;
+    const { data, error } = await supabaseAdmin
+      .from("registrations")
+      .select("notes")
+      .eq("id", registrationId)
+      .maybeSingle();
+    if (error) {
+      console.error("[link] notes read failed:", error.message);
+      return false;
+    }
+    const existing = (data as { notes: string | null } | null)?.notes ?? null;
+    // Same idempotence as the SQL writers: linking the same row twice must not
+    // say it twice. A resolution line later on is a different sentence.
+    if (!existing?.includes(DUPLICATE_CONTACT_NOTE)) {
+      patch.notes = appendNoteLine(existing, DUPLICATE_CONTACT_NOTE);
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    return true;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("registrations")
+    .update(patch)
+    .eq("id", registrationId);
+
+  if (error) {
+    console.error("[link] registration update failed:", error.message);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Post-insert link step used by `POST /api/register`. Safe to call multiple
  * times on the same registration row. Returns the resolution that was applied,
  * or null on database error (the caller logs and continues — failing here
@@ -164,26 +215,6 @@ export async function linkRegistrationToContact(input: {
     phone: input.phone,
   });
   const resolution = resolveContactLink(candidates);
-
-  const patch: Record<string, unknown> = {};
-  if (resolution.contactId) {
-    patch.contact_id = resolution.contactId;
-  }
-  if (resolution.needsAdminReview) {
-    patch.needs_admin_review = true;
-  }
-  if (Object.keys(patch).length === 0) {
-    return resolution;
-  }
-
-  const { error } = await supabaseAdmin
-    .from("registrations")
-    .update(patch)
-    .eq("id", input.registrationId);
-
-  if (error) {
-    console.error("[link] registration update failed:", error.message);
-    return null;
-  }
-  return resolution;
+  const applied = await applyLinkResolution(input.registrationId, resolution);
+  return applied ? resolution : null;
 }

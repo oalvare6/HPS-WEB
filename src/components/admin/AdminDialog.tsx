@@ -23,6 +23,7 @@ type AdminDialogProps = {
   footer?: ReactNode;
   /** Tailwind max-width for the centred (md+) layout. */
   widthClass?: string;
+  dismissDisabled?: boolean;
 };
 
 export function AdminDialog({
@@ -32,10 +33,13 @@ export function AdminDialog({
   children,
   footer,
   widthClass = "md:max-w-lg",
+  dismissDisabled = false,
 }: AdminDialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  onCloseRef.current = () => {
+    if (!dismissDisabled) onClose();
+  };
 
   // Escape closes. Registered once per mount; the ref keeps the latest handler.
   useEffect(() => {
@@ -58,14 +62,50 @@ export function AdminDialog({
     };
   }, []);
 
-  // Move focus inside. A child with autoFocus wins; otherwise the panel itself
-  // takes focus so the next Tab lands on the first control.
+  // Capture the opener before moving focus, then restore it on close.
   useEffect(() => {
+    const previous =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const panel = panelRef.current;
-    if (!panel) return;
-    const active = document.activeElement;
-    if (active && panel.contains(active)) return;
-    panel.focus();
+    if (panel && !panel.contains(document.activeElement)) panel.focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const items = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex="0"]',
+        ),
+      ).filter((el) => el.getClientRects().length > 0);
+      const first = items[0],
+        last = items[items.length - 1];
+      if (!first) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || document.activeElement === panel)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === last ||
+          !panel.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", trap);
+    return () => {
+      document.removeEventListener("keydown", trap);
+      if (previous?.isConnected) previous.focus();
+    };
   }, []);
 
   return (
@@ -78,9 +118,9 @@ export function AdminDialog({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`dashboard-card w-full max-h-[92vh] overflow-y-auto p-5 space-y-4 outline-none max-md:!rounded-t-2xl max-md:!rounded-b-none ${widthClass}`}
+        className={`dashboard-card admin-dialog-panel w-full max-h-[92vh] overflow-y-auto p-5 space-y-4 outline-none max-md:!rounded-t-2xl max-md:!rounded-b-none ${widthClass}`}
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="admin-dialog-header flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-white">{title}</h3>
             {description && (
@@ -90,6 +130,7 @@ export function AdminDialog({
           <button
             type="button"
             onClick={onClose}
+            disabled={dismissDisabled}
             className="-mr-2 -mt-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:text-white transition-colors"
             aria-label="Close"
           >
@@ -97,10 +138,10 @@ export function AdminDialog({
           </button>
         </div>
 
-        {children}
+        <div className="admin-dialog-content">{children}</div>
 
         {footer && (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border-token pt-4">
+          <div className="admin-dialog-footer flex flex-wrap items-center justify-end gap-2 border-t border-border-token pt-4">
             {footer}
           </div>
         )}

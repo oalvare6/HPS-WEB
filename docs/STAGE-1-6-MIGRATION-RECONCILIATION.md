@@ -361,6 +361,20 @@ would re-run the 19 unlisted files. Eighteen are structurally idempotent (§5.2 
 `20260815001500_dedupe_registrations_and_guard.sql` cancels duplicate live registrations and
 must not be handed a second chance under a version the ledger does not recognise.
 
+> **Corrected 2026-09-11 — "19" understates the blast radius.** Nineteen is the count of files
+> never recorded under *any* version. But `db push` matches on the version string alone, and the
+> nine class-(b) rows in §3.5 carry MCP-assigned versions that match **no** filename — so their
+> files are also unlisted as far as a push is concerned, and it re-runs them too. Against the
+> current 44 files: 44 − 13 exact matches = **31 files pushed, of which 28 are already applied**
+> and 3 are the genuinely new Stage 2.3 ones. `20260815001500` is among the nine, which is
+> precisely why it is singled out above. **The repair commands below are unaffected and remain
+> correct** — they already cover all 28. See
+> [`RELEASE-READINESS-STAGE-2.md`](RELEASE-READINESS-STAGE-2.md) §3.4.
+>
+> Note also that the `--status applied` list below names the 28 pre-Stage-2.3 files only. The
+> three Stage 2.3 versions (`20260911090000`, `20260911091000`, `20260911120000`) must **not** be
+> added to it: they are the only files that should actually execute.
+
 Nothing below runs SQL from the files; `migration repair` only edits
 `supabase_migrations.schema_migrations`. Do it in this order, with the CLI linked to
 `jqkiswwunrnyqjgroqtn` (`supabase link --project-ref jqkiswwunrnyqjgroqtn`):

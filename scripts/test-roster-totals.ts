@@ -43,6 +43,8 @@ function row(over: Partial<RosterRow>): RosterRow {
     paymentStatus: "pending",
     paymentMethod: null,
     needsReview: false,
+    review: null,
+    cancelledAt: null,
     missing: [],
     emergencyName: null,
     emergencyPhone: null,

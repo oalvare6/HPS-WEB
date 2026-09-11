@@ -40,7 +40,7 @@
  * server version in its header so the evidence names what it ran on.
  */
 import { execFile } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, parse } from "node:path";
 import { promisify } from "node:util";
@@ -95,7 +95,26 @@ export function lit(value: string | number | boolean | null): string {
     return String(value);
   }
   if (typeof value === "boolean") return value ? "true" : "false";
-  return `'${value.replace(/'/g, "''")}'`;
+  return asciiStringLiteral(value);
+}
+
+/**
+ * Non-ASCII text cannot ride in psql's argv on Windows: the C runtime converts
+ * the UTF-16 command line to the ANSI code page, so `—` reaches the server as
+ * the single byte 0x97 and is rejected as invalid UTF-8 (2026-09-11, first run
+ * of these suites on a developer's Windows machine). Escape it instead: an
+ * E'…' literal with every non-ASCII UTF-16 code unit as \uXXXX — surrogate
+ * pairs stay pairs, which PostgreSQL recombines — under the UTF8 client
+ * encoding `psqlBoth` pins. ASCII-only text keeps the plain '…' form so the
+ * SQL in failure output stays readable. The stored value is identical.
+ */
+export function asciiStringLiteral(value: string): string {
+  if (!/[^\x00-\x7f]/.test(value)) return `'${value.replace(/'/g, "''")}'`;
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "''")
+    .replace(/[^\x00-\x7f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  return `E'${escaped}'`;
 }
 
 /**
@@ -104,7 +123,11 @@ export function lit(value: string | number | boolean | null): string {
  * if the payload could close the quote.
  */
 export function jsonLit(value: unknown): string {
-  const text = JSON.stringify(value);
+  // \uXXXX is plain JSON and jsonb decodes it; see asciiStringLiteral for why.
+  const text = JSON.stringify(value).replace(
+    /[^\x00-\x7f]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`
+  );
   const tag = "$hpsjson$";
   if (text.includes(tag)) throw new Error("jsonLit(): payload contains the dollar-quote tag");
   return `${tag}${text}${tag}::jsonb`;
@@ -168,10 +191,40 @@ export type PgDb = {
 export type Applied = ({ ok: true } | { ok: false; error: string }) & { notices: string[] };
 
 async function psqlBoth(dsn: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
-  return run("psql", ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-d", dsn, ...args], {
-    maxBuffer: 32 * 1024 * 1024,
-    env: { ...process.env, PGCONNECT_TIMEOUT: "10" },
-  });
+  // psql's argv is the one place the bytes are not ours to choose: on Windows
+  // the C runtime converts it through the ANSI code page (asciiStringLiteral).
+  // lit()/jsonLit() keep test inputs ASCII; what is left is text read from a
+  // file — a `—` in a comment of scripts/sql/schema-catalog.sql — and that goes
+  // to psql through a temporary file instead. --single-transaction keeps a
+  // multi-statement payload atomic, as one -c request is; the deadlock tests'
+  // payloads are ASCII and stay on -c, where the lock is held across the sleep.
+  const at = args.indexOf("-c");
+  const viaFile = at !== -1 && /[^\x00-\x7f]/.test(args[at + 1] ?? "");
+  const scratch = viaFile ? mkdtempSync(join(tmpdir(), "hps-psql-")) : null;
+  if (scratch) {
+    const file = join(scratch, "command.sql");
+    writeFileSync(file, args[at + 1], "utf8");
+    const atomic = args.includes("--single-transaction") ? [] : ["--single-transaction"];
+    args = [...args.slice(0, at), ...atomic, "-f", file, ...args.slice(at + 2)];
+  }
+  try {
+    // PGCLIENTENCODING: the migration files are UTF-8 and the \u escapes from
+    // lit()/jsonLit() are only legal under UTF8, so say so rather than inherit
+    // whatever the OS locale implies. The CRLF strip undoes the C runtime's
+    // text-mode translation of psql's stdout on Windows, which turned a stored
+    // "first\nsecond" into "first\r\nsecond" and failed an equality check.
+    const { stdout, stderr } = await run(
+      "psql",
+      ["-X", "-q", "-v", "ON_ERROR_STOP=1", "-A", "-t", "-d", dsn, ...args],
+      {
+        maxBuffer: 32 * 1024 * 1024,
+        env: { ...process.env, PGCONNECT_TIMEOUT: "10", PGCLIENTENCODING: "UTF8" },
+      }
+    );
+    return { stdout: stdout.replace(/\r\n/g, "\n"), stderr: stderr.replace(/\r\n/g, "\n") };
+  } finally {
+    if (scratch) rmSync(scratch, { recursive: true, force: true });
+  }
 }
 
 async function psql(dsn: string, args: string[]): Promise<string> {

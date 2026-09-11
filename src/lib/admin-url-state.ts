@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
 /**
@@ -10,19 +10,17 @@ import { useCallback } from "react";
  * so that back/forward navigation, hard reloads, and bookmarks all preserve
  * the same view the admin was looking at.
  *
- * We always use router.replace with scroll: false:
+ * These filters only affect client-side admin views. Native replaceState keeps
+ * Next's search params in sync without a route round trip on every keystroke:
  *  - replace, so a flurry of filter changes does not push N entries onto the
  *    history stack (clicking back from a list page should return the user to
  *    the previous page, not to the same list with a slightly different
  *    filter).
- *  - scroll: false, so changing a filter never yanks the user back to the
+ *  - native history keeps scroll, so changing a filter never yanks the user back to the
  *    top of the page.
  */
 
-function buildHref(
-  pathname: string,
-  next: URLSearchParams,
-): string {
+function buildHref(pathname: string, next: URLSearchParams): string {
   const query = next.toString();
   return query ? `${pathname}?${query}` : pathname;
 }
@@ -37,22 +35,21 @@ export function useQueryParam(
   key: string,
   defaultValue = "",
 ): [string, (value: string | null) => void] {
-  const router = useRouter();
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const value = searchParams.get(key) ?? defaultValue;
 
   const setValue = useCallback(
     (next: string | null) => {
-      const params = new URLSearchParams(searchParams.toString());
+      const params = new URLSearchParams(window.location.search);
       if (next === null || next === "") {
         params.delete(key);
       } else {
         params.set(key, next);
       }
-      router.replace(buildHref(pathname, params), { scroll: false });
+      window.history.replaceState(null, "", buildHref(pathname, params));
     },
-    [router, pathname, searchParams, key],
+    [pathname, key],
   );
 
   return [value, setValue];
@@ -66,19 +63,17 @@ export function useQueryParam(
 export function useQueryParamsSetter(): (
   patch: Record<string, string | null>,
 ) => void {
-  const router = useRouter();
   const pathname = usePathname() ?? "";
-  const searchParams = useSearchParams();
 
   return useCallback(
     (patch: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParams.toString());
+      const params = new URLSearchParams(window.location.search);
       for (const [k, v] of Object.entries(patch)) {
         if (v === null || v === "") params.delete(k);
         else params.set(k, v);
       }
-      router.replace(buildHref(pathname, params), { scroll: false });
+      window.history.replaceState(null, "", buildHref(pathname, params));
     },
-    [router, pathname, searchParams],
+    [pathname],
   );
 }

@@ -21,6 +21,9 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import Link from "next/link";
+import { EventMessageButton } from "./EventMessageButton";
+import { playerLink } from "./workspace";
 import { toast } from "sonner";
 import { ListRowsSkeleton } from "@/components/shared/skeleton";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
@@ -63,7 +66,7 @@ export default function TournamentTeamsPanel({
 }: Props): React.ReactElement {
   const [teams, setTeams] = useState<AdminTeamRow[]>([]);
   const [registrations, setRegistrations] = useState<AdminTeamRegistration[]>(
-    []
+    [],
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -84,7 +87,10 @@ export default function TournamentTeamsPanel({
       setTeams(teamsRes.data ?? []);
     }
     if (regsRes.error) {
-      setError((cur) => cur || friendly(regsRes.error, "Failed to load registrations."));
+      setError(
+        (cur) =>
+          cur || friendly(regsRes.error, "Failed to load registrations."),
+      );
     } else {
       setRegistrations(regsRes.data ?? []);
     }
@@ -100,7 +106,7 @@ export default function TournamentTeamsPanel({
 
   const unassigned = useMemo(
     () => registrations.filter((r) => !r.team_id),
-    [registrations]
+    [registrations],
   );
 
   const regsByTeam = useMemo(() => {
@@ -147,25 +153,132 @@ export default function TournamentTeamsPanel({
         />
       </div>
 
-      {teams.length === 0 ? (
-        <AdminEmptyState
-          icon={UsersRound}
-          title="No teams yet"
-          description="Create a team above, then assign registrants from the unassigned list below."
-          className="dashboard-card p-8"
-        />
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {teams.map((team) => (
-            <TeamCard
-              key={team.id}
-              team={team}
-              members={regsByTeam.get(team.id) ?? []}
-              onChanged={load}
-            />
-          ))}
-        </div>
+      {teams.length > 0 && (
+        <section className="space-y-3">
+          <h2>Team progress</h2>
+          <p className="text-xs text-zinc-400">
+            Counts reflect registered players. Paid and waived/free players are
+            financially accounted for.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Team</th>
+                  <th>Registered</th>
+                  <th>Waiver complete</th>
+                  <th>Paid or waived</th>
+                  <th>Still unpaid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teams.map((team) => {
+                  const members = regsByTeam.get(team.id) ?? [];
+                  const paid = members.filter(
+                    (r) => r.payment_status === "paid",
+                  ).length;
+                  const waived = members.filter(
+                    (r) => r.payment_status === "waived",
+                  ).length;
+                  const accounted = paid + waived;
+                  return (
+                    <tr key={team.id}>
+                      <td>
+                        <Link
+                          className="admin-link font-medium"
+                          href={playerLink(tournamentId, { team: team.id })}
+                        >
+                          {team.name}
+                        </Link>
+                        <EventMessageButton
+                          eventId={tournamentId}
+                          teamId={team.id}
+                        />
+                      </td>
+                      <td>{members.length}</td>
+                      <td>
+                        <span>
+                          {members.filter((r) => r.waiver_ok).length} /{" "}
+                          {members.length}
+                        </span>
+                        <p>
+                          <Link
+                            className="admin-link text-xs"
+                            href={playerLink(tournamentId, {
+                              team: team.id,
+                              filter: "waiver-missing",
+                            })}
+                          >
+                            View missing waivers
+                          </Link>
+                        </p>
+                      </td>
+                      <td>
+                        <Link
+                          className="admin-link"
+                          href={playerLink(tournamentId, {
+                            team: team.id,
+                            filter: "accounted",
+                          })}
+                        >
+                          {accounted} / {members.length}
+                        </Link>
+                        <p className="text-xs text-zinc-400">
+                          {paid} paid · {waived} waived/free
+                        </p>
+                      </td>
+                      <td>
+                        <Link
+                          className="admin-link"
+                          href={playerLink(tournamentId, {
+                            team: team.id,
+                            filter: "unpaid",
+                          })}
+                        >
+                          {members.length - accounted} unpaid
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {unassigned.length > 0 && (
+            <Link
+              className="admin-link text-sm inline-block"
+              href={playerLink(tournamentId, { team: "unassigned" })}
+            >
+              {unassigned.length} players without a team →
+            </Link>
+          )}
+        </section>
       )}
+
+      <details open={teams.length === 0} className="space-y-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          Manage teams & captains
+        </summary>
+        {teams.length === 0 ? (
+          <AdminEmptyState
+            icon={UsersRound}
+            title="No teams yet"
+            description="Create a team above, then assign registrants from the unassigned list below."
+            className="dashboard-card p-8"
+          />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {teams.map((team) => (
+              <TeamCard
+                key={team.id}
+                team={team}
+                members={regsByTeam.get(team.id) ?? []}
+                onChanged={load}
+              />
+            ))}
+          </div>
+        )}
+      </details>
 
       <UnassignedList
         registrations={unassigned}
@@ -289,7 +402,7 @@ function TeamCard({
   const [deleting, setDeleting] = useState(false);
 
   const captain = members.find(
-    (m) => m.contact_id && m.contact_id === team.captain_contact_id
+    (m) => m.contact_id && m.contact_id === team.captain_contact_id,
   );
 
   const handleSave = async (): Promise<void> => {
@@ -335,7 +448,7 @@ function TeamCard({
   const handleDelete = async (): Promise<void> => {
     if (
       !window.confirm(
-        `Delete team "${team.name}"? Its members will move back to Unassigned.`
+        `Delete team "${team.name}"? Its members will move back to Unassigned.`,
       )
     ) {
       return;
@@ -655,7 +768,7 @@ function UnassignedRow({
 }
 
 function PaymentDot({ status }: { status: string }): React.ReactElement {
-  const isPaid = status === "paid";
+  const isPaid = status === "paid" || status === "waived";
   return (
     <span
       title={`Payment: ${status}`}

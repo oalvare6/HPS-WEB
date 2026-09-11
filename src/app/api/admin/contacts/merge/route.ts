@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
+import { appendNoteLine } from "@/lib/admin-review";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -12,6 +13,7 @@ type LiveReg = {
   contact_id: string;
   tournament_id: string;
   payment_status: string;
+  notes: string | null;
 };
 
 /**
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
     // outranks an unsettled one; on a tie the kept contact's row survives.
     const { data: liveRegsRaw } = await supabaseAdmin
       .from("registrations")
-      .select("id, contact_id, tournament_id, payment_status")
+      .select("id, contact_id, tournament_id, payment_status, notes")
       .in("contact_id", [winnerId, loserId])
       .is("cancelled_at", null)
       .not("tournament_id", "is", null);
@@ -110,11 +112,17 @@ export async function POST(req: NextRequest) {
         : [loserRows[0], ...winnerRows.slice(1)];
 
       for (const reg of toRetire) {
+        // Appended, not replaced: the retired row may carry review lines —
+        // a merge is exactly how a duplicate-contact review gets resolved —
+        // and those are the only record of why it was flagged.
         const { error: retireErr } = await supabaseAdmin
           .from("registrations")
           .update({
             cancelled_at: new Date().toISOString(),
-            notes: `Retired during contact merge ${new Date().toISOString().slice(0, 10)}: duplicate spot for the same person on this event.`,
+            notes: appendNoteLine(
+              reg.notes,
+              `Retired during contact merge ${new Date().toISOString().slice(0, 10)}: duplicate spot for the same person on this event.`
+            ),
           })
           .eq("id", reg.id)
           .is("cancelled_at", null);

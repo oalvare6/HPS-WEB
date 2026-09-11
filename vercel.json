@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "astra/stage-2-1-admin": false,
+      "claude/dazzling-wozniak-es39bo": false
+    }
+  }
+}

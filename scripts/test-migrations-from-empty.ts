@@ -79,7 +79,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Harness } from "./_test-fakes";
-import { provisionEmptyDatabase, REPO_ROOT, skipRequested, type PgDb } from "./_pg";
+import { lit, provisionEmptyDatabase, REPO_ROOT, skipRequested, type PgDb } from "./_pg";
 
 const t = new Harness();
 
@@ -169,6 +169,21 @@ type KnownDifference = { section: Section; key: string; kind: DiffKind; reason: 
  * followed used `create ... if not exists`, so production kept the draft's
  * index shapes and an orphan function. None of them changes a query result.
  */
+/**
+ * Objects this repository has and production does not yet, because their
+ * migration has only reached the isolated development project. One reason for
+ * the lot, since the reason really is the same one.
+ */
+function stage23FreshOnly(section: Section, keys: string[]): KnownDifference[] {
+  return keys.map((key) => ({
+    section,
+    key,
+    kind: "fresh_only" as DiffKind,
+    reason:
+      "Stage 2.3 (A: offline cash/Zelle receipts, C: the cross-event team guard). Created by supabase/migrations/20260911090000 and 20260911091000, applied to hps-dev only. Expected until production has them and the catalog is re-captured.",
+  }));
+}
+
 const KNOWN_DIFFERENCES: KnownDifference[] = [
   {
     section: "constraints",
@@ -213,6 +228,79 @@ const KNOWN_DIFFERENCES: KnownDifference[] = [
     kind: "production_only",
     reason: "orphan from the hand-created draft; no trigger calls it (both match triggers use set_updated_at_matches).",
   },
+  /*
+    Stage 2.3 A + C. Everything below exists in this repository and not yet in
+    production, because the two migrations that create it have only been applied
+    to the isolated hps-dev project. This is the FRESH-ONLY case CLAUDE.md
+    describes: expected until production has the migration and
+    docs/production-schema-catalog-2026-09-10.json is re-captured, at which point
+    these entries go stale and the check below will say so.
+  */
+  ...stage23FreshOnly("tables", ["manual_payments"]),
+  ...stage23FreshOnly(
+    "columns",
+    [
+      "amount_cents", "contact_id", "created_at", "currency", "id", "method",
+      "note", "received_at", "recorded_by", "registration_id", "tournament_id",
+      "void_reason", "voided_at", "voided_by",
+    ].map((c) => `manual_payments.${c}`)
+  ),
+  ...stage23FreshOnly(
+    "constraints",
+    [
+      "manual_payments_amount_cents_check", "manual_payments_contact_id_fkey",
+      "manual_payments_method_check", "manual_payments_pkey",
+      "manual_payments_recorded_by_check", "manual_payments_registration_id_fkey",
+      "manual_payments_tournament_id_fkey", "manual_payments_void_is_complete",
+    ].map((c) => `manual_payments.${c}`)
+  ),
+  ...stage23FreshOnly(
+    "indexes",
+    [
+      "manual_payments_live_idx", "manual_payments_pkey",
+      "manual_payments_registration_idx", "manual_payments_tournament_idx",
+    ].map((i) => `manual_payments.${i}`)
+  ),
+  ...stage23FreshOnly("triggers", ["registrations.registrations_team_same_event"]),
+  ...stage23FreshOnly("functions", [
+    "apply_manual_payment_status(p_registration_id uuid)",
+    "assert_registration_team_same_event()",
+    "manual_payments_total_cents(p_registration_id uuid)",
+    "record_manual_payment(p jsonb)",
+    "void_manual_payment(p jsonb)",
+  ]),
+  ...stage23FreshOnly("table_grants", ["manual_payments.service_role"]),
+  /* Stage 2.3 item B — message batches and per-recipient outcomes. */
+  ...stage23FreshOnly("tables", ["message_batches", "message_recipients"]),
+  ...stage23FreshOnly("columns", [
+    ...["audience", "body", "created_at", "created_by", "id", "idempotency_key", "subject",
+        "team_id", "template", "tournament_id"].map((c) => `message_batches.${c}`),
+    ...["attempts", "batch_id", "contact_id", "email", "error", "id", "name", "provider_id",
+        "registration_id", "sent_at", "status", "updated_at"].map((c) => `message_recipients.${c}`),
+  ]),
+  ...stage23FreshOnly("constraints", [
+    ...["message_batches_body_check", "message_batches_created_by_check",
+        "message_batches_idempotency_key", "message_batches_pkey",
+        "message_batches_subject_check", "message_batches_team_id_fkey",
+        "message_batches_tournament_id_fkey"].map((c) => `message_batches.${c}`),
+    ...["message_recipients_attempts_check", "message_recipients_batch_id_fkey",
+        "message_recipients_contact_id_fkey", "message_recipients_one_per_email",
+        "message_recipients_pkey", "message_recipients_registration_id_fkey",
+        "message_recipients_status_check"].map((c) => `message_recipients.${c}`),
+  ]),
+  ...stage23FreshOnly("indexes", [
+    ...["message_batches_idempotency_key", "message_batches_pkey",
+        "message_batches_tournament_idx"].map((i) => `message_batches.${i}`),
+    ...["message_recipients_batch_idx", "message_recipients_one_per_email",
+        "message_recipients_pkey", "message_recipients_registration_idx"].map(
+      (i) => `message_recipients.${i}`
+    ),
+  ]),
+  ...stage23FreshOnly("functions", ["mark_message_sent(p jsonb)", "record_message_batch(p jsonb)"]),
+  ...stage23FreshOnly("table_grants", [
+    "message_batches.service_role",
+    "message_recipients.service_role",
+  ]),
 ];
 
 /* ------------------------------------------------------------------ */
@@ -291,13 +379,12 @@ function migrationFiles(): { file: string; version: string; name: string }[] {
     });
 }
 
-const LEDGER_TAG = "$hpsmigration$";
-
 async function recordInLedger(db: PgDb, version: string, name: string, sql: string) {
-  if (sql.includes(LEDGER_TAG)) throw new Error(`${name} contains the ledger quote tag`);
+  // lit() rather than a dollar quote: the file text travels in psql's argv, and
+  // on Windows anything non-ASCII in argv is mangled (see asciiStringLiteral).
   await db.exec(
     `insert into supabase_migrations.schema_migrations (version, statements, name)
-     values ('${version}', array[${LEDGER_TAG}${sql}${LEDGER_TAG}], '${name}')
+     values ('${version}', array[${lit(sql)}], '${name}')
      on conflict (version) do nothing`
   );
 }

@@ -17,6 +17,7 @@ import { LOGIN_EXPIRED_MESSAGE } from "@/lib/admin-fetch";
 import { MAX_UPDATE_BODY_LENGTH, type TournamentUpdate } from "@/lib/types";
 import { ListRowsSkeleton } from "@/components/shared/skeleton";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { EventMessageButton } from "./EventMessageButton";
 
 const inputCls =
   "w-full px-4 py-3 bg-surface-2 border border-border-token text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent transition-colors";
@@ -38,7 +39,11 @@ function timeAgo(iso: string): string {
   });
 }
 
-export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string }) {
+export function TournamentUpdatesPanel({
+  tournamentId,
+}: {
+  tournamentId: string;
+}) {
   const [updates, setUpdates] = useState<TournamentUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -88,11 +93,14 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
     }
     setPosting(true);
     try {
-      const res = await fetch(`/api/admin/tournaments/${tournamentId}/updates`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: trimmed, pinned }),
-      });
+      const res = await fetch(
+        `/api/admin/tournaments/${tournamentId}/updates`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: trimmed, pinned }),
+        },
+      );
       if (res.status === 401) {
         toast.error(LOGIN_EXPIRED_MESSAGE);
         return;
@@ -122,7 +130,7 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ pinned: !u.pinned }),
-        }
+        },
       );
       if (res.status === 401) {
         toast.error(LOGIN_EXPIRED_MESSAGE);
@@ -148,7 +156,7 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
     try {
       const res = await fetch(
         `/api/admin/tournaments/${tournamentId}/updates/${u.id}`,
-        { method: "DELETE" }
+        { method: "DELETE" },
       );
       if (res.status === 401) {
         toast.error(LOGIN_EXPIRED_MESSAGE);
@@ -196,7 +204,7 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ body: trimmed }),
-        }
+        },
       );
       if (res.status === 401) {
         toast.error(LOGIN_EXPIRED_MESSAGE);
@@ -227,14 +235,22 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
           Public updates
         </h2>
         <p className="text-sm text-zinc-400 mt-1">
-          Post short updates that show on the public tournament page (e.g. &ldquo;Bracket
-          released&rdquo;, &ldquo;Round 3 moved to Field 2&rdquo;). Pin one to the top.
+          Post short updates that show on the public tournament page (e.g.
+          &ldquo;Bracket released&rdquo;, &ldquo;Round 3 moved to Field
+          2&rdquo;). Pin one to the top.
         </p>
       </div>
 
       {/* Composer */}
+      <div className="flex flex-wrap justify-between gap-3 text-xs text-zinc-400">
+        <span>
+          Posting publishes to the event page. It does not send an email.
+        </span>
+        <EventMessageButton eventId={tournamentId} text={body} />
+      </div>
       <div className="space-y-3">
         <textarea
+          aria-label="Public announcement"
           rows={3}
           value={body}
           onChange={(e) => setBody(e.target.value)}
@@ -256,7 +272,11 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
           <div className="flex items-center gap-3 ml-auto">
             <span
               className={`text-xs ${
-                overLimit ? "text-red-400" : remaining < 50 ? "text-yellow-400" : "text-zinc-500"
+                overLimit
+                  ? "text-red-400"
+                  : remaining < 50
+                    ? "text-yellow-400"
+                    : "text-zinc-500"
               }`}
             >
               {remaining} chars left
@@ -267,7 +287,11 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
               disabled={posting || !body.trim() || overLimit}
               className="inline-flex items-center gap-2 btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {posting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {posting ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
               {posting ? "Posting…" : "Post update"}
             </button>
           </div>
@@ -306,7 +330,9 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
                         Pinned
                       </span>
                     )}
-                    <span className="text-zinc-500">{timeAgo(u.created_at)}</span>
+                    <span className="text-zinc-500">
+                      {timeAgo(u.created_at)}
+                    </span>
                     {u.updated_at !== u.created_at && (
                       <span className="text-zinc-600">· edited</span>
                     )}
@@ -381,7 +407,9 @@ export function TournamentUpdatesPanel({ tournamentId }: { tournamentId: string 
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-zinc-200 whitespace-pre-wrap">{u.body}</p>
+                  <p className="text-sm text-zinc-200 whitespace-pre-wrap">
+                    {u.body}
+                  </p>
                 )}
               </div>
             );

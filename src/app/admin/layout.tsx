@@ -1,3 +1,4 @@
+import "./admin.css";
 import { Toaster } from "sonner";
 import type { ReactNode } from "react";
 import { AdminGate } from "@/components/admin/AdminGate";
@@ -5,7 +6,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <>
+    <div className="hps-admin">
       <AdminGate>
         <AdminShell>{children}</AdminShell>
       </AdminGate>
@@ -20,6 +21,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           },
         }}
       />
-    </>
+    </div>
   );
 }

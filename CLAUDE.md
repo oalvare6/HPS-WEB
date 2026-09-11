@@ -21,8 +21,11 @@ Simplicity for that person outranks cleverness everywhere.
 **Stack:** Next.js 15 App Router, React 19, Supabase, Stripe, DocuSeal. Player auth =
 Supabase; admin = HMAC cookie.
 
-**Local dev:** `npm run dev` → http://localhost:3000 (needs `.env.local`, including
-`SUPABASE_SERVICE_ROLE_KEY` — most pages fail without it).
+**Local dev:** `npx tsx scripts/stage22-dev.ts` → http://127.0.0.1:3022, running this checkout
+against the isolated `hps-dev` Supabase project from `.env.stage22.local` (Stage 2.2; `--check`
+verifies the keys without starting anything). `npm run dev` is deliberately *not* the launch
+command: `.env.local` is a partial `vercel env pull` of production values and most pages fail
+without `SUPABASE_SERVICE_ROLE_KEY`, which is not kept locally on purpose.
 
 **Before claiming anything works:**
 
@@ -48,6 +51,13 @@ npx tsx scripts/test-event-cta.ts
 npx tsx scripts/test-me-next-steps.ts
 npx tsx scripts/test-cancel-eligibility.ts
 npx tsx scripts/test-waiver-reconcile.ts
+npx tsx scripts/test-admin-workspace.ts       # Stage 2.1 admin partitions, filters and links
+npx tsx scripts/test-admin-messages.ts        # Stage 2.3 B: message audiences and rendering
+npx tsx scripts/test-admin-review.ts          # Stage 2.3 D: review reasons, the live check, the Resolve rule
+npx tsx scripts/test-stage22-guard.ts         # proves the Stage 2.2 guard refuses Production
+npx tsx scripts/test-stage22-verify-contract.ts # runs the Stage 2.2 verifier against the real route envelopes
+npx tsx scripts/test-manual-payments-sql.ts   # needs a PostgreSQL; Stage 2.3 A+C
+npx tsx scripts/test-messages-sql.ts          # needs a PostgreSQL; Stage 2.3 B
 npx tsx scripts/test-finalize-sql.ts          # needs a PostgreSQL; see below
 npx tsx scripts/test-stripe-integration.ts    # needs a PostgreSQL; see below
 npx tsx scripts/test-migrations-from-empty.ts # needs a PostgreSQL; see below
@@ -61,6 +71,12 @@ a throwaway database: they use `HPS_TEST_DATABASE_URL` if it is set, otherwise a
 port 54329, otherwise they start their own cluster with `initdb`. If none of that is possible
 they **fail rather than skip** — a silent skip is how a suite stops proving what its name
 says. `HPS_SKIP_PG_TESTS=1` skips them deliberately and prints that the SQL was not executed.
+**On Windows the harness cannot boot its own cluster** (it shells through `sh`/`su`), so give it
+one on 54329 with trust auth, once: `initdb -D %LOCALAPPDATA%\hps-pg17 -U postgres -A trust`,
+then `port = 54329`, `listen_addresses = '127.0.0.1'` and `timezone = 'UTC'` (Supabase is UTC;
+a local-time cluster fails the `created_at` date checks) in its `postgresql.conf`, and
+`pg_ctl -D %LOCALAPPDATA%\hps-pg17 start` before the run. Never point them at a scram-auth
+server: the fixture's `authenticator` role has no password and `psql` will sit on a prompt.
 
 **The schema builds from an empty database, and only migrations define it (2026-09-10,
 [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md)).**
@@ -70,9 +86,12 @@ only ever defined by loose scripts under `supabase/` and applied by hand. Five b
 migrations now capture them and the loose scripts are archived under
 `docs/archive/loose-sql/`. Three rules follow. **Never put a `.sql` file directly under
 `supabase/` again** — only `supabase/migrations/YYYYMMDDHHMMSS_name.sql`, idempotent, with a
-rollback comment. **Production's migration ledger is still drifted** (22 rows for 41 files;
+rollback comment. **Production's migration ledger is still drifted** (22 rows for 44 files;
 repair commands in the report §8), so **do not run `supabase db push` against production**
-until it is repaired — it would re-run nineteen files, one of them data-bearing. And the
+until it is repaired — it would re-run **28** already-applied files, one of them data-bearing.
+(The reports' older figure of "nineteen" counts only files never recorded under *any* version;
+the nine MCP-versioned rows match no filename either, so a push re-runs those too —
+[`docs/RELEASE-READINESS-STAGE-2.md`](docs/RELEASE-READINESS-STAGE-2.md) §3.4.) And the
 from-empty test diffs a fresh build against `docs/production-schema-catalog-2026-09-10.json`:
 when you add a migration, expect it to show new objects as FRESH-ONLY until production has
 the migration and the catalog is re-captured (the query is `scripts/sql/schema-catalog.sql`).
@@ -171,6 +190,65 @@ tag, and "needs waiver" is reserved for genuinely missing or expired. Do not rea
 `registrations.waiver_signed` directly in a UI again; that habit is what had the same
 person reading "signed" and "pending" on the same page.
 
+**Offline money is a separate ledger, and Stripe still owns card settlement (2026-09-11, Stage
+2.3 A, [`docs/STAGE-2-3-PROPOSAL.md`](docs/STAGE-2-3-PROPOSAL.md)).** The rule above says no second
+writer of `payments` **for card money**, and the owner confirmed that reading: cash and Zelle,
+which Stripe has no record of, live in `manual_payments` with their own writer,
+`record_manual_payment`. Nothing in that path writes `payments`. The table is **append-only** —
+money fields are never updated, a correction voids the receipt (recording who and why) and enters
+a new one, so the table *is* the audit history. `apply_manual_payment_status` decides the
+registration's status in a fixed order and the order is the design: **Stripe wins** (a succeeded
+`payments` row is never overwritten, the collision is flagged instead), then **the owner's own
+`waived`/`refunded` decisions win**, and only then do receipts decide — including downwards, so
+below the fee is `partial`, not `paid`. A registration with no receipts is never touched, so a
+status set by hand on the dropdown stands. Getting that third step wrong is easy: the first draft
+returned early on any `paid`, and voiding a receipt then left the row reading `paid` with $20
+against a $50 entry.
+
+**A message is sent exactly once (2026-09-11, Stage 2.3 B).** `message_batches` carries an
+`idempotency_key` minted by the composer; re-posting it returns the first batch and queues nobody
+again, the same shape `finalize_checkout_payment` uses for Stripe event ids. One address gets one
+`message_recipients` row per batch, and `mark_message_sent` refuses to change a row already
+`sent` — so Retry can only ever touch failures. Mail cannot be recalled, which is why all three
+live in the database rather than in the UI. **Audiences are resolved server-side**: "everyone
+unpaid" means who is unpaid at the moment of sending, via `isFinanciallySettled` in
+`src/lib/admin-roster.ts` — the same definition the roster displays, exported rather than copied.
+Nobody is dropped silently; a player with no email is reported as skipped with a reason. `sent`
+means the provider accepted it, **not** that it arrived — there is no bounce webhook yet — and
+nothing is delivered at all unless `RESEND_API_KEY` and `RESUME_EMAIL_FROM` are set, which the
+Stage 2.2 dev launcher deliberately strips.
+
+**A registration's team must belong to its own event (2026-09-11, Stage 2.3 C).** Enforced by the
+`registrations_team_same_event` trigger, which also fires on `tournament_id` so moving a rostered
+player to another event is caught. Deliberately **not** a composite foreign key: that would add a
+second `registrations`→`teams` relationship and make every embed between them answer PGRST201 (the
+trap below), and being MATCH SIMPLE it would skip the check whenever `tournament_id` is null. The
+admin route still checks too — it gives the owner a readable message; the trigger means no future
+writer can bypass it.
+
+**A review flag is cleared by exactly one route, and never while something is still wrong
+(2026-09-11, Stage 2.3 D, `src/lib/admin-review.ts`).** `registrations.needs_admin_review` is raised
+by seven writers — contact collision at signup, the World Cup captain-paid claim, three branches of
+`finalize_checkout_payment`, two of `record_manual_payment` — and until Stage 2.3 D cleared by none;
+the admin PATCH still does not accept it. It is cleared only by `POST /api/admin/registrations/[id]/review`,
+which re-runs the **live check** server-side (a succeeded card payment against the status, live
+offline receipts, the number of People records that still match, the cancelled-spot cases) and answers
+409 with the list while anything is unsafe; the owner can resolve anyway only by saying in writing what
+they did, and that sentence — with what was still wrong — is what gets recorded. The model is the
+columns that already exist, on purpose: the boolean is what the "Needs review" filter reads and it
+stays a boolean; `notes` is the ledger, where the writers' fixed sentences are the *why* (the SQL
+suites pin those literals, `scripts/test-admin-review.ts` pins how they are read back — change one and
+both fail) and `Review resolved <ISO> — <what>` lines are the audit trail, appended by the route with a
+plain append so `append_note_line`'s dedupe never swallows one. Safety is **never** read from notes:
+a flag with no note (the ~24 legacy production rows) still gets a truthful "here is what is wrong now,
+or nothing is". Two consequences to keep: never make a UI decide a flag is safe from the sentence
+alone, and when the same SQL cause recurs after a resolution `append_note_line` appends nothing — the
+flag goes up, notes gain no line, and `reviewView` reports that as "flagged again" and leans on the
+live check. The two "paid AFTER this spot was cancelled" reasons land on cancelled rows the roster
+hides, so the roster payload carries them separately as `cancelledReviews`: shown under the review
+filter and on the overview, never in `rows`, so totals, teams, messaging and the schedule never see
+them.
+
 **Match results have exactly one writer and one rule.** A match becomes `completed` only
 through `PUT /api/admin/tournaments/[id]/matches/[matchId]/result`, which calls the database
 function `save_match_result` (score + status + scorers in one transaction). The match PATCH
@@ -230,9 +308,12 @@ Preview deployments are exempt on purpose — don't "simplify" that check away.
 
 | Doc | What |
 |---|---|
+| [`docs/RELEASE-READINESS-STAGE-2.md`](docs/RELEASE-READINESS-STAGE-2.md) | **Read before shipping anything to production.** The controlled release plan for Stage 2.1+2.2+2.3: exact SHAs, migration state verified live against production, what is actually wrong with the ledger and what a push would re-run, the forced deploy order (migrations before code), stop conditions, rollback and a smoke checklist. |
 | [`docs/ASTRA-HANDOFF.md`](docs/ASTRA-HANDOFF.md) | **Start here for product, UI or admin work.** The current system in one read: architecture, the invariants that must not break, the route map, the admin problem to solve, and what a designer is free to change. |
 | [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) | **The active plan.** Start here. |
-| [`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md) | **Most recent session.** One event-state resolver for every surface: why five pages disagreed about the same event, the `EventView` model, the invariant matrix, the headless-Chromium agreement check, and the business questions left open. |
+| [`docs/STAGE-2-3-PROPOSAL.md`](docs/STAGE-2-3-PROPOSAL.md) | **Most recent session. Stage 2.3 A, B, C and D are all done** (2026-09-11), built and validated against `hps-dev`: offline cash/Zelle receipts, the Resend send path, the cross-event team guard, and actionable review reasons with a Resolve action and audit trail. Read it for what is deliberately still out of scope — scheduled reminders, bounce callbacks — and for the limits stated rather than hidden. |
+| [`docs/STAGE-2-2-REPORT.md`](docs/STAGE-2-2-REPORT.md) | **Stage 2.2, COMPLETE (44/44 through the running admin, 2026-09-11).** The isolated `hps-dev` project built from migrations and verified object-by-object against the production catalog, seeded, validated in SQL and then through the app's own routes. Read §7 for what the bring-up found: a key preflight that checked the URL and never the keys, and a verifier that reported its own parse bug as missing data. |
+| [`docs/STAGE-2-0-EVENT-STATE.md`](docs/STAGE-2-0-EVENT-STATE.md) | One event-state resolver for every surface: why five pages disagreed about the same event, the `EventView` model, the invariant matrix, the headless-Chromium agreement check, and the business questions left open. |
 | [`docs/STAGE-1-6-MIGRATION-RECONCILIATION.md`](docs/STAGE-1-6-MIGRATION-RECONCILIATION.md) | Why every Preview branch failed, the five baseline migrations that make an empty database build, production vs. repository drift object by object, and the ledger repair still owed. |
 | [`docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md`](docs/STAGE-1-4-1-PRICING-AND-STRIPE-CLOSEOUT.md) | Supabase made the single source of price, the authorised amount recorded per Checkout Session, and the Stripe sandbox procedure written down. **Closes the pricing trap Stage 1.4 opened.** |
 | [`docs/STAGE-1-4-STRIPE-VALIDATION.md`](docs/STAGE-1-4-STRIPE-VALIDATION.md) | The settlement SQL executed for the first time (against a real PostgreSQL, and `xmax` checked on production's own 17.6): two defects found and fixed, the $80 repair rehearsed, and `--apply` fenced. **Corrects §13 and §15 of the Stage 1.2 report.** |
